@@ -1,7 +1,12 @@
 const admin = require('firebase-admin');
 
-// Load service account from the path defined in .env
-const serviceAccount = require(process.env.FIREBASE_SERVICE_ACCOUNT_JSON_PATH);
+
+// Build service account object from environment variables
+const serviceAccount = {
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+  privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'), // handles escaped newlines
+};
 
 // Initialize Firebase Admin SDK if not already initialized
 if (!admin.apps.length) {
