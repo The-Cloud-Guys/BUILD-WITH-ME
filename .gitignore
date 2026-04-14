@@ -1,40 +1,33 @@
-# Node.js dependencies (anywhere)
+# Node.js dependencies
 node_modules/
 
-# Package lock files (exclude both root and subfolder)
+# Package lock files
 package-lock.json
 build_with_me_auth/package-lock.json
 
-# Environment variables (contains secrets)
+# Environment variables
 .env
 build_with_me_auth/.env
 
-# Firebase service account key (private key)
+# Firebase service account key
 serviceAccountKey.json
 build_with_me_auth/serviceAccountKey.json
 
-# Documentation / scratch files (not needed in repo)
+# Documentation / scratch files
 Build_With_Me_-_Authentication_&_Account_System_(MVP).docx
 folde and file setup.docx
 firebase-getToken.js
 setup.js
 
-# Root package.json (if it's not part of the project)
-# Note: build_with_me_auth/package.json is kept (it is required)
-package.json
+# Root package.json (ignore only at root, NOT the one in build_with_me_auth)
+/package.json
 
-# Logs
+# Logs, OS junk, IDE, build outputs...
 *.log
 npm-debug.log*
-
-# OS junk
 .DS_Store
 Thumbs.db
-
-# IDE folders
 .vscode/
 .idea/
-
-# Build outputs
 dist/
 build/
