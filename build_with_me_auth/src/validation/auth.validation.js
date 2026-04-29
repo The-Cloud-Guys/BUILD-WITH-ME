@@ -17,6 +17,21 @@ const loginValidation = (data) => {
   return schema.validate(data);
 };
 
+const verifyEmailValidation = (data) => {
+  const schema = Joi.object({
+    email: Joi.string().email().required(),
+    otp: Joi.string().required(),
+  });
+  return schema.validate(data);
+};
+
+const resendOTPValidation = (data) => {
+  const schema = Joi.object({
+    email: Joi.string().email().required(),
+  });
+  return schema.validate(data);
+};
+
 // For POST /api/auth/forgot-password
 const forgotPasswordValidation = (data) => {
   const schema = Joi.object({
@@ -37,6 +52,8 @@ const resetPasswordValidation = (data) => {
 module.exports = {
   registerValidation,
   loginValidation,
+  verifyEmailValidation,
+  resendOTPValidation,
   forgotPasswordValidation,
   resetPasswordValidation,
 };

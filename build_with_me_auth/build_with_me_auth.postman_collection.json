@@ -1,55 +1,41 @@
 {
   "info": {
-    "name": "Build With Me Auth API Tests",
-    "description": "Postman collection for testing auth endpoints in build_with_me_auth: register, login, protected route, password reset, and Firebase auth.",
+    "name": "Build With Me - Complete Auth API (Cookies + Email Verification)",
+    "description": "Tests all authentication endpoints: register, email verification (OTP), resend OTP, login (with cookie), refresh token, logout, forgot/reset password, Firebase auth, and protected route. JWT is stored in HTTP‑only cookies – Postman will manage them automatically.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://localhost:5050"
-    },
-    {
-      "key": "testEmail",
-      "value": "testuser@example.com"
-    },
-    {
-      "key": "testPassword",
-      "value": "test1234"
-    },
-    {
-      "key": "testName",
-      "value": "Test User"
-    },
-    {
-      "key": "newPassword",
-      "value": "newpassword123"
-    },
-    {
-      "key": "accessToken",
-      "value": ""
-    },
-    {
-      "key": "resetToken",
-      "value": ""
-    },
-    {
-      "key": "firebaseIdToken",
-      "value": "",
-      "description": "Firebase ID token from client Google sign-in."
-    }
+    { "key": "baseUrl", "value": "http://localhost:5050" },
+    { "key": "testEmail", "value": "postman@example.com" },
+    { "key": "testPassword", "value": "test1234" },
+    { "key": "testName", "value": "Postman Tester" },
+    { "key": "newPassword", "value": "newpass5678" },
+    { "key": "resetToken", "value": "", "description": "Copy from password reset email (plain token)" },
+    { "key": "verificationOtp", "value": "", "description": "Copy from email verification OTP (6 digits)" },
+    { "key": "firebaseIdToken", "value": "", "description": "Firebase ID token from Google sign-in (obtain via frontend)" }
   ],
   "item": [
     {
-      "name": "1. Register New User",
+      "name": "1. Register New User (sends OTP)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
+              "pm.test('Response contains message and email', () => {",
+              "  const jsonData = pm.response.json();",
+              "  pm.expect(jsonData).to.have.property('message').that.includes('Registration successful');",
+              "  pm.expect(jsonData).to.have.property('email', pm.variables.get('testEmail'));",
+              "});",
+              "console.log('✅ Registration successful. Check email or terminal for OTP and set collection variable \"verificationOtp\".');"
+            ]
+          }
+        }
+      ],
       "request": {
         "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"name\": \"{{testName}}\",\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
@@ -59,39 +45,99 @@
           "host": ["{{baseUrl}}"],
           "path": ["api", "auth", "register"]
         }
-      },
+      }
+    },
+    {
+      "name": "2. Verify Email (OTP required – manual step)",
       "event": [
         {
           "listen": "test",
           "script": {
             "exec": [
-              "pm.test('Status code is 201', function () {",
-              "    pm.response.to.have.status(201);",
-              "});",
-              "const jsonData = pm.response.json();",
-              "pm.test('Response contains token and user fields', function () {",
-              "    pm.expect(jsonData).to.have.property('token');",
-              "    pm.expect(jsonData).to.have.property('_id');",
-              "    pm.expect(jsonData).to.have.property('name', pm.variables.get('testName'));",
-              "    pm.expect(jsonData).to.have.property('email', pm.variables.get('testEmail'));",
-              "});",
-              "pm.collectionVariables.set('accessToken', jsonData.token);"
-            ],
-            "type": "text/javascript"
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Response contains success message and user data', () => {",
+              "  const jsonData = pm.response.json();",
+              "  pm.expect(jsonData).to.have.property('message', 'Email verified successfully');",
+              "  pm.expect(jsonData).to.have.property('user');",
+              "  pm.expect(jsonData.user).to.have.property('email', pm.variables.get('testEmail'));",
+              "});"
+            ]
           }
         }
-      ]
-    },
-    {
-      "name": "2. Login with Registered User",
+      ],
       "request": {
         "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{verificationOtp}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/verify-email",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "verify-email"]
+        },
+        "description": "⚠️ Before running, set collection variable 'verificationOtp' with the 6-digit code received by email (or shown in terminal)."
+      }
+    },
+    {
+      "name": "3. Resend Verification OTP (if needed)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Response confirms OTP sent', () => {",
+              "  pm.expect(pm.response.json()).to.have.property('message', 'New OTP sent to your email.');",
+              "});",
+              "console.log('✅ New OTP sent. Check email and update \"verificationOtp\" variable.');"
+            ]
           }
-        ],
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/resend-verification",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "resend-verification"]
+        }
+      }
+    },
+    {
+      "name": "4. Login (sets cookies)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Response contains user data and no token (cookie only)', () => {",
+              "  const jsonData = pm.response.json();",
+              "  pm.expect(jsonData).to.have.property('message', 'Login successful');",
+              "  pm.expect(jsonData).to.have.property('user');",
+              "  pm.expect(jsonData.user).to.have.property('email', pm.variables.get('testEmail'));",
+              "  pm.expect(jsonData).to.not.have.property('token');",
+              "});",
+              "pm.test('Cookies are present in response headers', () => {",
+              "  const setCookieHeaders = pm.response.headers.all().filter(h => h.key === 'Set-Cookie');",
+              "  const cookiesString = setCookieHeaders.map(h => h.value).join('; ');",
+              "  pm.expect(cookiesString).to.include('accessToken');",
+              "  pm.expect(cookiesString).to.include('refreshToken');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
@@ -101,71 +147,104 @@
           "host": ["{{baseUrl}}"],
           "path": ["api", "auth", "login"]
         }
-      },
+      }
+    },
+    {
+      "name": "5. Get Current User (Protected, uses cookie)",
       "event": [
         {
           "listen": "test",
           "script": {
             "exec": [
-              "pm.test('Status code is 200', function () {",
-              "    pm.response.to.have.status(200);",
-              "});",
-              "const jsonData = pm.response.json();",
-              "pm.test('Response contains token', function () {",
-              "    pm.expect(jsonData).to.have.property('token');",
-              "});",
-              "pm.collectionVariables.set('accessToken', jsonData.token);"
-            ],
-            "type": "text/javascript"
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Returns user profile without password', () => {",
+              "  const jsonData = pm.response.json();",
+              "  pm.expect(jsonData).to.have.property('email', pm.variables.get('testEmail'));",
+              "  pm.expect(jsonData).to.not.have.property('password');",
+              "});"
+            ]
           }
         }
-      ]
-    },
-    {
-      "name": "3. Get Current User (Protected Route)",
+      ],
       "request": {
         "method": "GET",
-        "header": [
-          {
-            "key": "Authorization",
-            "value": "Bearer {{accessToken}}"
-          }
-        ],
+        "header": [],
         "url": {
           "raw": "{{baseUrl}}/api/auth/me",
           "host": ["{{baseUrl}}"],
           "path": ["api", "auth", "me"]
         }
-      },
+      }
+    },
+    {
+      "name": "6. Refresh Token",
       "event": [
         {
           "listen": "test",
           "script": {
             "exec": [
-              "pm.test('Status code is 200', function () {",
-              "    pm.response.to.have.status(200);",
-              "});",
-              "const jsonData = pm.response.json();",
-              "pm.test('User profile returns email and no password field', function () {",
-              "    pm.expect(jsonData).to.have.property('email', pm.variables.get('testEmail'));",
-              "    pm.expect(jsonData).to.not.have.property('password');",
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Refreshed tokens set new cookies', () => {",
+              "  pm.expect(pm.response.json()).to.have.property('message', 'Token refreshed');",
               "});"
-            ],
-            "type": "text/javascript"
+            ]
           }
         }
-      ]
-    },
-    {
-      "name": "4. Forgot Password (Request Reset Email)",
+      ],
       "request": {
         "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/refresh-token",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "refresh-token"]
+        }
+      }
+    },
+    {
+      "name": "7. Logout (clears cookies)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Logout success message', () => {",
+              "  pm.expect(pm.response.json()).to.have.property('message', 'Logged out');",
+              "});"
+            ]
           }
-        ],
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/logout",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "logout"]
+        }
+      }
+    },
+    {
+      "name": "8. Forgot Password (request reset email)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Reset email sent confirmation', () => {",
+              "  pm.expect(pm.response.json()).to.have.property('message');",
+              "});",
+              "console.log('✅ Password reset email sent. Check email for token and set collection variable \"resetToken\".');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
@@ -175,35 +254,28 @@
           "host": ["{{baseUrl}}"],
           "path": ["api", "auth", "forgot-password"]
         }
-      },
+      }
+    },
+    {
+      "name": "9. Reset Password (using token, returns cookies)",
       "event": [
         {
           "listen": "test",
           "script": {
             "exec": [
-              "pm.test('Status code is 200', function () {",
-              "    pm.response.to.have.status(200);",
-              "});",
-              "pm.test('Reset email endpoint returns intended message', function () {",
-              "    const jsonData = pm.response.json();",
-              "    pm.expect(jsonData).to.have.property('message');",
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Password reset sets new cookies and returns user', () => {",
+              "  const jsonData = pm.response.json();",
+              "  pm.expect(jsonData).to.have.property('message', 'Password reset successful');",
+              "  pm.expect(jsonData).to.have.property('user');",
               "});"
-            ],
-            "type": "text/javascript"
+            ]
           }
         }
-      ]
-    },
-    {
-      "name": "5. Reset Password (Manual resetToken required)",
+      ],
       "request": {
         "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"newPassword\": \"{{newPassword}}\"\n}"
@@ -213,38 +285,29 @@
           "host": ["{{baseUrl}}"],
           "path": ["api", "auth", "reset-password"]
         },
-        "description": "This request requires a valid reset token from the password reset email or database. Set {{resetToken}} manually before running."
-      },
+        "description": "⚠️ Before running, set collection variable 'resetToken' from the password reset email."
+      }
+    },
+    {
+      "name": "10. Firebase Google Auth (requires frontend ID token)",
       "event": [
         {
           "listen": "test",
           "script": {
             "exec": [
-              "pm.test('Status code is 200', function () {",
-              "    pm.response.to.have.status(200);",
-              "});",
-              "const jsonData = pm.response.json();",
-              "pm.test('Password reset returns new JWT token', function () {",
-              "    pm.expect(jsonData).to.have.property('message', 'Password reset successful');",
-              "    pm.expect(jsonData).to.have.property('token');",
-              "});",
-              "pm.collectionVariables.set('accessToken', jsonData.token);"
-            ],
-            "type": "text/javascript"
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Firebase login sets cookies', () => {",
+              "  const jsonData = pm.response.json();",
+              "  pm.expect(jsonData).to.have.property('message', 'Firebase login successful');",
+              "  pm.expect(jsonData).to.have.property('user');",
+              "});"
+            ]
           }
         }
-      ]
-    },
-    {
-      "name": "6. Firebase Google Auth",
+      ],
       "request": {
         "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"idToken\": \"{{firebaseIdToken}}\"\n}"
@@ -254,102 +317,66 @@
           "host": ["{{baseUrl}}"],
           "path": ["api", "auth", "firebase"]
         },
-        "description": "Use a valid Firebase ID token from Google sign-in. This endpoint verifies Firebase tokens and issues the app JWT."
-      },
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status code is 200', function () {",
-              "    pm.response.to.have.status(200);",
-              "});",
-              "const jsonData = pm.response.json();",
-              "pm.test('Firebase auth returns app JWT token', function () {",
-              "    pm.expect(jsonData).to.have.property('token');",
-              "});",
-              "pm.collectionVariables.set('accessToken', jsonData.token);"
-            ],
-            "type": "text/javascript"
-          }
-        }
-      ]
+        "description": "⚠️ Obtain a Firebase ID token from your frontend (Google sign-in) and set the collection variable 'firebaseIdToken'."
+      }
     },
     {
-      "name": "7. Invalid Login",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"wrongpassword\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/auth/login",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "auth", "login"]
-        }
-      },
+      "name": "11. Negative Test – Register with Existing Email",
       "event": [
         {
           "listen": "test",
           "script": {
             "exec": [
-              "pm.test('Status code is 401', function () {",
-              "    pm.response.to.have.status(401);",
-              "});",
-              "const jsonData = pm.response.json();",
-              "pm.test('Invalid login response contains error message', function () {",
-              "    pm.expect(jsonData).to.have.property('message');",
+              "pm.test('Status code is 400', () => pm.response.to.have.status(400));",
+              "pm.test('Error message indicates email exists', () => {",
+              "  pm.expect(pm.response.json()).to.have.property('message', 'Email already exists');",
               "});"
-            ],
-            "type": "text/javascript"
+            ]
           }
         }
-      ]
-    },
-    {
-      "name": "8. Register Existing Email",
+      ],
       "request": {
         "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"name\": \"Duplicate User\",\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"anotherpass\"\n}"
+          "raw": "{\n  \"name\": \"Duplicate\",\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"somepass\"\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/api/auth/register",
           "host": ["{{baseUrl}}"],
           "path": ["api", "auth", "register"]
         }
-      },
+      }
+    },
+    {
+      "name": "12. Negative Test – Login with Unverified Email (if not yet verified)",
       "event": [
         {
           "listen": "test",
           "script": {
             "exec": [
-              "pm.test('Status code is 400', function () {",
-              "    pm.response.to.have.status(400);",
-              "});",
-              "const jsonData = pm.response.json();",
-              "pm.test('Duplicate registration returns error', function () {",
-              "    pm.expect(jsonData).to.have.property('message');",
+              "pm.test('Status code is 401', () => pm.response.to.have.status(401));",
+              "pm.test('Error asks to verify email', () => {",
+              "  pm.expect(pm.response.json()).to.have.property('message', 'Please verify your email before logging in.');",
               "});"
-            ],
-            "type": "text/javascript"
+            ]
           }
         }
-      ]
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "login"]
+        }
+      }
     }
   ]
 }

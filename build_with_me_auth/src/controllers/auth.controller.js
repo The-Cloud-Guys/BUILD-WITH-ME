@@ -2,64 +2,103 @@ const User = require('../models/user.model');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
-const { verifyFirebaseToken } = require('../services/firebase.service');
 const {
   registerValidation,
   loginValidation,
   forgotPasswordValidation,
   resetPasswordValidation,
+  verifyEmailValidation,
+  resendOTPValidation,
 } = require('../validation/auth.validation');
+const { verifyFirebaseToken } = require('../services/firebase.service');
+const { generateAlphanumericOTP, hashOTP } = require('../utils/otp.util');
 
-// Generate JWT Token
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN,
+//  TOKEN HELPERS (with cookies)
+
+const generateTokens = (user) => {
+  const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
   });
+  const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_REFRESH_SECRET, {
+    expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+  });
+  return { accessToken, refreshToken };
 };
 
-// Configure Nodemailer transporter (use environment variables)
+const storeRefreshToken = async (userId, refreshToken) => {
+  const hashed = crypto.createHash('sha256').update(refreshToken).digest('hex');
+  console.log(`[storeRefreshToken] Updating user ${userId} with hash ${hashed.substring(0,10)}...`);
+  const result = await User.findByIdAndUpdate(userId, { refreshToken: hashed });
+  console.log(`[storeRefreshToken] Update result:`, result ? 'success' : 'failed');
+};
+
+const verifyRefreshTokenFromDB = async (userId, refreshToken) => {
+  const user = await User.findById(userId).select('+refreshToken');
+  if (!user || !user.refreshToken) return false;
+  const hashed = crypto.createHash('sha256').update(refreshToken).digest('hex');
+  return hashed === user.refreshToken;
+};
+
+const clearRefreshToken = async (userId) => {
+  await User.findByIdAndUpdate(userId, { refreshToken: null });
+};
+
 const createTransporter = () => {
+  const isDev = process.env.NODE_ENV !== 'production';
   return nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
-    port: process.env.EMAIL_PORT,
-    secure: process.env.EMAIL_SECURE === 'true', // true for 465, false for other ports
+    port: parseInt(process.env.EMAIL_PORT),
+    secure: process.env.EMAIL_SECURE === 'true',
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     },
+    ...(isDev && {
+      logger: true,
+      debug: true,
+    }),
   });
 };
 
-// @desc    Register a new user
-// @route   POST /api/auth/register
-// @access  Public
+const sendEmail = async ({ email, subject, html }) => {
+  const transporter = createTransporter();
+  await transporter.sendMail({
+    from: `"Build With Me" <${process.env.EMAIL_FROM}>`,
+    to: email,
+    subject,
+    html,
+  });
+};
+
+
 const register = async (req, res) => {
   try {
-    // Validate request body
+    if (req.body.email) req.body.email = req.body.email.toLowerCase().trim();
     const { error } = registerValidation(req.body);
-    if (error) {
-      return res.status(400).json({ message: error.details[0].message });
-    }
+    if (error) return res.status(400).json({ message: error.details[0].message });
 
     const { name, email, password } = req.body;
-
-    // Check if user already exists
     const userExists = await User.findOne({ email });
-    if (userExists) {
-      return res.status(400).json({ message: 'User already exists' });
-    }
+    if (userExists) return res.status(400).json({ message: 'Email already exists' });
 
-    // Create user
     const user = await User.create({ name, email, password });
 
-    // Generate token
-    const token = generateToken(user._id);
+    const otp = generateAlphanumericOTP(6);
+    const hashedOTP = hashOTP(otp);
+    user.emailVerificationOTP = hashedOTP;
+    user.emailVerificationExpires = Date.now() + 10 * 60 * 1000;
+    await user.save();
+
+    const html = `<p>Welcome! Your verification OTP is: <strong>${otp}</strong>. Expires in 10 minutes.</p>`;
+    try {
+      await sendEmail({ email: user.email, subject: 'Verify Your Email', html });
+    } catch (err) {
+      console.error('Email failed:', err);
+    }
 
     res.status(201).json({
-      _id: user._id,
-      name: user.name,
+      message: 'Registration successful. Check your email for OTP to verify your account.',
       email: user.email,
-      token,
     });
   } catch (error) {
     console.error(error);
@@ -67,39 +106,49 @@ const register = async (req, res) => {
   }
 };
 
-// @desc    Login user
-// @route   POST /api/auth/login
-// @access  Public
-const login = async (req, res) => {
+
+const verifyEmail = async (req, res) => {
   try {
-    // Validate request body
-    const { error } = loginValidation(req.body);
-    if (error) {
-      return res.status(400).json({ message: error.details[0].message });
+    if (req.body.email) req.body.email = req.body.email.toLowerCase().trim();
+    const { error } = verifyEmailValidation(req.body);
+    if (error) return res.status(400).json({ message: error.details[0].message });
+
+    const { email, otp } = req.body;
+    const user = await User.findOne({ email }).select('+emailVerificationOTP');
+    if (!user || user.emailVerified) return res.status(400).json({ message: 'Invalid request' });
+    if (!user.emailVerificationOTP || user.emailVerificationExpires < Date.now()) {
+      return res.status(400).json({ message: 'OTP expired. Request a new one.' });
+    }
+    if (hashOTP(otp) !== user.emailVerificationOTP) {
+      return res.status(400).json({ message: 'Invalid OTP' });
     }
 
-    const { email, password } = req.body;
+    user.emailVerified = true;
+    user.emailVerificationOTP = undefined;
+    user.emailVerificationExpires = undefined;
+    await user.save();
 
-    // Check for user
-    const user = await User.findOne({ email }).select('+password');
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
+    const { accessToken, refreshToken } = generateTokens(user);
+    await storeRefreshToken(user._id, refreshToken);
 
-    // Check password
-    const isMatch = await user.matchPassword(password);
-    if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-
-    // Generate token
-    const token = generateToken(user._id);
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 15 * 60 * 1000,
+      path: '/',   
+    });
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',   
+    });
 
     res.json({
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      token,
+      message: 'Email verified successfully',
+      user: { _id: user._id, name: user.name, email: user.email },
     });
   } catch (error) {
     console.error(error);
@@ -107,12 +156,151 @@ const login = async (req, res) => {
   }
 };
 
-// @desc    Get current logged in user
-// @route   GET /api/auth/me
-// @access  Private
+
+const resendVerificationOTP = async (req, res) => {
+  try {
+    if (req.body.email) req.body.email = req.body.email.toLowerCase().trim();
+    const { error } = resendOTPValidation(req.body);
+    if (error) return res.status(400).json({ message: error.details[0].message });
+
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    if (!user || user.emailVerified) return res.status(400).json({ message: 'Invalid request' });
+
+    const otp = generateAlphanumericOTP(6);
+    const hashedOTP = hashOTP(otp);
+    user.emailVerificationOTP = hashedOTP;
+    user.emailVerificationExpires = Date.now() + 10 * 60 * 1000;
+    await user.save();
+
+    const html = `<p>Your new OTP is: <strong>${otp}</strong>. Expires in 10 minutes.</p>`;
+    try {
+      await sendEmail({ email: user.email, subject: 'Resend OTP', html });
+      res.json({ message: 'New OTP sent to your email.' });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: 'Failed to send email' });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+//  LOGIN (check emailVerified, set cookies)
+
+const login = async (req, res) => {
+  try {
+    if (req.body.email) req.body.email = req.body.email.toLowerCase().trim();
+    const { error } = loginValidation(req.body);
+    if (error) return res.status(400).json({ message: error.details[0].message });
+
+    const { email, password } = req.body;
+    const user = await User.findOne({ email }).select('+password');
+    if (!user || !(await user.matchPassword(password))) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+    if (!user.emailVerified) {
+      return res.status(401).json({ message: 'Please verify your email before logging in.' });
+    }
+
+    const { accessToken, refreshToken } = generateTokens(user);
+    await storeRefreshToken(user._id, refreshToken);
+
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 15 * 60 * 1000,
+      path: '/',
+    });
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
+    });
+
+    res.json({
+      message: 'Login successful',
+      user: { _id: user._id, name: user.name, email: user.email },
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+//  REFRESH TOKEN
+const refreshToken = async (req, res) => {
+  try {
+    const refreshToken = req.cookies.refreshToken;
+    if (!refreshToken) return res.status(401).json({ message: 'No refresh token' });
+
+    let decoded;
+    try {
+      decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    } catch (err) {
+      return res.status(401).json({ message: 'Invalid refresh token' });
+    }
+
+    const isValid = await verifyRefreshTokenFromDB(decoded.id, refreshToken);
+    if (!isValid) return res.status(401).json({ message: 'Refresh token revoked' });
+
+    const user = await User.findById(decoded.id);
+    if (!user) return res.status(401).json({ message: 'User not found' });
+
+    const { accessToken: newAccessToken, refreshToken: newRefreshToken } = generateTokens(user);
+    await storeRefreshToken(user._id, newRefreshToken);   // ✅ store new token
+
+    res.cookie('accessToken', newAccessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 15 * 60 * 1000,
+      path: '/',
+    });
+    res.cookie('refreshToken', newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
+    });
+
+    res.json({ message: 'Token refreshed' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+//  LOGOUT
+
+const logout = async (req, res) => {
+  try {
+    const refreshToken = req.cookies.refreshToken;
+    if (refreshToken) {
+      let decoded;
+      try {
+        decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+        await clearRefreshToken(decoded.id);
+      } catch (err) {}
+    }
+    res.clearCookie('accessToken');
+    res.clearCookie('refreshToken');
+    res.json({ message: 'Logged out' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// GET CURRENT USER (protected)
+
 const getMe = async (req, res) => {
   try {
-    // req.user is set by the protect middleware (add it if needed)
     const user = await User.findById(req.user.id).select('-password');
     res.json(user);
   } catch (error) {
@@ -121,92 +309,80 @@ const getMe = async (req, res) => {
   }
 };
 
-// @desc    Send password reset email
-// @route   POST /api/auth/forgot-password
-// @access  Public
+//  FORGOT PASSWORD
+
 const forgotPassword = async (req, res) => {
   try {
+    if (req.body.email) req.body.email = req.body.email.toLowerCase().trim();
     const { error } = forgotPasswordValidation(req.body);
-    if (error) {
-      return res.status(400).json({ message: error.details[0].message });
-    }
+    if (error) return res.status(400).json({ message: error.details[0].message });
 
     const { email } = req.body;
     const user = await User.findOne({ email });
     if (!user) {
-      // For security, don't reveal that user doesn't exist
-      return res.status(200).json({ message: 'If that email exists, we have sent a reset link.' });
+      return res.status(200).json({ message: 'If email exists, reset link sent' });
     }
 
-    // Generate reset token
     const plainToken = user.generateResetToken();
     await user.save({ validateBeforeSave: false });
-
-    // Create reset URL (frontend URL)
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${plainToken}`;
+    const html = `<a href="${resetUrl}">Reset Password</a> (expires in 10 minutes)`;
 
-    // Send email
-    const transporter = createTransporter();
-    const mailOptions = {
-      from: `"Build With Me" <${process.env.EMAIL_FROM}>`,
-      to: user.email,
-      subject: 'Password Reset Request',
-      html: `
-        <p>You requested a password reset.</p>
-        <p>Click this <a href="${resetUrl}">link</a> to reset your password.</p>
-        <p>The link expires in 10 minutes.</p>
-        <p>If you didn't request this, please ignore this email.</p>
-      `,
-    };
-
-    await transporter.sendMail(mailOptions);
-
-    res.status(200).json({ message: 'Password reset email sent' });
+    try {
+      await sendEmail({ email: user.email, subject: 'Reset Password', html });
+      res.json({ message: 'Reset email sent' });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: 'Failed to send email' });
+    }
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// @desc    Reset password using token
-// @route   POST /api/auth/reset-password
-// @access  Public
+// RESET PASSWORD (returns tokens)
+
 const resetPassword = async (req, res) => {
   try {
     const { error } = resetPasswordValidation(req.body);
-    if (error) {
-      return res.status(400).json({ message: error.details[0].message });
-    }
+    if (error) return res.status(400).json({ message: error.details[0].message });
 
-    const { token, newPassword } = req.body;
-
-    // Hash the token from request to compare with stored hash
-    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
-
+    const hashedToken = crypto.createHash('sha256').update(req.body.token).digest('hex');
     const user = await User.findOne({
       resetPasswordToken: hashedToken,
       resetPasswordExpires: { $gt: Date.now() },
     }).select('+password');
 
-    if (!user) {
-      return res.status(400).json({ message: 'Invalid or expired token' });
-    }
+    if (!user) return res.status(400).json({ message: 'Invalid or expired token' });
 
-    // Update password
-    user.password = newPassword;
+    user.password = req.body.newPassword;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
     await user.save();
 
-    // Optionally generate new JWT and return it
-    const jwtToken = generateToken(user._id);
+    // Auto-login after reset
+    const { accessToken, refreshToken } = generateTokens(user);
+    await storeRefreshToken(user._id, refreshToken);
 
-    res.status(200).json({
+res.cookie('accessToken', accessToken, {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+  maxAge: 15 * 60 * 1000,
+  path: '/',
+});
+res.cookie('refreshToken', refreshToken, {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  path: '/',
+});
+
+    res.json({
       message: 'Password reset successful',
-      token: jwtToken,
-      _id: user._id,
-      name: user.name,
-      email: user.email,
+      user: { _id: user._id, name: user.name, email: user.email },
     });
   } catch (error) {
     console.error(error);
@@ -214,33 +390,25 @@ const resetPassword = async (req, res) => {
   }
 };
 
-// @desc    Authenticate with Firebase (Google Sign-In)
-// @route   POST /api/auth/firebase
-// @access  Public
+//  FIREBASE AUTH (auto-verified)
+
 const firebaseAuth = async (req, res) => {
   try {
     const { idToken } = req.body;
-    if (!idToken) {
-      return res.status(400).json({ message: 'ID token is required' });
-    }
+    if (!idToken) return res.status(400).json({ message: 'ID token required' });
 
-    // Verify token using Firebase Admin SDK
-    const decodedToken = await verifyFirebaseToken(idToken);
-    const { uid, email, name, picture } = decodedToken;
+    const decoded = await verifyFirebaseToken(idToken);
+    let { uid, email, name } = decoded;
+    email = email.toLowerCase().trim();
 
-    // Find or create user in MongoDB
     let user = await User.findOne({ firebaseUid: uid });
     if (!user) {
-      // Check if email already exists (local user)
       user = await User.findOne({ email });
       if (user) {
-        // Link existing local user to Firebase
         user.firebaseUid = uid;
         if (!user.providers.includes('google')) user.providers.push('google');
         await user.save();
       } else {
-        // Create new user with dummy password (never used for login)
-        const crypto = require('crypto');
         const dummyPassword = crypto.randomBytes(20).toString('hex');
         user = await User.create({
           name: name || email.split('@')[0],
@@ -248,23 +416,48 @@ const firebaseAuth = async (req, res) => {
           firebaseUid: uid,
           providers: ['google'],
           password: dummyPassword,
+          emailVerified: true, // auto-verified
         });
       }
     }
 
-    // Generate your own JWT for this user
-    const token = generateToken(user._id);
+    const { accessToken, refreshToken } = generateTokens(user);
+    await storeRefreshToken(user._id, refreshToken);
+
+res.cookie('accessToken', accessToken, {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+  maxAge: 15 * 60 * 1000,
+  path: '/',
+});
+res.cookie('refreshToken', refreshToken, {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  path: '/',
+});
 
     res.json({
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      token,
+      message: 'Firebase login successful',
+      user: { _id: user._id, name: user.name, email: user.email },
     });
   } catch (error) {
-    console.error('Firebase auth error:', error);
-    res.status(401).json({ message: 'Invalid Firebase token' });
+    console.error(error);
+    res.status(401).json({ message: 'Firebase auth failed' });
   }
 };
 
-module.exports = { register, login, getMe, forgotPassword, resetPassword, firebaseAuth };
+module.exports = {
+  register,
+  verifyEmail,
+  resendVerificationOTP,
+  login,
+  refreshToken,
+  logout,
+  getMe,
+  forgotPassword,
+  resetPassword,
+  firebaseAuth,
+};

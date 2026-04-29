@@ -1,21 +1,33 @@
 const express = require('express');
 const {
   register,
+  verifyEmail,
+  resendVerificationOTP,
   login,
+  refreshToken,
+  logout,
   getMe,
   forgotPassword,
   resetPassword,
-  firebaseAuth,         
+  firebaseAuth,
 } = require('../controllers/auth.controller');
-const { protect } = require('../middleware/auth.middleware');
+const { protect, logCookies } = require('../middleware/auth.middleware'); // ← correct path
+const { authLimiter } = require('../middleware/rateLimiter');
 
 const router = express.Router();
 
-router.post('/register', register);
-router.post('/login', login);
-router.get('/me', protect, getMe);
-router.post('/forgot-password', forgotPassword);
-router.post('/reset-password', resetPassword);
-router.post('/firebase', firebaseAuth); 
+// Public routes (with rate limiting on sensitive ones)
+router.post('/register', authLimiter, register);
+router.post('/verify-email', verifyEmail);
+router.post('/resend-verification', resendVerificationOTP);
+router.post('/login', authLimiter, login);
+router.post('/refresh-token', refreshToken);
+router.post('/logout', logout);
+router.post('/forgot-password', authLimiter, forgotPassword);
+router.post('/reset-password', authLimiter, resetPassword);
+router.post('/firebase', firebaseAuth);
+
+// Protected route (logCookies is optional, for debugging)
+router.get('/me', logCookies, protect, getMe);
 
 module.exports = router;

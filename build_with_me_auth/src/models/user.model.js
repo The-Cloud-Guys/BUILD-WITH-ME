@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const userSchema = new mongoose.Schema(
   {
@@ -8,6 +9,7 @@ const userSchema = new mongoose.Schema(
       required: [true, 'Please add a name'],
       trim: true,
     },
+
     email: {
       type: String,
       required: [true, 'Please add an email'],
@@ -15,44 +17,74 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
+
     password: {
       type: String,
       required: [true, 'Please add a password'],
       minlength: 6,
       select: false,
     },
-    // Password reset fields
+
+    //  Password Reset
     resetPasswordToken: String,
     resetPasswordExpires: Date,
+
+    //  Firebase / Social Auth
+    firebaseUid: {
+      type: String,
+      unique: true,
+      sparse: true, // allows multiple nulls
+    },
+
+
+providers: {
+  type: [String],
+  enum: ['local', 'google', 'facebook', 'apple', 'github'],
+  default: ['local']
+},
+
+    //  Email Verification
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+   emailVerificationOTP: String,
+    emailVerificationExpires: Date,
+
+    // 🔁 Refresh Token (hashed)
+    refreshToken: {
+      type: String,
+      select: false,
+    },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
-// Encrypt password before saving
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
+
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
   next();
 });
 
-// Compare entered password with hashed password
 userSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// Generate password reset token (crypto)
 userSchema.methods.generateResetToken = function () {
-  const crypto = require('crypto');
   const resetToken = crypto.randomBytes(32).toString('hex');
+
   this.resetPasswordToken = crypto
     .createHash('sha256')
     .update(resetToken)
     .digest('hex');
-  this.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
-  return resetToken; // return plain token (to send via email)
+
+  this.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // 10 mins
+
+  return resetToken;
 };
+
 
 module.exports = mongoose.model('User', userSchema);
