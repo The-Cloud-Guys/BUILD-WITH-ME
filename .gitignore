@@ -9,6 +9,10 @@ build_with_me_auth/package-lock.json
 .env
 build_with_me_auth/.env
 
+# Firebase token helper (contains API keys)
+firebase-token.html
+build_with_me_auth/firebase-token.html
+
 # Firebase service account key
 serviceAccountKey.json
 build_with_me_auth/serviceAccountKey.json

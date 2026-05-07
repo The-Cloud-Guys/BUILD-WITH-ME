@@ -2,6 +2,7 @@ const User = require('../models/user.model');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+
 const {
   registerValidation,
   loginValidation,
@@ -10,31 +11,35 @@ const {
   verifyEmailValidation,
   resendOTPValidation,
 } = require('../validation/auth.validation');
-const { verifyFirebaseToken } = require('../services/firebase.service');
-const { generateAlphanumericOTP, hashOTP } = require('../utils/otp.util');
 
-//  TOKEN HELPERS (with cookies)
+const { verifyFirebaseToken } = require('../services/firebase.service');
+const { generateNumericOTP, hashOTP } = require('../utils/otp.util');
+
+// ==============================
+// TOKEN HELPERS
+// ==============================
 
 const generateTokens = (user) => {
   const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
   });
+
   const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_REFRESH_SECRET, {
     expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   });
+
   return { accessToken, refreshToken };
 };
 
 const storeRefreshToken = async (userId, refreshToken) => {
   const hashed = crypto.createHash('sha256').update(refreshToken).digest('hex');
-  console.log(`[storeRefreshToken] Updating user ${userId} with hash ${hashed.substring(0,10)}...`);
-  const result = await User.findByIdAndUpdate(userId, { refreshToken: hashed });
-  console.log(`[storeRefreshToken] Update result:`, result ? 'success' : 'failed');
+  await User.findByIdAndUpdate(userId, { refreshToken: hashed });
 };
 
 const verifyRefreshTokenFromDB = async (userId, refreshToken) => {
   const user = await User.findById(userId).select('+refreshToken');
   if (!user || !user.refreshToken) return false;
+
   const hashed = crypto.createHash('sha256').update(refreshToken).digest('hex');
   return hashed === user.refreshToken;
 };
@@ -42,6 +47,10 @@ const verifyRefreshTokenFromDB = async (userId, refreshToken) => {
 const clearRefreshToken = async (userId) => {
   await User.findByIdAndUpdate(userId, { refreshToken: null });
 };
+
+// ==============================
+// EMAIL SETUP
+// ==============================
 
 const createTransporter = () => {
   const isDev = process.env.NODE_ENV !== 'production';
@@ -53,10 +62,7 @@ const createTransporter = () => {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     },
-    ...(isDev && {
-      logger: true,
-      debug: true,
-    }),
+    ...(isDev && { logger: true, debug: true }),
   });
 };
 
@@ -70,6 +76,9 @@ const sendEmail = async ({ email, subject, html }) => {
   });
 };
 
+// ==============================
+// REGISTER
+// ==============================
 
 const register = async (req, res) => {
   try {
@@ -77,27 +86,31 @@ const register = async (req, res) => {
     const { error } = registerValidation(req.body);
     if (error) return res.status(400).json({ message: error.details[0].message });
 
-    const { name, email, password } = req.body;
+    const { email, password } = req.body;
     const userExists = await User.findOne({ email });
     if (userExists) return res.status(400).json({ message: 'Email already exists' });
 
-    const user = await User.create({ name, email, password });
+    const user = await User.create({
+      email,
+      password,
+      emailVerified: false,
+      onboardingStep: 0,
+    });
 
-    const otp = generateAlphanumericOTP(6);
+    const otp = generateNumericOTP(6);
     const hashedOTP = hashOTP(otp);
     user.emailVerificationOTP = hashedOTP;
     user.emailVerificationExpires = Date.now() + 10 * 60 * 1000;
     await user.save();
 
-    const html = `<p>Welcome! Your verification OTP is: <strong>${otp}</strong>. Expires in 10 minutes.</p>`;
-    try {
-      await sendEmail({ email: user.email, subject: 'Verify Your Email', html });
-    } catch (err) {
-      console.error('Email failed:', err);
-    }
+    await sendEmail({
+      email: user.email,
+      subject: 'Verify Your Email',
+      html: `<p>Your OTP is <b>${otp}</b>. Expires in 10 minutes.</p>`,
+    });
 
     res.status(201).json({
-      message: 'Registration successful. Check your email for OTP to verify your account.',
+      message: 'Registration successful. Verify OTP sent.',
       email: user.email,
     });
   } catch (error) {
@@ -106,6 +119,9 @@ const register = async (req, res) => {
   }
 };
 
+// ==============================
+// VERIFY EMAIL
+// ==============================
 
 const verifyEmail = async (req, res) => {
   try {
@@ -115,9 +131,9 @@ const verifyEmail = async (req, res) => {
 
     const { email, otp } = req.body;
     const user = await User.findOne({ email }).select('+emailVerificationOTP');
-    if (!user || user.emailVerified) return res.status(400).json({ message: 'Invalid request' });
-    if (!user.emailVerificationOTP || user.emailVerificationExpires < Date.now()) {
-      return res.status(400).json({ message: 'OTP expired. Request a new one.' });
+
+    if (!user || user.emailVerified || !user.emailVerificationOTP || user.emailVerificationExpires < Date.now()) {
+      return res.status(400).json({ message: 'Invalid or expired OTP' });
     }
     if (hashOTP(otp) !== user.emailVerificationOTP) {
       return res.status(400).json({ message: 'Invalid OTP' });
@@ -136,19 +152,19 @@ const verifyEmail = async (req, res) => {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 15 * 60 * 1000,
-      path: '/',   
+      path: '/',
     });
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/',   
+      path: '/',
     });
 
     res.json({
       message: 'Email verified successfully',
-      user: { _id: user._id, name: user.name, email: user.email },
+      user: { _id: user._id, email: user.email, onboardingStep: user.onboardingStep },
     });
   } catch (error) {
     console.error(error);
@@ -156,6 +172,9 @@ const verifyEmail = async (req, res) => {
   }
 };
 
+// ==============================
+// RESEND OTP
+// ==============================
 
 const resendVerificationOTP = async (req, res) => {
   try {
@@ -165,29 +184,32 @@ const resendVerificationOTP = async (req, res) => {
 
     const { email } = req.body;
     const user = await User.findOne({ email });
-    if (!user || user.emailVerified) return res.status(400).json({ message: 'Invalid request' });
+    if (!user || user.emailVerified) {
+      return res.status(400).json({ message: 'Invalid request' });
+    }
 
-    const otp = generateAlphanumericOTP(6);
+    const otp = generateNumericOTP(6);
     const hashedOTP = hashOTP(otp);
     user.emailVerificationOTP = hashedOTP;
     user.emailVerificationExpires = Date.now() + 10 * 60 * 1000;
     await user.save();
 
-    const html = `<p>Your new OTP is: <strong>${otp}</strong>. Expires in 10 minutes.</p>`;
-    try {
-      await sendEmail({ email: user.email, subject: 'Resend OTP', html });
-      res.json({ message: 'New OTP sent to your email.' });
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ message: 'Failed to send email' });
-    }
+    await sendEmail({
+      email: user.email,
+      subject: 'Resend OTP',
+      html: `<p>Your new OTP is <b>${otp}</b>. Expires in 10 minutes.</p>`,
+    });
+
+    res.json({ message: 'New OTP sent to your email.' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-//  LOGIN (check emailVerified, set cookies)
+// ==============================
+// LOGIN
+// ==============================
 
 const login = async (req, res) => {
   try {
@@ -224,7 +246,7 @@ const login = async (req, res) => {
 
     res.json({
       message: 'Login successful',
-      user: { _id: user._id, name: user.name, email: user.email },
+      user: { _id: user._id, email: user.email, onboardingStep: user.onboardingStep },
     });
   } catch (error) {
     console.error(error);
@@ -232,27 +254,30 @@ const login = async (req, res) => {
   }
 };
 
-//  REFRESH TOKEN
+// ==============================
+// REFRESH TOKEN
+// ==============================
+
 const refreshToken = async (req, res) => {
   try {
-    const refreshToken = req.cookies.refreshToken;
-    if (!refreshToken) return res.status(401).json({ message: 'No refresh token' });
+    const refreshTokenCookie = req.cookies.refreshToken;
+    if (!refreshTokenCookie) return res.status(401).json({ message: 'No refresh token' });
 
     let decoded;
     try {
-      decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+      decoded = jwt.verify(refreshTokenCookie, process.env.JWT_REFRESH_SECRET);
     } catch (err) {
       return res.status(401).json({ message: 'Invalid refresh token' });
     }
 
-    const isValid = await verifyRefreshTokenFromDB(decoded.id, refreshToken);
+    const isValid = await verifyRefreshTokenFromDB(decoded.id, refreshTokenCookie);
     if (!isValid) return res.status(401).json({ message: 'Refresh token revoked' });
 
     const user = await User.findById(decoded.id);
     if (!user) return res.status(401).json({ message: 'User not found' });
 
     const { accessToken: newAccessToken, refreshToken: newRefreshToken } = generateTokens(user);
-    await storeRefreshToken(user._id, newRefreshToken);   // ✅ store new token
+    await storeRefreshToken(user._id, newRefreshToken);
 
     res.cookie('accessToken', newAccessToken, {
       httpOnly: true,
@@ -276,15 +301,16 @@ const refreshToken = async (req, res) => {
   }
 };
 
-//  LOGOUT
+// ==============================
+// LOGOUT
+// ==============================
 
 const logout = async (req, res) => {
   try {
-    const refreshToken = req.cookies.refreshToken;
-    if (refreshToken) {
-      let decoded;
+    const refreshTokenCookie = req.cookies.refreshToken;
+    if (refreshTokenCookie) {
       try {
-        decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+        const decoded = jwt.verify(refreshTokenCookie, process.env.JWT_REFRESH_SECRET);
         await clearRefreshToken(decoded.id);
       } catch (err) {}
     }
@@ -297,11 +323,15 @@ const logout = async (req, res) => {
   }
 };
 
-// GET CURRENT USER (protected)
+// ==============================
+// GET CURRENT USER (PROTECTED)
+// ==============================
 
 const getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password');
+    const user = await User.findById(req.user.id).select(
+      '-password -refreshToken -emailVerificationOTP -resetPasswordToken -resetPasswordExpires'
+    );
     res.json(user);
   } catch (error) {
     console.error(error);
@@ -309,7 +339,9 @@ const getMe = async (req, res) => {
   }
 };
 
-//  FORGOT PASSWORD
+// ==============================
+// FORGOT PASSWORD
+// ==============================
 
 const forgotPassword = async (req, res) => {
   try {
@@ -320,7 +352,7 @@ const forgotPassword = async (req, res) => {
     const { email } = req.body;
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(200).json({ message: 'If email exists, reset link sent' });
+      return res.status(200).json({ message: 'If email exists, reset link sent' }); // security
     }
 
     const plainToken = user.generateResetToken();
@@ -328,20 +360,17 @@ const forgotPassword = async (req, res) => {
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${plainToken}`;
     const html = `<a href="${resetUrl}">Reset Password</a> (expires in 10 minutes)`;
 
-    try {
-      await sendEmail({ email: user.email, subject: 'Reset Password', html });
-      res.json({ message: 'Reset email sent' });
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ message: 'Failed to send email' });
-    }
+    await sendEmail({ email: user.email, subject: 'Reset Password', html });
+    res.json({ message: 'Reset email sent' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// RESET PASSWORD (returns tokens)
+// ==============================
+// RESET PASSWORD (RETURNS COOKIES)
+// ==============================
 
 const resetPassword = async (req, res) => {
   try {
@@ -361,28 +390,27 @@ const resetPassword = async (req, res) => {
     user.resetPasswordExpires = undefined;
     await user.save();
 
-    // Auto-login after reset
     const { accessToken, refreshToken } = generateTokens(user);
     await storeRefreshToken(user._id, refreshToken);
 
-res.cookie('accessToken', accessToken, {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax',
-  maxAge: 15 * 60 * 1000,
-  path: '/',
-});
-res.cookie('refreshToken', refreshToken, {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax',
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-  path: '/',
-});
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 15 * 60 * 1000,
+      path: '/',
+    });
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
+    });
 
     res.json({
       message: 'Password reset successful',
-      user: { _id: user._id, name: user.name, email: user.email },
+      user: { _id: user._id, email: user.email },
     });
   } catch (error) {
     console.error(error);
@@ -390,7 +418,9 @@ res.cookie('refreshToken', refreshToken, {
   }
 };
 
-//  FIREBASE AUTH (auto-verified)
+// ==============================
+// FIREBASE AUTH (NO PROFILE PHOTO SYNC)
+// ==============================
 
 const firebaseAuth = async (req, res) => {
   try {
@@ -398,10 +428,11 @@ const firebaseAuth = async (req, res) => {
     if (!idToken) return res.status(400).json({ message: 'ID token required' });
 
     const decoded = await verifyFirebaseToken(idToken);
-    let { uid, email, name } = decoded;
+    let { uid, email } = decoded;
     email = email.toLowerCase().trim();
 
     let user = await User.findOne({ firebaseUid: uid });
+
     if (!user) {
       user = await User.findOne({ email });
       if (user) {
@@ -411,12 +442,12 @@ const firebaseAuth = async (req, res) => {
       } else {
         const dummyPassword = crypto.randomBytes(20).toString('hex');
         user = await User.create({
-          name: name || email.split('@')[0],
           email,
           firebaseUid: uid,
           providers: ['google'],
           password: dummyPassword,
-          emailVerified: true, // auto-verified
+          emailVerified: true,
+          // profilePhoto is NOT set from Google – user must upload later
         });
       }
     }
@@ -424,30 +455,34 @@ const firebaseAuth = async (req, res) => {
     const { accessToken, refreshToken } = generateTokens(user);
     await storeRefreshToken(user._id, refreshToken);
 
-res.cookie('accessToken', accessToken, {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax',
-  maxAge: 15 * 60 * 1000,
-  path: '/',
-});
-res.cookie('refreshToken', refreshToken, {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax',
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-  path: '/',
-});
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 15 * 60 * 1000,
+      path: '/',
+    });
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
+    });
 
     res.json({
       message: 'Firebase login successful',
-      user: { _id: user._id, name: user.name, email: user.email },
+      user: { _id: user._id, email: user.email }, // no profilePhoto field returned
     });
   } catch (error) {
     console.error(error);
     res.status(401).json({ message: 'Firebase auth failed' });
   }
 };
+
+// ==============================
+// EXPORTS
+// ==============================
 
 module.exports = {
   register,

@@ -6,13 +6,13 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-     "gen-token-page": "node generate-token-page.js"
+    "gen-token-page": "node generate-token-page.js"
   },
   "keywords": [],
   "author": "Habeeb Olakunle",
   "license": "",
   "dependencies": {
-    "@supabase/supabase-js": "^2.101.1",
+    "@supabase/supabase-js": "^2.105.1",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
@@ -25,7 +25,9 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^7.8.9",
     "morgan": "^1.10.1",
-    "nodemailer": "^8.0.5"
+    "multer": "^2.1.1",
+    "nodemailer": "^8.0.5",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

@@ -13,6 +13,7 @@ const {
 } = require('../controllers/auth.controller');
 const { protect, logCookies } = require('../middleware/auth.middleware'); // ← correct path
 const { authLimiter } = require('../middleware/rateLimiter');
+const onboardingRoutes = require('./onboarding.routes');
 
 const router = express.Router();
 
