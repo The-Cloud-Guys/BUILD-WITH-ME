@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const brevo = require('@getbrevo/brevo');
+const axios = require('axios');
 
 const {
   registerValidation,
@@ -61,23 +62,34 @@ let apiKey = apiInstance.authentications['apiKey'];
 apiKey.apiKey = process.env.BREVO_API_KEY;
 
 const sendEmail = async ({ email, subject, html }) => {
-  let sendSmtpEmail = new brevo.SendSmtpEmail();
-  sendSmtpEmail.to = [{ email }];
-  sendSmtpEmail.sender = { 
-    email: process.env.EMAIL_FROM, 
-    name: "Build With Me" 
-  };
-  sendSmtpEmail.subject = subject;
-  sendSmtpEmail.htmlContent = html;
-
   try {
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
+    const response = await axios.post(
+      'https://api.brevo.com/v3/smtp/email',
+      {
+        sender: {
+          email: process.env.EMAIL_FROM,
+          name: 'Build With Me',
+        },
+        to: [{ email }],
+        subject,
+        htmlContent: html,
+      },
+      {
+        headers: {
+          'api-key': process.env.BREVO_API_KEY,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    return response.data;
   } catch (error) {
-    console.error('Brevo email error:', error);
+    console.error(
+      'Brevo email error:',
+      error.response?.data || error.message
+    );
     throw new Error('Email sending failed');
   }
 };
-
 // ==============================
 // REGISTER
 // ==============================
