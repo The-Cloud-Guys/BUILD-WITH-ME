@@ -65,20 +65,11 @@ const userSchema = new mongoose.Schema(
     // =========================
     // Role & Skills
     // =========================
-    role: {
-      type: String,
-      enum: [
-        'Developer',
-        'Designer',
-        'Product Manager',
-        'Security',
-        'Data/ML',
-        'DevOps',
-        'Mobile Dev',
-        'Other',
-      ],
-      default: null,
-    },
+   role: {
+  type: String,
+  default: null,
+  // Validation of allowed roles is done in onboarding.controller.js
+},
 
     skills: {
       type: [String],
