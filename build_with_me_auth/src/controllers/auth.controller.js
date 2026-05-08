@@ -2,6 +2,7 @@ const User = require('../models/user.model');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const brevo = require('@getbrevo/brevo');
 
 const {
   registerValidation,
@@ -52,28 +53,29 @@ const clearRefreshToken = async (userId) => {
 // EMAIL SETUP
 // ==============================
 
-const createTransporter = () => {
-  const isDev = process.env.NODE_ENV !== 'production';
-  return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: parseInt(process.env.EMAIL_PORT),
-    secure: process.env.EMAIL_SECURE === 'true',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-    ...(isDev && { logger: true, debug: true }),
-  });
-};
+
+
+// Configure Brevo API client
+let apiInstance = new brevo.TransactionalEmailsApi();
+let apiKey = apiInstance.authentications['apiKey'];
+apiKey.apiKey = process.env.BREVO_API_KEY;
 
 const sendEmail = async ({ email, subject, html }) => {
-  const transporter = createTransporter();
-  await transporter.sendMail({
-    from: `"Build With Me" <${process.env.EMAIL_FROM}>`,
-    to: email,
-    subject,
-    html,
-  });
+  let sendSmtpEmail = new brevo.SendSmtpEmail();
+  sendSmtpEmail.to = [{ email }];
+  sendSmtpEmail.sender = { 
+    email: process.env.EMAIL_FROM, 
+    name: "Build With Me" 
+  };
+  sendSmtpEmail.subject = subject;
+  sendSmtpEmail.htmlContent = html;
+
+  try {
+    await apiInstance.sendTransacEmail(sendSmtpEmail);
+  } catch (error) {
+    console.error('Brevo email error:', error);
+    throw new Error('Email sending failed');
+  }
 };
 
 // ==============================

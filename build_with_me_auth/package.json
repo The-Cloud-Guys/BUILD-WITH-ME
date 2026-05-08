@@ -12,6 +12,8 @@
   "author": "Habeeb Olakunle",
   "license": "",
   "dependencies": {
+    "@getbrevo/brevo": "^5.0.4",
+    "@sendgrid/mail": "^8.1.6",
     "@supabase/supabase-js": "^2.105.1",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
