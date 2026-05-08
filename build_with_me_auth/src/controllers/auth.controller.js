@@ -57,10 +57,6 @@ const clearRefreshToken = async (userId) => {
 
 
 // Configure Brevo API client
-let apiInstance = new brevo.TransactionalEmailsApi();
-let apiKey = apiInstance.authentications['apiKey'];
-apiKey.apiKey = process.env.BREVO_API_KEY;
-
 const sendEmail = async ({ email, subject, html }) => {
   try {
     const response = await axios.post(
@@ -83,10 +79,7 @@ const sendEmail = async ({ email, subject, html }) => {
     );
     return response.data;
   } catch (error) {
-    console.error(
-      'Brevo email error:',
-      error.response?.data || error.message
-    );
+    console.error('Brevo email error:', error.response?.data || error.message);
     throw new Error('Email sending failed');
   }
 };
