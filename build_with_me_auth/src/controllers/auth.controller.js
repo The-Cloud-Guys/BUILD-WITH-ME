@@ -1,8 +1,6 @@
 const User = require('../models/user.model');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
-const brevo = require('@getbrevo/brevo');
 const axios = require('axios');
 
 const {
