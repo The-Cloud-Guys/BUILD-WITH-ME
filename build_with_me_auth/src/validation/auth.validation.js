@@ -1,5 +1,10 @@
 const Joi = require('joi');
 
+// ==============================
+// AUTH VALIDATION SCHEMAS
+// ==============================
+
+// Register (email + password only)
 const registerValidation = (data) => {
   const schema = Joi.object({
     email: Joi.string().email().required(),
@@ -8,6 +13,7 @@ const registerValidation = (data) => {
   return schema.validate(data);
 };
 
+// Login
 const loginValidation = (data) => {
   const schema = Joi.object({
     email: Joi.string().email().required(),
@@ -16,22 +22,7 @@ const loginValidation = (data) => {
   return schema.validate(data);
 };
 
-const verifyEmailValidation = (data) => {
-  const schema = Joi.object({
-    email: Joi.string().email().required(),
-    otp: Joi.string().required(),
-  });
-  return schema.validate(data);
-};
-
-const resendOTPValidation = (data) => {
-  const schema = Joi.object({
-    email: Joi.string().email().required(),
-  });
-  return schema.validate(data);
-};
-
-// For POST /api/auth/forgot-password
+// Forgot password (email only)
 const forgotPasswordValidation = (data) => {
   const schema = Joi.object({
     email: Joi.string().email().required(),
@@ -39,6 +30,7 @@ const forgotPasswordValidation = (data) => {
   return schema.validate(data);
 };
 
+// Verify reset OTP (step 2)
 const verifyResetOtpValidation = (data) => {
   const schema = Joi.object({
     email: Joi.string().email().required(),
@@ -47,7 +39,7 @@ const verifyResetOtpValidation = (data) => {
   return schema.validate(data);
 };
 
-// Changed: reset-password now accepts a token (not OTP)
+// Reset password (step 3 – uses temporary token)
 const resetPasswordValidation = (data) => {
   const schema = Joi.object({
     token: Joi.string().required(),
@@ -56,12 +48,19 @@ const resetPasswordValidation = (data) => {
   return schema.validate(data);
 };
 
-// For POST /api/auth/reset-password
-const resetPasswordValidation = (data) => {
+// Verify email OTP
+const verifyEmailValidation = (data) => {
   const schema = Joi.object({
     email: Joi.string().email().required(),
     otp: Joi.string().length(6).required(),
-    newPassword: Joi.string().min(6).required(),
+  });
+  return schema.validate(data);
+};
+
+// Resend OTP
+const resendOTPValidation = (data) => {
+  const schema = Joi.object({
+    email: Joi.string().email().required(),
   });
   return schema.validate(data);
 };
@@ -69,8 +68,9 @@ const resetPasswordValidation = (data) => {
 module.exports = {
   registerValidation,
   loginValidation,
+  forgotPasswordValidation,
+  verifyResetOtpValidation,
+  resetPasswordValidation,
   verifyEmailValidation,
   resendOTPValidation,
-  forgotPasswordValidation,
-  resetPasswordValidation,
 };
