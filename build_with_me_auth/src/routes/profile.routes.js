@@ -12,7 +12,7 @@ const router = express.Router();
 
 // All routes require authentication
 router.get('/me', protect, getMyProfile);
-router.put('/me', protect, updateProfile);
+router.patch('/me', protect, updateProfile);
 router.post('/me/photo', protect, upload.single('photo'), uploadProfilePhoto);
 router.delete('/me/photo', protect, deleteProfilePhoto);
 
