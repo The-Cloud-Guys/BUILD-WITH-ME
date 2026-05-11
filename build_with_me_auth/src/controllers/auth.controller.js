@@ -357,16 +357,26 @@ const forgotPassword = async (req, res) => {
     const { email } = req.body;
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(200).json({ message: 'If email exists, reset link sent' }); // security
+      // For security, don't reveal whether email exists
+      return res.status(200).json({ message: 'If that email exists, we have sent a reset OTP.' });
     }
 
-    const plainToken = user.generateResetToken();
-    await user.save({ validateBeforeSave: false });
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${plainToken}`;
-    const html = `<a href="${resetUrl}">Reset Password</a> (expires in 10 minutes)`;
+    // Generate 6-digit numeric OTP
+    const otp = generateNumericOTP(6);
+    const hashedOTP = hashOTP(otp);
+    user.resetPasswordOTP = hashedOTP;
+    user.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+    await user.save();
 
-    await sendEmail({ email: user.email, subject: 'Reset Password', html });
-    res.json({ message: 'Reset email sent' });
+    // Send OTP via email (using Brevo)
+    const html = `<p>Your password reset OTP is: <strong>${otp}</strong>. It expires in 10 minutes.</p>`;
+    try {
+      await sendEmail({ email: user.email, subject: 'Password Reset OTP', html });
+      res.status(200).json({ message: 'Password reset OTP sent to your email.' });
+    } catch (emailError) {
+      console.error('Email failed:', emailError);
+      res.status(500).json({ message: 'Failed to send OTP. Try again later.' });
+    }
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -379,22 +389,28 @@ const forgotPassword = async (req, res) => {
 
 const resetPassword = async (req, res) => {
   try {
+    if (req.body.email) req.body.email = req.body.email.toLowerCase().trim();
     const { error } = resetPasswordValidation(req.body);
     if (error) return res.status(400).json({ message: error.details[0].message });
 
-    const hashedToken = crypto.createHash('sha256').update(req.body.token).digest('hex');
-    const user = await User.findOne({
-      resetPasswordToken: hashedToken,
-      resetPasswordExpires: { $gt: Date.now() },
-    }).select('+password');
+    const { email, otp, newPassword } = req.body;
+    const user = await User.findOne({ email }).select('+password +resetPasswordOTP');
+    if (!user || !user.resetPasswordOTP || user.resetPasswordExpires < Date.now()) {
+      return res.status(400).json({ message: 'Invalid or expired OTP' });
+    }
 
-    if (!user) return res.status(400).json({ message: 'Invalid or expired token' });
+    // Compare OTP
+    if (hashOTP(otp) !== user.resetPasswordOTP) {
+      return res.status(400).json({ message: 'Invalid OTP' });
+    }
 
-    user.password = req.body.newPassword;
-    user.resetPasswordToken = undefined;
+    // Update password
+    user.password = newPassword;
+    user.resetPasswordOTP = undefined;
     user.resetPasswordExpires = undefined;
     await user.save();
 
+    // Generate new tokens and set cookies (auto-login)
     const { accessToken, refreshToken } = generateTokens(user);
     await storeRefreshToken(user._id, refreshToken);
 

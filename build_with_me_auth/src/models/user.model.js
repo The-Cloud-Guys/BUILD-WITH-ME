@@ -95,33 +95,32 @@ const userSchema = new mongoose.Schema(
     // =========================
     // Email Verification
     // =========================
-    emailVerified: {
-      type: Boolean,
-      default: false,
-    },
+emailVerified: {
+  type: Boolean,
+  default: false,
+},
+emailVerificationOTP: {
+  type: String,
+  default: null,
+},
+emailVerificationExpires: {
+  type: Date,
+  default: null,
+},
 
-    emailVerificationOTP: {
-      type: String,
-      default: null,
-    },
 
-    emailVerificationExpires: {
-      type: Date,
-      default: null,
-    },
+// =========================
+// Password Reset (OTP based)
+// =========================
+resetPasswordOTP: {
+  type: String,
+  default: null,
+},
+resetPasswordExpires: {
+  type: Date,
+  default: null,
+},
 
-    // =========================
-    // Password Reset
-    // =========================
-    resetPasswordToken: {
-      type: String,
-      default: null,
-    },
-
-    resetPasswordExpires: {
-      type: Date,
-      default: null,
-    },
 
     // =========================
     // Firebase / Social Auth
@@ -171,12 +170,6 @@ userSchema.methods.matchPassword = async function (enteredPassword) {
   return bcrypt.compare(enteredPassword, this.password);
 };
 
-// Generate password reset token
-userSchema.methods.generateResetToken = function () {
-  const resetToken = crypto.randomBytes(32).toString('hex');
-  this.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-  this.resetPasswordExpires = Date.now() + 10 * 60 * 1000;
-  return resetToken;
-};
+
 
 module.exports = mongoose.model('User', userSchema);
