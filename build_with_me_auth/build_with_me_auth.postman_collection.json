@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Build With Me - Full API (Auth + Onboarding + Profile + Storage)",
-    "description": "Complete test suite for authentication (register, OTP, login, refresh, logout, password reset, Firebase), step‑by‑step onboarding (role, skills, profile completion), profile management (update, photo upload & delete with signed URLs), and negative tests. Uses HTTP‑only cookies – Postman manages them automatically.",
+    "description": "Complete test suite for authentication (register, OTP, login, refresh, logout, password reset OTP, Firebase), step‑by‑step onboarding (role, skills, profile completion), profile management (update, photo upload & delete with signed URLs), and negative tests. Uses HTTP‑only cookies – Postman manages them automatically.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -13,7 +13,7 @@
     { "key": "testBio", "value": "Passionate full‑stack developer." },
     { "key": "testExternalLink", "value": "https://github.com/johndoe" },
     { "key": "newPassword", "value": "newpass5678" },
-    { "key": "resetToken", "value": "", "description": "Copy from password reset email" },
+    { "key": "resetOtp", "value": "", "description": "Copy from password reset OTP email (6 digits)" },
     { "key": "verificationOtp", "value": "", "description": "Copy from email OTP (6 digits)" },
     { "key": "firebaseIdToken", "value": "", "description": "Obtain from frontend Google sign‑in" }
   ],
@@ -175,17 +175,17 @@
           }
         },
         {
-          "name": "6. Forgot Password (request reset email)",
+          "name": "6. Forgot Password (request OTP)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Reset email sent confirmation', () => {",
+                  "pm.test('Reset OTP sent confirmation', () => {",
                   "  pm.expect(pm.response.json()).to.have.property('message');",
                   "});",
-                  "console.log('✅ Password reset email sent. Set variable \"resetToken\".');"
+                  "console.log('✅ Password reset OTP sent. Set variable \"resetOtp\" from email/terminal.');"
                 ]
               }
             }
@@ -205,7 +205,7 @@
           }
         },
         {
-          "name": "7. Reset Password (using token, returns cookies)",
+          "name": "7. Reset Password (using OTP, returns cookies)",
           "event": [
             {
               "listen": "test",
@@ -226,14 +226,14 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"newPassword\": \"{{newPassword}}\"\n}"
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{resetOtp}}\",\n  \"newPassword\": \"{{newPassword}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/reset-password",
               "host": ["{{baseUrl}}"],
               "path": ["api", "auth", "reset-password"]
             },
-            "description": "⚠️ Set collection variable 'resetToken' from password reset email."
+            "description": "⚠️ Set collection variable 'resetOtp' from the password reset email (6-digit code)."
           }
         },
         {
