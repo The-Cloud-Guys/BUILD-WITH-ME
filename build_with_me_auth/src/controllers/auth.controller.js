@@ -7,6 +7,7 @@ const {
   registerValidation,
   loginValidation,
   forgotPasswordValidation,
+  verifyResetOtpValidation,  
   resetPasswordValidation,
   verifyEmailValidation,
   resendOTPValidation,
