@@ -345,7 +345,7 @@ const getMe = async (req, res) => {
 };
 
 // ==============================
-// FORGOT PASSWORD
+// FORGOT PASSWORD step 1: Request reset OTP
 // ==============================
 
 const forgotPassword = async (req, res) => {
@@ -384,33 +384,74 @@ const forgotPassword = async (req, res) => {
 };
 
 // ==============================
-// RESET PASSWORD (RETURNS COOKIES)
+// VERIFY RESET OTP (step 2)
 // ==============================
-
-const resetPassword = async (req, res) => {
+const verifyResetOtp = async (req, res) => {
   try {
     if (req.body.email) req.body.email = req.body.email.toLowerCase().trim();
-    const { error } = resetPasswordValidation(req.body);
+    const { error } = verifyResetOtpValidation(req.body);
     if (error) return res.status(400).json({ message: error.details[0].message });
 
-    const { email, otp, newPassword } = req.body;
-    const user = await User.findOne({ email }).select('+password +resetPasswordOTP');
+    const { email, otp } = req.body;
+    const user = await User.findOne({ email }).select('+resetPasswordOTP');
     if (!user || !user.resetPasswordOTP || user.resetPasswordExpires < Date.now()) {
       return res.status(400).json({ message: 'Invalid or expired OTP' });
     }
 
-    // Compare OTP
     if (hashOTP(otp) !== user.resetPasswordOTP) {
       return res.status(400).json({ message: 'Invalid OTP' });
     }
 
-    // Update password
-    user.password = newPassword;
+    // OTP is valid – generate a short-lived JWT token for password reset (expires in 5 minutes)
+    const resetToken = jwt.sign(
+      { id: user._id, purpose: 'reset' },
+      process.env.JWT_RESET_SECRET,
+      { expiresIn: '5m' }
+    );
+
+    // Clear OTP fields to prevent reuse (optional, but good)
     user.resetPasswordOTP = undefined;
     user.resetPasswordExpires = undefined;
     await user.save();
 
-    // Generate new tokens and set cookies (auto-login)
+    res.json({
+      message: 'OTP verified. You may now reset your password.',
+      resetToken, // send to frontend
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ==============================
+// RESET PASSWORD (step 3, uses temporary token)
+// ==============================
+const resetPassword = async (req, res) => {
+  try {
+    const { error } = resetPasswordValidation(req.body);
+    if (error) return res.status(400).json({ message: error.details[0].message });
+
+    const { token, newPassword } = req.body;
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_RESET_SECRET);
+    } catch (err) {
+      return res.status(400).json({ message: 'Invalid or expired reset token' });
+    }
+
+    if (decoded.purpose !== 'reset') {
+      return res.status(400).json({ message: 'Invalid token purpose' });
+    }
+
+    const user = await User.findById(decoded.id).select('+password');
+    if (!user) return res.status(400).json({ message: 'User not found' });
+
+    user.password = newPassword;
+    await user.save();
+
+    // After successful password reset, log the user in (issue new tokens)
     const { accessToken, refreshToken } = generateTokens(user);
     await storeRefreshToken(user._id, refreshToken);
 
@@ -438,6 +479,8 @@ const resetPassword = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+
 
 // ==============================
 // FIREBASE AUTH (NO PROFILE PHOTO SYNC)
@@ -514,6 +557,7 @@ module.exports = {
   logout,
   getMe,
   forgotPassword,
+  verifyResetOtp,
   resetPassword,
   firebaseAuth,
 };

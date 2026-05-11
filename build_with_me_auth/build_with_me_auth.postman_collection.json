@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Build With Me - Full API (Auth + Onboarding + Profile + Storage)",
-    "description": "Complete test suite for authentication (register, OTP, login, refresh, logout, password reset OTP, Firebase), step‑by‑step onboarding (role, skills, profile completion), profile management (update, photo upload & delete with signed URLs), and negative tests. Uses HTTP‑only cookies – Postman manages them automatically.",
+    "description": "Complete test suite for authentication (register, OTP, login, refresh, logout, password reset OTP + token, Firebase), step‑by‑step onboarding, profile management (PATCH, photo upload/delete with signed URLs), and negative tests. Uses HTTP‑only cookies – Postman manages them automatically.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -14,6 +14,7 @@
     { "key": "testExternalLink", "value": "https://github.com/johndoe" },
     { "key": "newPassword", "value": "newpass5678" },
     { "key": "resetOtp", "value": "", "description": "Copy from password reset OTP email (6 digits)" },
+    { "key": "resetToken", "value": "", "description": "Temporary JWT returned by /verify-reset-otp" },
     { "key": "verificationOtp", "value": "", "description": "Copy from email OTP (6 digits)" },
     { "key": "firebaseIdToken", "value": "", "description": "Obtain from frontend Google sign‑in" }
   ],
@@ -205,7 +206,39 @@
           }
         },
         {
-          "name": "7. Reset Password (using OTP, returns cookies)",
+          "name": "7. Verify Reset OTP (returns temporary token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contains resetToken', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('resetToken');",
+                  "  pm.collectionVariables.set('resetToken', jsonData.resetToken);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{resetOtp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-reset-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "verify-reset-otp"]
+            },
+            "description": "⚠️ Set variable 'resetOtp' before running. The response contains a short-lived JWT (resetToken) used in the next step."
+          }
+        },
+        {
+          "name": "8. Reset Password (using token, returns cookies)",
           "event": [
             {
               "listen": "test",
@@ -226,18 +259,18 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{resetOtp}}\",\n  \"newPassword\": \"{{newPassword}}\"\n}"
+              "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"newPassword\": \"{{newPassword}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/reset-password",
               "host": ["{{baseUrl}}"],
               "path": ["api", "auth", "reset-password"]
             },
-            "description": "⚠️ Set collection variable 'resetOtp' from the password reset email (6-digit code)."
+            "description": "⚠️ This step uses the resetToken obtained from /verify-reset-otp (automatically set as collection variable)."
           }
         },
         {
-          "name": "8. Firebase Google Auth",
+          "name": "9. Firebase Google Auth",
           "event": [
             {
               "listen": "test",
@@ -274,7 +307,7 @@
       "name": "📝 Onboarding Flow",
       "item": [
         {
-          "name": "9. Get Onboarding Status",
+          "name": "10. Get Onboarding Status",
           "event": [
             {
               "listen": "test",
@@ -299,7 +332,7 @@
           }
         },
         {
-          "name": "10. Set User Role",
+          "name": "11. Set User Role",
           "event": [
             {
               "listen": "test",
@@ -331,7 +364,7 @@
           }
         },
         {
-          "name": "11. Set User Skills",
+          "name": "12. Set User Skills",
           "event": [
             {
               "listen": "test",
@@ -363,7 +396,7 @@
           }
         },
         {
-          "name": "12. Complete Profile",
+          "name": "13. Complete Profile",
           "event": [
             {
               "listen": "test",
@@ -401,7 +434,7 @@
       "name": "🖼️ Profile Management",
       "item": [
         {
-          "name": "13. Get Current Profile (after onboarding)",
+          "name": "14. Get Current Profile (after onboarding)",
           "event": [
             {
               "listen": "test",
@@ -427,7 +460,7 @@
           }
         },
         {
-          "name": "14. Update Profile (additional changes)",
+          "name": "15. Update Profile (partial update)",
           "event": [
             {
               "listen": "test",
@@ -458,7 +491,7 @@
           }
         },
         {
-          "name": "15. Upload Profile Photo",
+          "name": "16. Upload Profile Photo",
           "event": [
             {
               "listen": "test",
@@ -495,7 +528,7 @@
           }
         },
         {
-          "name": "16. Delete Profile Photo",
+          "name": "17. Delete Profile Photo",
           "event": [
             {
               "listen": "test",
@@ -524,7 +557,7 @@
       "name": "⚠️ Negative Tests",
       "item": [
         {
-          "name": "17. Register with Existing Email",
+          "name": "18. Register with Existing Email",
           "event": [
             {
               "listen": "test",
@@ -553,7 +586,7 @@
           }
         },
         {
-          "name": "18. Login with Unverified Email",
+          "name": "19. Login with Unverified Email",
           "event": [
             {
               "listen": "test",
@@ -582,7 +615,7 @@
           }
         },
         {
-          "name": "19. Access Protected Route Without Login",
+          "name": "20. Access Protected Route Without Login",
           "event": [
             {
               "listen": "test",

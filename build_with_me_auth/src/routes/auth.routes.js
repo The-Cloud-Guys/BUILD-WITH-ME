@@ -25,6 +25,7 @@ router.post('/login', authLimiter, login);
 router.post('/refresh-token', refreshToken);
 router.post('/logout', logout);
 router.post('/forgot-password', authLimiter, forgotPassword);
+router.post('/verify-reset-otp', authLimiter, verifyResetOtp);
 router.post('/reset-password', authLimiter, resetPassword);
 router.post('/firebase', firebaseAuth);
 
