@@ -558,7 +558,7 @@ module.exports = {
   logout,
   getMe,
   forgotPassword,
-  verifyResetOtp,
+  verifyResetOtp,    
   resetPassword,
   firebaseAuth,
 };

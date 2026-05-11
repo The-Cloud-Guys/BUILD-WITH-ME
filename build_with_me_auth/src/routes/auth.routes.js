@@ -8,6 +8,7 @@ const {
   logout,
   getMe,
   forgotPassword,
+  verifyResetOtp,      
   resetPassword,
   firebaseAuth,
 } = require('../controllers/auth.controller');
