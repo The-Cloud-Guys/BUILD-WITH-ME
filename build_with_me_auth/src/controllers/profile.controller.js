@@ -1,20 +1,16 @@
 const User = require('../models/user.model');
 const { uploadFile, deleteFile, getSignedUrl } = require('../services/supabase.service');
 const sharp = require('sharp');
+const { getOnboardingStatus } = require('../utils/onboardingStatus');
 
 // ==============================
 // HELPERS
 // ==============================
 
-// Generate profile image path (always JPG)
 const generateProfilePhotoPath = (userId) => {
   const timestamp = Date.now();
   return `users/${userId}/profile_${timestamp}.jpg`;
 };
-
-// ==============================
-// IMAGE PROCESSING
-// ==============================
 
 const processImage = async (buffer) => {
   try {
@@ -59,7 +55,6 @@ const getMyProfile = async (req, res) => {
 
     const userObj = user.toObject();
 
-    // Generate signed URL for private images
     if (userObj.profilePhoto && typeof userObj.profilePhoto === 'string' && userObj.profilePhoto.startsWith('users/')) {
       try {
         const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, userObj.profilePhoto);
@@ -69,14 +64,138 @@ const getMyProfile = async (req, res) => {
       }
     }
 
-    res.json(userObj);
+    res.json({
+      ...userObj,
+      onboardingCompleted: user.onboardingCompleted,
+      onboardingStatus: getOnboardingStatus(user.onboardingStep),
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// @desc Update profile (onboarding step 3)
+// @desc    Create full user profile (onboarding step 3) with optional photo
+// @route   POST /api/userProfile
+// @access  Private
+const createUserProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (user.onboardingStep !== 2) {
+      return res.status(400).json({ message: `Onboarding step mismatch. Expected step 2, got ${user.onboardingStep}` });
+    }
+
+    const { firstName, lastName, bio, externalLink } = req.body;
+    const updateData = {};
+
+    if (firstName) updateData.firstName = firstName.trim();
+    if (lastName) updateData.lastName = lastName.trim();
+    if (bio) updateData.bio = bio.slice(0, 500);
+    if (externalLink) updateData.externalLink = externalLink.trim();
+
+    if (req.file) {
+      const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!allowedMimeTypes.includes(req.file.mimetype)) {
+        return res.status(400).json({ message: 'Only JPG, PNG, and WEBP images are allowed' });
+      }
+
+      if (user.profilePhoto && user.profilePhoto.startsWith('users/')) {
+        try {
+          await deleteFile(process.env.SUPABASE_BUCKET_AVATAR, user.profilePhoto);
+        } catch (err) { /* ignore */ }
+      }
+
+      const processedBuffer = await processImage(req.file.buffer);
+      const filePath = generateProfilePhotoPath(user._id);
+      await uploadFile(process.env.SUPABASE_BUCKET_AVATAR, filePath, processedBuffer, 'image/jpeg');
+      updateData.profilePhoto = filePath;
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(req.user.id, updateData, { new: true })
+      .select('-password -refreshToken -emailVerificationOTP -resetPasswordToken -resetPasswordExpires');
+
+    updatedUser.onboardingStep = 3;
+    await updatedUser.save();
+
+    const userObj = updatedUser.toObject();
+    if (userObj.profilePhoto && userObj.profilePhoto.startsWith('users/')) {
+      const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, userObj.profilePhoto);
+      userObj.profilePhoto = signedUrl;
+    }
+
+    res.json({
+      message: 'Profile created successfully',
+      onboardingCompleted: true,
+      onboardingStatus: 'completed',
+      user: userObj,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Update profile (including photo) – PATCH /api/userProfile
+// @route   PATCH /api/userProfile
+// @access  Private
+const updateUserProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const { firstName, lastName, bio, skills, externalLink } = req.body;
+    const updateData = {};
+
+    if (firstName !== undefined) updateData.firstName = firstName.trim();
+    if (lastName !== undefined) updateData.lastName = lastName.trim();
+    if (bio !== undefined) updateData.bio = bio.slice(0, 500);
+    if (externalLink !== undefined) updateData.externalLink = externalLink.trim();
+
+    if (skills !== undefined) {
+      let normalized = Array.isArray(skills) ? skills : skills.split(',').map(s => s.trim());
+      updateData.skills = normalized;
+    }
+
+    if (req.file) {
+      const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!allowedMimeTypes.includes(req.file.mimetype)) {
+        return res.status(400).json({ message: 'Only JPG, PNG, and WEBP images are allowed' });
+      }
+
+      if (user.profilePhoto && user.profilePhoto.startsWith('users/')) {
+        await deleteFile(process.env.SUPABASE_BUCKET_AVATAR, user.profilePhoto);
+      }
+
+      const processedBuffer = await processImage(req.file.buffer);
+      const filePath = generateProfilePhotoPath(user._id);
+      await uploadFile(process.env.SUPABASE_BUCKET_AVATAR, filePath, processedBuffer, 'image/jpeg');
+      updateData.profilePhoto = filePath;
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(req.user.id, updateData, { new: true })
+      .select('-password -refreshToken -emailVerificationOTP -resetPasswordToken -resetPasswordExpires');
+
+    const userObj = updatedUser.toObject();
+    if (userObj.profilePhoto && userObj.profilePhoto.startsWith('users/')) {
+      const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, userObj.profilePhoto);
+      userObj.profilePhoto = signedUrl;
+    }
+
+    res.json({
+      message: 'Profile updated successfully',
+      onboardingCompleted: userObj.onboardingStep === 3,
+      onboardingStatus: getOnboardingStatus(userObj.onboardingStep),
+      user: userObj,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc Update profile (legacy, kept for compatibility)
 // @route PUT /api/profile/me
 // @access Private
 const updateProfile = async (req, res) => {
@@ -112,7 +231,6 @@ const updateProfile = async (req, res) => {
 
     const userObj = user.toObject();
 
-    // Generate signed URL if needed
     if (userObj.profilePhoto && typeof userObj.profilePhoto === 'string' && userObj.profilePhoto.startsWith('users/')) {
       try {
         const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, userObj.profilePhoto);
@@ -151,7 +269,6 @@ const uploadProfilePhoto = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Delete old private image if exists
     if (user.profilePhoto && typeof user.profilePhoto === 'string' && user.profilePhoto.startsWith('users/')) {
       try {
         await deleteFile(process.env.SUPABASE_BUCKET_AVATAR, user.profilePhoto);
@@ -160,7 +277,6 @@ const uploadProfilePhoto = async (req, res) => {
       }
     }
 
-    // Process image (resize & convert to JPEG)
     let processedBuffer;
     try {
       processedBuffer = await processImage(req.file.buffer);
@@ -171,15 +287,12 @@ const uploadProfilePhoto = async (req, res) => {
       throw err;
     }
 
-    // Upload to Supabase
     const filePath = generateProfilePhotoPath(user._id);
     await uploadFile(process.env.SUPABASE_BUCKET_AVATAR, filePath, processedBuffer, 'image/jpeg');
 
-    // Store only the path
     user.profilePhoto = filePath;
     await user.save();
 
-    // Generate temporary signed URL for response
     const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, filePath);
 
     res.json({ message: 'Profile photo uploaded successfully', profilePhoto: signedUrl });
@@ -199,7 +312,6 @@ const deleteProfilePhoto = async (req, res) => {
       return res.status(404).json({ message: 'No profile photo found' });
     }
 
-    // Delete only private Supabase images
     if (typeof user.profilePhoto === 'string' && user.profilePhoto.startsWith('users/')) {
       await deleteFile(process.env.SUPABASE_BUCKET_AVATAR, user.profilePhoto);
     }
@@ -219,4 +331,6 @@ module.exports = {
   updateProfile,
   uploadProfilePhoto,
   deleteProfilePhoto,
+  createUserProfile,
+  updateUserProfile,
 };

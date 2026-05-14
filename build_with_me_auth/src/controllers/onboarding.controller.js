@@ -1,12 +1,6 @@
 const User = require('../models/user.model');
 const { roleValidation, skillsValidation, profileCompletionValidation } = require('../validation/onboarding.validation');
-
-// Helper to ensure user is at the correct step
-const checkStep = (user, expectedStep, nextStep = null) => {
-  if (user.onboardingStep !== expectedStep) {
-    throw new Error(`Onboarding step mismatch. Expected step ${expectedStep}, but user is at step ${user.onboardingStep}`);
-  }
-};
+const { getOnboardingStatus } = require('../utils/onboardingStatus');
 
 // @desc    Save user's role (Step 1)
 // @route   POST /api/onboarding/role
@@ -29,7 +23,12 @@ const setRole = async (req, res) => {
     res.json({
       message: 'Role saved successfully',
       nextStep: 'skills',
-      user: { id: user._id, role: user.role, onboardingStep: user.onboardingStep }
+      user: {
+        ...user.toObject(),
+        onboardingCompleted: user.onboardingCompleted,
+      },
+      onboardingCompleted: user.onboardingCompleted,
+      onboardingStatus: getOnboardingStatus(user.onboardingStep),
     });
   } catch (error) {
     console.error(error);
@@ -58,7 +57,12 @@ const setSkills = async (req, res) => {
     res.json({
       message: 'Skills saved successfully',
       nextStep: 'profile',
-      user: { id: user._id, skills: user.skills, onboardingStep: user.onboardingStep }
+      user: {
+        ...user.toObject(),
+        onboardingCompleted: user.onboardingCompleted,
+      },
+      onboardingCompleted: user.onboardingCompleted,
+      onboardingStatus: getOnboardingStatus(user.onboardingStep),
     });
   } catch (error) {
     console.error(error);
@@ -85,10 +89,9 @@ const completeProfile = async (req, res) => {
     user.lastName = lastName.trim();
     user.bio = bio ? bio.slice(0, 500) : '';
     user.externalLink = externalLink ? externalLink.trim() : '';
-    user.onboardingStep = 3; // completed
+    user.onboardingStep = 3;
     await user.save();
 
-    // Return full user object (excluding sensitive fields)
     const userObj = user.toObject();
     delete userObj.password;
     delete userObj.refreshToken;
@@ -99,7 +102,12 @@ const completeProfile = async (req, res) => {
     res.json({
       message: 'Profile completed successfully',
       onboardingComplete: true,
-      user: userObj
+      user: {
+        ...userObj,
+        onboardingCompleted: user.onboardingCompleted,
+      },
+      onboardingCompleted: user.onboardingCompleted,
+      onboardingStatus: getOnboardingStatus(user.onboardingStep),
     });
   } catch (error) {
     console.error(error);
@@ -110,10 +118,15 @@ const completeProfile = async (req, res) => {
 // @desc    Get current onboarding status
 // @route   GET /api/onboarding/status
 // @access  Private
-const getOnboardingStatus = async (req, res) => {
+const getOnboardingStatusHandler = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('onboardingStep role skills firstName lastName bio externalLink profilePhoto');
-    res.json({ onboardingStep: user.onboardingStep, user });
+    res.json({
+      onboardingStep: user.onboardingStep,
+      onboardingCompleted: user.onboardingCompleted,
+      onboardingStatus: getOnboardingStatus(user.onboardingStep),
+      user,
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -124,5 +137,5 @@ module.exports = {
   setRole,
   setSkills,
   completeProfile,
-  getOnboardingStatus,
+  getOnboardingStatus: getOnboardingStatusHandler,
 };

@@ -15,6 +15,7 @@ const {
 
 const { verifyFirebaseToken } = require('../services/firebase.service');
 const { generateNumericOTP, hashOTP } = require('../utils/otp.util');
+const { getOnboardingStatus } = require('../utils/onboardingStatus');
 
 // ==============================
 // TOKEN HELPERS
@@ -53,9 +54,6 @@ const clearRefreshToken = async (userId) => {
 // EMAIL SETUP
 // ==============================
 
-
-
-// Configure Brevo API client
 const sendEmail = async ({ email, subject, html }) => {
   try {
     const response = await axios.post(
@@ -82,6 +80,7 @@ const sendEmail = async ({ email, subject, html }) => {
     throw new Error('Email sending failed');
   }
 };
+
 // ==============================
 // REGISTER
 // ==============================
@@ -170,7 +169,14 @@ const verifyEmail = async (req, res) => {
 
     res.json({
       message: 'Email verified successfully',
-      user: { _id: user._id, email: user.email, onboardingStep: user.onboardingStep },
+      user: {
+        _id: user._id,
+        email: user.email,
+        onboardingStep: user.onboardingStep,
+        onboardingCompleted: user.onboardingCompleted
+      },
+      onboardingCompleted: user.onboardingCompleted,
+      onboardingStatus: getOnboardingStatus(user.onboardingStep)
     });
   } catch (error) {
     console.error(error);
@@ -252,7 +258,14 @@ const login = async (req, res) => {
 
     res.json({
       message: 'Login successful',
-      user: { _id: user._id, email: user.email, onboardingStep: user.onboardingStep },
+      user: {
+        _id: user._id,
+        email: user.email,
+        onboardingStep: user.onboardingStep,
+        onboardingCompleted: user.onboardingCompleted
+      },
+      onboardingCompleted: user.onboardingCompleted,
+      onboardingStatus: getOnboardingStatus(user.onboardingStep)
     });
   } catch (error) {
     console.error(error);
@@ -338,7 +351,18 @@ const getMe = async (req, res) => {
     const user = await User.findById(req.user.id).select(
       '-password -refreshToken -emailVerificationOTP -resetPasswordToken -resetPasswordExpires'
     );
-    res.json(user);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const userObject = user.toObject();
+
+    res.json({
+      ...userObject,
+      onboardingCompleted: user.onboardingCompleted,
+      onboardingStatus: getOnboardingStatus(user.onboardingStep),
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -346,7 +370,7 @@ const getMe = async (req, res) => {
 };
 
 // ==============================
-// FORGOT PASSWORD step 1: Request reset OTP
+// FORGOT PASSWORD (step 1: request OTP)
 // ==============================
 
 const forgotPassword = async (req, res) => {
@@ -358,18 +382,15 @@ const forgotPassword = async (req, res) => {
     const { email } = req.body;
     const user = await User.findOne({ email });
     if (!user) {
-      // For security, don't reveal whether email exists
       return res.status(200).json({ message: 'If that email exists, we have sent a reset OTP.' });
     }
 
-    // Generate 6-digit numeric OTP
     const otp = generateNumericOTP(6);
     const hashedOTP = hashOTP(otp);
     user.resetPasswordOTP = hashedOTP;
-    user.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+    user.resetPasswordExpires = Date.now() + 10 * 60 * 1000;
     await user.save();
 
-    // Send OTP via email (using Brevo)
     const html = `<p>Your password reset OTP is: <strong>${otp}</strong>. It expires in 10 minutes.</p>`;
     try {
       await sendEmail({ email: user.email, subject: 'Password Reset OTP', html });
@@ -403,21 +424,19 @@ const verifyResetOtp = async (req, res) => {
       return res.status(400).json({ message: 'Invalid OTP' });
     }
 
-    // OTP is valid – generate a short-lived JWT token for password reset (expires in 5 minutes)
     const resetToken = jwt.sign(
       { id: user._id, purpose: 'reset' },
       process.env.JWT_RESET_SECRET,
       { expiresIn: '5m' }
     );
 
-    // Clear OTP fields to prevent reuse (optional, but good)
     user.resetPasswordOTP = undefined;
     user.resetPasswordExpires = undefined;
     await user.save();
 
     res.json({
       message: 'OTP verified. You may now reset your password.',
-      resetToken, // send to frontend
+      resetToken,
     });
   } catch (error) {
     console.error(error);
@@ -426,7 +445,7 @@ const verifyResetOtp = async (req, res) => {
 };
 
 // ==============================
-// RESET PASSWORD (step 3, uses temporary token)
+// RESET PASSWORD (step 3)
 // ==============================
 const resetPassword = async (req, res) => {
   try {
@@ -452,7 +471,6 @@ const resetPassword = async (req, res) => {
     user.password = newPassword;
     await user.save();
 
-    // After successful password reset, log the user in (issue new tokens)
     const { accessToken, refreshToken } = generateTokens(user);
     await storeRefreshToken(user._id, refreshToken);
 
@@ -481,12 +499,9 @@ const resetPassword = async (req, res) => {
   }
 };
 
-
-
 // ==============================
-// FIREBASE AUTH (NO PROFILE PHOTO SYNC)
+// FIREBASE AUTH (no profile photo sync, includes token and onboarding status)
 // ==============================
-
 const firebaseAuth = async (req, res) => {
   try {
     const { idToken } = req.body;
@@ -512,7 +527,6 @@ const firebaseAuth = async (req, res) => {
           providers: ['google'],
           password: dummyPassword,
           emailVerified: true,
-          // profilePhoto is NOT set from Google – user must upload later
         });
       }
     }
@@ -535,9 +549,20 @@ const firebaseAuth = async (req, res) => {
       path: '/',
     });
 
+    const isProfileCompleted = user.onboardingStep === 3;
+
     res.json({
       message: 'Firebase login successful',
-      user: { _id: user._id, email: user.email }, // no profilePhoto field returned
+      token: accessToken,
+      isProfileCompleted,
+      user: {
+        id: user._id,
+        email: user.email,
+        onboardingStep: user.onboardingStep,
+        onboardingCompleted: user.onboardingCompleted
+      },
+      onboardingCompleted: user.onboardingCompleted,
+      onboardingStatus: getOnboardingStatus(user.onboardingStep)
     });
   } catch (error) {
     console.error(error);
@@ -558,7 +583,7 @@ module.exports = {
   logout,
   getMe,
   forgotPassword,
-  verifyResetOtp,    
+  verifyResetOtp,
   resetPassword,
   firebaseAuth,
 };

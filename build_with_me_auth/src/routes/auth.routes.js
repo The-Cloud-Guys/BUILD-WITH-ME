@@ -15,7 +15,6 @@ const {
 const { protect, logCookies } = require('../middleware/auth.middleware'); // ← correct path
 const { authLimiter } = require('../middleware/rateLimiter');
 const onboardingRoutes = require('./onboarding.routes');
-
 const router = express.Router();
 
 // Public routes (with rate limiting on sensitive ones)
@@ -30,7 +29,6 @@ router.post('/verify-reset-otp', authLimiter, verifyResetOtp);
 router.post('/reset-password', authLimiter, resetPassword);
 router.post('/firebase', firebaseAuth);
 
-// Protected route (logCookies is optional, for debugging)
 router.get('/me', logCookies, protect, getMe);
 
 module.exports = router;

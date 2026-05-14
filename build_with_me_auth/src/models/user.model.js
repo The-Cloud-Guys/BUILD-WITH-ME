@@ -65,11 +65,11 @@ const userSchema = new mongoose.Schema(
     // =========================
     // Role & Skills
     // =========================
-   role: {
-  type: String,
-  default: null,
-  // Validation of allowed roles is done in onboarding.controller.js
-},
+    role: {
+      type: String,
+      default: null,
+      // Validation of allowed roles is done in onboarding.controller.js
+    },
 
     skills: {
       type: [String],
@@ -95,32 +95,30 @@ const userSchema = new mongoose.Schema(
     // =========================
     // Email Verification
     // =========================
-emailVerified: {
-  type: Boolean,
-  default: false,
-},
-emailVerificationOTP: {
-  type: String,
-  default: null,
-},
-emailVerificationExpires: {
-  type: Date,
-  default: null,
-},
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
+    emailVerificationOTP: {
+      type: String,
+      default: null,
+    },
+    emailVerificationExpires: {
+      type: Date,
+      default: null,
+    },
 
-
-// =========================
-// Password Reset (OTP based)
-// =========================
-resetPasswordOTP: {
-  type: String,
-  default: null,
-},
-resetPasswordExpires: {
-  type: Date,
-  default: null,
-},
-
+    // =========================
+    // Password Reset (OTP based)
+    // =========================
+    resetPasswordOTP: {
+      type: String,
+      default: null,
+    },
+    resetPasswordExpires: {
+      type: Date,
+      default: null,
+    },
 
     // =========================
     // Firebase / Social Auth
@@ -157,6 +155,11 @@ userSchema.virtual('fullName').get(function () {
   return `${this.firstName} ${this.lastName}`.trim();
 });
 
+// NEW VIRTUAL: onboardingCompleted
+userSchema.virtual('onboardingCompleted').get(function () {
+  return this.onboardingStep === 3;
+});
+
 // Hash password before saving
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
@@ -169,7 +172,5 @@ userSchema.pre('save', async function (next) {
 userSchema.methods.matchPassword = async function (enteredPassword) {
   return bcrypt.compare(enteredPassword, this.password);
 };
-
-
 
 module.exports = mongoose.model('User', userSchema);
