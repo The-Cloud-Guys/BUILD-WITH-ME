@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Build With Me - Full API (Auth + Onboarding + Profile + Storage)",
-    "description": "Complete test suite for authentication (register, OTP, login, refresh, logout, password reset OTP + token, Firebase), step‑by‑step onboarding, profile management (PATCH, photo upload/delete with signed URLs), and negative tests. Uses HTTP‑only cookies – Postman manages them automatically.",
+    "description": "Complete test suite for authentication (register, OTP, login, refresh, logout, password reset OTP + token, Firebase), step‑by‑step onboarding, combined profile creation/update with photo (multipart), profile management, and negative tests. Uses HTTP‑only cookies – Postman manages them automatically.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -68,6 +68,7 @@
                   "  pm.expect(jsonData).to.have.property('user');",
                   "  pm.expect(jsonData.user).to.have.property('email', pm.variables.get('testEmail'));",
                   "  pm.expect(jsonData.user).to.have.property('onboardingStep', 0);",
+                  "  pm.expect(jsonData).to.have.property('onboardingStatus', 'email_verified');",
                   "});"
                 ]
               }
@@ -101,6 +102,8 @@
                   "  pm.expect(jsonData).to.have.property('message', 'Login successful');",
                   "  pm.expect(jsonData).to.have.property('user');",
                   "  pm.expect(jsonData.user).to.have.property('email', pm.variables.get('testEmail'));",
+                  "  pm.expect(jsonData.user).to.have.property('onboardingStep');",
+                  "  pm.expect(jsonData).to.have.property('onboardingStatus');",
                   "  pm.expect(jsonData).to.not.have.property('token');",
                   "});",
                   "pm.test('Cookies are present in response headers', () => {",
@@ -277,9 +280,11 @@
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Firebase login sets cookies', () => {",
+                  "pm.test('Firebase login returns token and isProfileCompleted', () => {",
                   "  const jsonData = pm.response.json();",
                   "  pm.expect(jsonData).to.have.property('message', 'Firebase login successful');",
+                  "  pm.expect(jsonData).to.have.property('token');",
+                  "  pm.expect(jsonData).to.have.property('isProfileCompleted');",
                   "  pm.expect(jsonData).to.have.property('user');",
                   "});"
                 ]
@@ -344,6 +349,7 @@
                   "  pm.expect(jsonData).to.have.property('message', 'Role saved successfully');",
                   "  pm.expect(jsonData).to.have.property('nextStep', 'skills');",
                   "  pm.expect(jsonData.user).to.have.property('role', 'Developer');",
+                  "  pm.expect(jsonData).to.have.property('onboardingStatus', 'role_pending');",
                   "});"
                 ]
               }
@@ -376,6 +382,7 @@
                   "  pm.expect(jsonData).to.have.property('message', 'Skills saved successfully');",
                   "  pm.expect(jsonData).to.have.property('nextStep', 'profile');",
                   "  pm.expect(jsonData.user.skills).to.be.an('array').that.includes('Node.js');",
+                  "  pm.expect(jsonData).to.have.property('onboardingStatus', 'skills_pending');",
                   "});"
                 ]
               }
@@ -396,7 +403,7 @@
           }
         },
         {
-          "name": "13. Complete Profile",
+          "name": "13. Complete Profile (text only) - using /onboarding/profile",
           "event": [
             {
               "listen": "test",
@@ -409,6 +416,7 @@
                   "  pm.expect(jsonData).to.have.property('onboardingComplete', true);",
                   "  pm.expect(jsonData.user).to.have.property('firstName', pm.variables.get('testFirstName'));",
                   "  pm.expect(jsonData.user).to.have.property('lastName', pm.variables.get('testLastName'));",
+                  "  pm.expect(jsonData).to.have.property('onboardingStatus', 'completed');",
                   "});"
                 ]
               }
@@ -431,10 +439,96 @@
       ]
     },
     {
-      "name": "🖼️ Profile Management",
+      "name": "🖼️ Combined Profile + Photo Endpoints",
       "item": [
         {
-          "name": "14. Get Current Profile (after onboarding)",
+          "name": "14a. Create Full Profile with Photo (multipart) - POST /api/userProfile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Profile created with photo and details', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('message', 'Profile created successfully');",
+                  "  pm.expect(jsonData).to.have.property('onboardingCompleted', true);",
+                  "  pm.expect(jsonData).to.have.property('onboardingStatus', 'completed');",
+                  "  pm.expect(jsonData.user).to.have.property('firstName', pm.variables.get('testFirstName'));",
+                  "  pm.expect(jsonData.user).to.have.property('lastName', pm.variables.get('testLastName'));",
+                  "  pm.expect(jsonData.user).to.have.property('profilePhoto').that.includes('signed');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "firstName", "value": "{{testFirstName}}", "type": "text" },
+                { "key": "lastName", "value": "{{testLastName}}", "type": "text" },
+                { "key": "bio", "value": "{{testBio}}", "type": "text" },
+                { "key": "externalLink", "value": "{{testExternalLink}}", "type": "text" },
+                { "key": "photo", "type": "file", "src": "/path/to/sample-avatar.jpg" }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/profile/userProfile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "profile", "userProfile"]
+            },
+            "description": "⚠️ Replace '/path/to/sample-avatar.jpg' with an actual image file path. This endpoint creates profile and uploads photo in one request (multipart/form-data)."
+          }
+        },
+        {
+          "name": "14b. Update Full Profile with Photo (multipart) - PATCH /api/userProfile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Profile updated with photo and details', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('message', 'Profile updated successfully');",
+                  "  pm.expect(jsonData.user).to.have.property('bio', 'Updated bio via multipart');",
+                  "  pm.expect(jsonData.user).to.have.property('profilePhoto').that.includes('signed');",
+                  "  pm.expect(jsonData).to.have.property('onboardingStatus');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "bio", "value": "Updated bio via multipart", "type": "text" },
+                { "key": "skills", "value": "TypeScript,GraphQL", "type": "text" },
+                { "key": "externalLink", "value": "https://updated.dev", "type": "text" },
+                { "key": "photo", "type": "file", "src": "/path/to/new-avatar.jpg" }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/profile/userProfile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "profile", "userProfile"]
+            },
+            "description": "⚠️ Replace file path with actual image. This endpoint updates profile and optionally replaces photo in a single multipart request."
+          }
+        }
+      ]
+    },
+    {
+      "name": "🖼️ Legacy Profile Management (separate endpoints)",
+      "item": [
+        {
+          "name": "15. Get Current Profile (after onboarding)",
           "event": [
             {
               "listen": "test",
@@ -445,6 +539,7 @@
                   "  const jsonData = pm.response.json();",
                   "  pm.expect(jsonData).to.have.property('firstName', pm.variables.get('testFirstName'));",
                   "  pm.expect(jsonData).to.have.property('skills').that.is.an('array');",
+                  "  pm.expect(jsonData).to.have.property('onboardingStatus', 'completed');",
                   "});"
                 ]
               }
@@ -460,7 +555,7 @@
           }
         },
         {
-          "name": "15. Update Profile (partial update)",
+          "name": "16. Update Profile (partial update, JSON)",
           "event": [
             {
               "listen": "test",
@@ -491,7 +586,7 @@
           }
         },
         {
-          "name": "16. Upload Profile Photo",
+          "name": "17. Upload Profile Photo (standalone)",
           "event": [
             {
               "listen": "test",
@@ -528,7 +623,7 @@
           }
         },
         {
-          "name": "17. Delete Profile Photo",
+          "name": "18. Delete Profile Photo",
           "event": [
             {
               "listen": "test",
@@ -557,7 +652,7 @@
       "name": "⚠️ Negative Tests",
       "item": [
         {
-          "name": "18. Register with Existing Email",
+          "name": "19. Register with Existing Email",
           "event": [
             {
               "listen": "test",
@@ -586,7 +681,7 @@
           }
         },
         {
-          "name": "19. Login with Unverified Email",
+          "name": "20. Login with Unverified Email",
           "event": [
             {
               "listen": "test",
@@ -615,7 +710,7 @@
           }
         },
         {
-          "name": "20. Access Protected Route Without Login",
+          "name": "21. Access Protected Route Without Login",
           "event": [
             {
               "listen": "test",

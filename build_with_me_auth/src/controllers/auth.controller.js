@@ -373,6 +373,9 @@ const getMe = async (req, res) => {
 // FORGOT PASSWORD (step 1: request OTP)
 // ==============================
 
+// ==============================
+// FORGOT PASSWORD step 1: Request reset OTP (requires verified email)
+// ==============================
 const forgotPassword = async (req, res) => {
   try {
     if (req.body.email) req.body.email = req.body.email.toLowerCase().trim();
@@ -381,16 +384,23 @@ const forgotPassword = async (req, res) => {
 
     const { email } = req.body;
     const user = await User.findOne({ email });
+
+    // Check if email exists AND is verified
     if (!user) {
-      return res.status(200).json({ message: 'If that email exists, we have sent a reset OTP.' });
+      return res.status(404).json({ message: 'Email not found' });
+    }
+    if (!user.emailVerified) {
+      return res.status(400).json({ message: 'Email not verified. Please verify your email first.' });
     }
 
+    // Generate 6-digit numeric OTP
     const otp = generateNumericOTP(6);
     const hashedOTP = hashOTP(otp);
     user.resetPasswordOTP = hashedOTP;
-    user.resetPasswordExpires = Date.now() + 10 * 60 * 1000;
+    user.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
     await user.save();
 
+    // Send OTP via email (using Brevo)
     const html = `<p>Your password reset OTP is: <strong>${otp}</strong>. It expires in 10 minutes.</p>`;
     try {
       await sendEmail({ email: user.email, subject: 'Password Reset OTP', html });
