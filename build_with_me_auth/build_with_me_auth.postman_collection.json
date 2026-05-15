@@ -62,9 +62,10 @@
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains success message and user data', () => {",
+                  "pm.test('Response contains success message, user data, and accessToken', () => {",
                   "  const jsonData = pm.response.json();",
                   "  pm.expect(jsonData).to.have.property('message', 'Email verified successfully');",
+                  "  pm.expect(jsonData).to.have.property('accessToken');",
                   "  pm.expect(jsonData).to.have.property('user');",
                   "  pm.expect(jsonData.user).to.have.property('email', pm.variables.get('testEmail'));",
                   "  pm.expect(jsonData.user).to.have.property('onboardingStep', 0);",
@@ -97,9 +98,10 @@
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains user data and no token (cookie only)', () => {",
+                  "pm.test('Response contains user data, accessToken, and no token (cookie only)', () => {",
                   "  const jsonData = pm.response.json();",
                   "  pm.expect(jsonData).to.have.property('message', 'Login successful');",
+                  "  pm.expect(jsonData).to.have.property('accessToken');",
                   "  pm.expect(jsonData).to.have.property('user');",
                   "  pm.expect(jsonData.user).to.have.property('email', pm.variables.get('testEmail'));",
                   "  pm.expect(jsonData.user).to.have.property('onboardingStep');",
@@ -138,8 +140,10 @@
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Refreshed tokens set new cookies', () => {",
-                  "  pm.expect(pm.response.json()).to.have.property('message', 'Token refreshed');",
+                  "pm.test('Refreshed tokens set new cookies and return accessToken', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('message', 'Token refreshed');",
+                  "  pm.expect(jsonData).to.have.property('accessToken');",
                   "});"
                 ]
               }
@@ -187,8 +191,7 @@
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
                   "pm.test('Reset OTP sent confirmation', () => {",
-                  "  pm.expect(pm.response.json()).to.have.property('message');",
-                  "});",
+                  "  pm.expect(pm.response.json()).to.have.property('message');",  "});",
                   "console.log('✅ Password reset OTP sent. Set variable \"resetOtp\" from email/terminal.');"
                 ]
               }
@@ -248,9 +251,10 @@
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Password reset sets new cookies and returns user', () => {",
+                  "pm.test('Password reset sets new cookies, returns user and accessToken', () => {",
                   "  const jsonData = pm.response.json();",
                   "  pm.expect(jsonData).to.have.property('message', 'Password reset successful');",
+                  "  pm.expect(jsonData).to.have.property('accessToken');", 
                   "  pm.expect(jsonData).to.have.property('user');",
                   "});"
                 ]
