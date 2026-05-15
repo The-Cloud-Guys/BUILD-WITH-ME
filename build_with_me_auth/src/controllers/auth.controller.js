@@ -167,17 +167,13 @@ const verifyEmail = async (req, res) => {
       path: '/',
     });
 
-    res.json({
-      message: 'Email verified successfully',
-      user: {
-        _id: user._id,
-        email: user.email,
-        onboardingStep: user.onboardingStep,
-        onboardingCompleted: user.onboardingCompleted
-      },
-      onboardingCompleted: user.onboardingCompleted,
-      onboardingStatus: getOnboardingStatus(user.onboardingStep)
-    });
+res.json({
+  message: 'Email verified successfully',
+  accessToken,
+  user: { _id: user._id, email: user.email, onboardingStep: user.onboardingStep, onboardingCompleted: user.onboardingCompleted },
+  onboardingCompleted: user.onboardingCompleted,
+  onboardingStatus: getOnboardingStatus(user.onboardingStep)
+});
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -258,6 +254,7 @@ const login = async (req, res) => {
 
     res.json({
       message: 'Login successful',
+      accessToken,
       user: {
         _id: user._id,
         email: user.email,
@@ -313,7 +310,7 @@ const refreshToken = async (req, res) => {
       path: '/',
     });
 
-    res.json({ message: 'Token refreshed' });
+    res.json({ message: 'Token refreshed', accessToken: newAccessToken });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -404,7 +401,7 @@ const forgotPassword = async (req, res) => {
     const html = `<p>Your password reset OTP is: <strong>${otp}</strong>. It expires in 10 minutes.</p>`;
     try {
       await sendEmail({ email: user.email, subject: 'Password Reset OTP', html });
-      res.status(200).json({ message: 'Password reset OTP sent to your email.' });
+      res.status(200).json({ message: 'Email exists and OTP has been sent to email.' });
     } catch (emailError) {
       console.error('Email failed:', emailError);
       res.status(500).json({ message: 'Failed to send OTP. Try again later.' });
@@ -501,6 +498,7 @@ const resetPassword = async (req, res) => {
 
     res.json({
       message: 'Password reset successful',
+      accessToken,
       user: { _id: user._id, email: user.email },
     });
   } catch (error) {
@@ -563,7 +561,7 @@ const firebaseAuth = async (req, res) => {
 
     res.json({
       message: 'Firebase login successful',
-      token: accessToken,
+      accessToken,
       isProfileCompleted,
       user: {
         id: user._id,
