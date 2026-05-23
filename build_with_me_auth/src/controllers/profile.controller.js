@@ -83,10 +83,6 @@ const createUserProfile = async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    if (user.onboardingStep !== 2) {
-      return res.status(400).json({ message: `Onboarding step mismatch. Expected step 2, got ${user.onboardingStep}` });
-    }
-
     const { firstName, lastName, bio, externalLink } = req.body;
     const updateData = {};
 
@@ -116,8 +112,10 @@ const createUserProfile = async (req, res) => {
     const updatedUser = await User.findByIdAndUpdate(req.user.id, updateData, { new: true })
       .select('-password -refreshToken -emailVerificationOTP -resetPasswordToken -resetPasswordExpires');
 
-    updatedUser.onboardingStep = 3;
-    await updatedUser.save();
+    if (updatedUser.onboardingStep < 3) {
+      updatedUser.onboardingStep = 3;
+      await updatedUser.save();
+    }
 
     const userObj = updatedUser.toObject();
     if (userObj.profilePhoto && userObj.profilePhoto.startsWith('users/')) {
@@ -127,9 +125,9 @@ const createUserProfile = async (req, res) => {
 
     res.json({
       message: 'Profile created successfully',
-      onboardingCompleted: true,
-      onboardingStatus: 'completed',
-      user: userObj,
+      onboardingCompleted: userObj.onboardingStep === 3,
+      onboardingStatus: getOnboardingStatus(userObj.onboardingStep),
+      user: userObj
     });
   } catch (error) {
     console.error(error);
