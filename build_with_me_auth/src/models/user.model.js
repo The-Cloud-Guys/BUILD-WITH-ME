@@ -50,17 +50,11 @@ const userSchema = new mongoose.Schema(
 
     // External link (GitHub / Portfolio / LinkedIn etc.)
     externalLink: {
-      type: String,
-      trim: true,
-      default: '',
-      validate: {
-        validator: function (v) {
-          if (!v) return true;
-          return /^https?:\/\/.+/.test(v);
-        },
-        message: 'External link must be a valid URL starting with http:// or https://',
-      },
-    },
+  type: String,
+  trim: true,
+  default: '',
+  // No validation – any string is allowed
+},
 
     // =========================
     // Role & Skills
