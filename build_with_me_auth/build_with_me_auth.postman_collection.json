@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Build With Me - Full API (Auth + Onboarding + Profile + Storage)",
-    "description": "Complete test suite for authentication (register, OTP, login, refresh, logout, password reset OTP + token, Firebase), step‑by‑step onboarding, combined profile creation/update with photo (multipart), profile management, and negative tests. Uses HTTP‑only cookies – Postman manages them automatically.",
+    "name": "Build With Me - Full API (Auth + Onboarding + Profile + Storage + Projects)",
+    "description": "Complete test suite for authentication, onboarding, profile, projects (CRUD, applications, team management), and negative tests. Uses HTTP‑only cookies – Postman manages them automatically.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -16,7 +16,9 @@
     { "key": "resetOtp", "value": "", "description": "Copy from password reset OTP email (6 digits)" },
     { "key": "resetToken", "value": "", "description": "Temporary JWT returned by /verify-reset-otp" },
     { "key": "verificationOtp", "value": "", "description": "Copy from email OTP (6 digits)" },
-    { "key": "firebaseIdToken", "value": "", "description": "Obtain from frontend Google sign‑in" }
+    { "key": "firebaseIdToken", "value": "", "description": "Obtain from frontend Google sign‑in" },
+    { "key": "projectId", "value": "", "description": "ID of created project" },
+    { "key": "applicationId", "value": "", "description": "ID of submitted application" }
   ],
   "item": [
     {
@@ -191,7 +193,8 @@
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
                   "pm.test('Reset OTP sent confirmation', () => {",
-                  "  pm.expect(pm.response.json()).to.have.property('message');",  "});",
+                  "  pm.expect(pm.response.json()).to.have.property('message');",
+                  "});",
                   "console.log('✅ Password reset OTP sent. Set variable \"resetOtp\" from email/terminal.');"
                 ]
               }
@@ -254,7 +257,7 @@
                   "pm.test('Password reset sets new cookies, returns user and accessToken', () => {",
                   "  const jsonData = pm.response.json();",
                   "  pm.expect(jsonData).to.have.property('message', 'Password reset successful');",
-                  "  pm.expect(jsonData).to.have.property('accessToken');", 
+                  "  pm.expect(jsonData).to.have.property('accessToken');",
                   "  pm.expect(jsonData).to.have.property('user');",
                   "});"
                 ]
@@ -484,7 +487,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "profile", "userProfile"]
             },
-            "description": "⚠️ Replace '/path/to/sample-avatar.jpg' with an actual image file path. This endpoint creates profile and uploads photo in one request (multipart/form-data)."
+            "description": "⚠️ Replace '/path/to/sample-avatar.jpg' with an actual image file path."
           }
         },
         {
@@ -523,7 +526,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "profile", "userProfile"]
             },
-            "description": "⚠️ Replace file path with actual image. This endpoint updates profile and optionally replaces photo in a single multipart request."
+            "description": "⚠️ Replace file path with actual image."
           }
         }
       ]
@@ -653,10 +656,271 @@
       ]
     },
     {
+      "name": "🚀 Projects",
+      "item": [
+        {
+          "name": "19. Create Project",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Response contains project id', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('message', 'Project created successfully');",
+                  "  pm.expect(jsonData).to.have.property('project');",
+                  "  pm.collectionVariables.set('projectId', jsonData.project._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"AI-Powered Code Reviewer\",\n  \"description\": \"Build an AI tool to review pull requests and suggest improvements.\",\n  \"requiredSkills\": [\"Machine Learning\", \"Node.js\", \"OpenAI API\"],\n  \"techStack\": [\"Python\", \"FastAPI\", \"React\"],\n  \"stage\": \"PROTOTYPE\",\n  \"developersNeeded\": 3\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects"]
+            }
+          }
+        },
+        {
+          "name": "20. Get All Projects (with optional filters)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contains projects array', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('projects');",
+                  "  pm.expect(jsonData.projects).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/projects",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects"]
+            }
+          }
+        },
+        {
+          "name": "21. Get Single Project by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contains project details', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('_id', pm.variables.get('projectId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{projectId}}"]
+            }
+          }
+        },
+        {
+          "name": "22. Update Project (owner only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Project updated', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('message', 'Project updated successfully');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"AI Code Reviewer (Updated)\",\n  \"developersNeeded\": 4\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{projectId}}"]
+            }
+          }
+        },
+        {
+          "name": "23. Apply to Project (with CV)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Application sent', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('message').that.includes('Application sent');",
+                  "  pm.expect(jsonData).to.have.property('application');",
+                  "  pm.collectionVariables.set('applicationId', jsonData.application._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "message", "value": "I have 5 years of experience in ML and Python.", "type": "text" },
+                { "key": "portfolioLink", "value": "https://github.com/yourhandle", "type": "text" },
+                { "key": "cv", "type": "file", "src": "/path/to/cv.pdf" }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/apply",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{projectId}}", "apply"]
+            },
+            "description": "⚠️ Replace '/path/to/cv.pdf' with a real PDF/DOC file (max 10MB)."
+          }
+        },
+        {
+          "name": "24. Get Project Applications (owner only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contains applications array', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/applications",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{projectId}}", "applications"]
+            }
+          }
+        },
+        {
+          "name": "25. Accept Application (owner only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Application accepted', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('message', 'Application accepted successfully');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACCEPTED\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/applications/{{applicationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "applications", "{{applicationId}}"]
+            }
+          }
+        },
+        {
+          "name": "26. Get Project Team",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contains owner and members', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('owner');",
+                  "  pm.expect(jsonData).to.have.property('members');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/team",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{projectId}}", "team"]
+            }
+          }
+        },
+        {
+          "name": "27. Delete Project (owner only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Project deleted', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('message', 'Project deleted successfully');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{projectId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "⚠️ Negative Tests",
       "item": [
         {
-          "name": "19. Register with Existing Email",
+          "name": "28. Register with Existing Email",
           "event": [
             {
               "listen": "test",
@@ -685,7 +949,7 @@
           }
         },
         {
-          "name": "20. Login with Unverified Email",
+          "name": "29. Login with Unverified Email",
           "event": [
             {
               "listen": "test",
@@ -714,7 +978,7 @@
           }
         },
         {
-          "name": "21. Access Protected Route Without Login",
+          "name": "30. Access Protected Route Without Login",
           "event": [
             {
               "listen": "test",
