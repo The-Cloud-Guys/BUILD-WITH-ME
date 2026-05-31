@@ -2,6 +2,7 @@ const Project = require('../models/project.model');
 const Application = require('../models/application.model');
 const User = require('../models/user.model');
 const { uploadFile, deleteFile, getSignedUrl } = require('../services/supabase.service');
+const { createNotification } = require('../services/notification.service');
 const multer = require('multer');
 const path = require('path');
 
@@ -29,16 +30,27 @@ const generateCVPath = (userId, projectId, originalName) => {
 // PROJECT CRUD
 // ==============================
 
+const isRoleAvailable = (project, roleName) => {
+  const role = project.roles.find(r => r.roleName === roleName);
+  return role && role.currentCount < role.requiredCount;
+};
+
 // @desc    Create a new project
 // @route   POST /api/projects
 // @access  Private
 const createProject = async (req, res) => {
   try {
-    const { title, description, requiredSkills, techStack, stage, developersNeeded } = req.body;
+    const { title, description, requiredSkills, techStack, stage, roles } = req.body;
 
-    // Validate required fields
-    if (!title || !description || !requiredSkills || !techStack || !developersNeeded) {
-      return res.status(400).json({ message: 'All fields are required' });
+    if (!roles || !Array.isArray(roles) || roles.length === 0) {
+      return res.status(400).json({ message: 'At least one role is required' });
+    }
+
+    // Validate each role
+    for (let role of roles) {
+      if (!role.roleName || !role.requiredCount || role.requiredCount < 1) {
+        return res.status(400).json({ message: 'Each role must have a name and required count (>=1)' });
+      }
     }
 
     const project = await Project.create({
@@ -47,20 +59,26 @@ const createProject = async (req, res) => {
       requiredSkills: Array.isArray(requiredSkills) ? requiredSkills : requiredSkills.split(','),
       techStack: Array.isArray(techStack) ? techStack : techStack.split(','),
       stage,
-      developersNeeded,
       owner: req.user.id,
-      teamMembers: [],
+      roles: roles.map(r => ({ roleName: r.roleName, requiredCount: r.requiredCount, currentCount: 0 })),
     });
 
-    res.status(201).json({
-      message: 'Project created successfully',
-      project,
-    });
+    // Notify users whose skills match this project's requiredSkills
+    const users = await User.find({ skills: { $in: requiredSkills } }).select('_id');
+    for (let user of users) {
+      if (user._id.toString() !== req.user.id) {
+        await createNotification({
+          user: user._id,
+          type: 'PROJECT_MATCH',
+          message: `New project "${title}" matches your skills.`,
+          relatedProject: project._id,
+        });
+      }
+    }
+
+    res.status(201).json({ message: 'Project created successfully', project });
   } catch (error) {
     console.error(error);
-    if (error.name === 'ValidationError') {
-      return res.status(400).json({ message: error.message });
-    }
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -154,28 +172,42 @@ const updateProject = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
     if (!project) return res.status(404).json({ message: 'Project not found' });
-
     if (project.owner.toString() !== req.user.id) {
-      return res.status(403).json({ message: 'Not authorized to update this project' });
+      return res.status(403).json({ message: 'Not authorized' });
     }
 
-    const { title, description, requiredSkills, techStack, stage, developersNeeded } = req.body;
+    const { title, description, requiredSkills, techStack, stage, roles } = req.body;
 
     if (title) project.title = title;
     if (description) project.description = description;
     if (requiredSkills) project.requiredSkills = Array.isArray(requiredSkills) ? requiredSkills : requiredSkills.split(',');
     if (techStack) project.techStack = Array.isArray(techStack) ? techStack : techStack.split(',');
     if (stage) project.stage = stage;
-    if (developersNeeded) project.developersNeeded = developersNeeded;
+    if (roles) {
+      // Validate roles: cannot reduce requiredCount below currentCount if there are existing applications
+      for (let newRole of roles) {
+        const existingRole = project.roles.find(r => r.roleName === newRole.roleName);
+        if (existingRole && newRole.requiredCount < existingRole.currentCount) {
+          return res.status(400).json({
+            message: `Cannot reduce required count for role "${newRole.roleName}" below already filled positions (${existingRole.currentCount}).`
+          });
+        }
+      }
+      project.roles = roles.map(r => ({
+        roleName: r.roleName,
+        requiredCount: r.requiredCount,
+        currentCount: project.roles.find(old => old.roleName === r.roleName)?.currentCount || 0,
+      }));
+    }
 
     await project.save();
-
     res.json({ message: 'Project updated successfully', project });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
   }
 };
+
 
 // @desc    Delete project (owner only)
 // @route   DELETE /api/projects/:id
@@ -205,36 +237,55 @@ const deleteProject = async (req, res) => {
 // ==============================
 // APPLICATIONS
 // ==============================
-
-// @desc    Apply to a project (with CV upload)
+// @desc    Apply to project (with CV)
 // @route   POST /api/projects/:id/apply
 // @access  Private
 const applyToProject = async (req, res) => {
-  // Use multer middleware in route
   try {
     const project = await Project.findById(req.params.id);
     if (!project) return res.status(404).json({ message: 'Project not found' });
 
-    // Check if user already applied
-    const existing = await Application.findOne({ project: project._id, applicant: req.user.id });
-    if (existing) return res.status(400).json({ message: 'You have already applied to this project' });
-
-    const { message, portfolioLink } = req.body;
+    const { message, portfolioLink, role } = req.body;
     if (!message) return res.status(400).json({ message: 'Application message is required' });
+    if (!role) return res.status(400).json({ message: 'Role is required' });
+
+    // Check if role exists and has capacity
+    const roleObj = project.roles.find(r => r.roleName === role);
+    if (!roleObj) {
+      return res.status(400).json({ message: 'Invalid role for this project' });
+    }
+    if (roleObj.currentCount >= roleObj.requiredCount) {
+      return res.status(400).json({ message: 'This role is already filled' });
+    }
+
+    const existing = await Application.findOne({ project: project._id, applicant: req.user.id });
+    if (existing) {
+      return res.status(400).json({ message: 'You have already applied to this project' });
+    }
 
     let cvPath = null;
     if (req.file) {
       const filePath = generateCVPath(req.user.id, project._id, req.file.originalname);
-      await uploadFile('resumes', filePath, req.file.buffer, req.file.mimetype);
+      await uploadFile(process.env.SUPABASE_BUCKET_RESUMES, filePath, req.file.buffer, req.file.mimetype);
       cvPath = filePath;
     }
 
     const application = await Application.create({
       project: project._id,
       applicant: req.user.id,
+      role,
       message,
       portfolioLink: portfolioLink || '',
       cvPath,
+    });
+
+    // Notify project owner
+    await createNotification({
+      user: project.owner,
+      type: 'NEW_APPLICATION',
+      message: `New application from ${req.user.firstName} ${req.user.lastName} for role "${role}" in project "${project.title}".`,
+      relatedProject: project._id,
+      relatedApplication: application._id,
     });
 
     res.status(201).json({
@@ -283,9 +334,9 @@ const getProjectApplications = async (req, res) => {
   }
 };
 
-// @desc    Update application status (accept/reject) – owner only
+// @desc    Update application status (accept/reject)
 // @route   PUT /api/applications/:id
-// @access  Private
+// @access  Private (project owner only)
 const updateApplicationStatus = async (req, res) => {
   try {
     const application = await Application.findById(req.params.id).populate('project');
@@ -301,15 +352,74 @@ const updateApplicationStatus = async (req, res) => {
       return res.status(400).json({ message: 'Invalid status' });
     }
 
+    const oldStatus = application.status;
     application.status = status;
     await application.save();
 
-    // If accepted, add applicant to project teamMembers
-    if (status === 'ACCEPTED') {
+    // Update role capacity
+    const roleIndex = project.roles.findIndex(r => r.roleName === application.role);
+    if (roleIndex === -1) {
+      return res.status(400).json({ message: 'Role no longer exists in project' });
+    }
+
+    if (status === 'ACCEPTED' && oldStatus !== 'ACCEPTED') {
+      // Increment currentCount
+      project.roles[roleIndex].currentCount += 1;
+      await project.save();
+
+      // Add user to teamMembers
       if (!project.teamMembers.includes(application.applicant)) {
         project.teamMembers.push(application.applicant);
         await project.save();
       }
+
+      // Notify applicant
+      await createNotification({
+        user: application.applicant,
+        type: 'APPLICATION_STATUS',
+        message: `Your application for role "${application.role}" in project "${project.title}" has been accepted.`,
+        relatedProject: project._id,
+        relatedApplication: application._id,
+      });
+
+      // If role is now filled, notify owner
+      const role = project.roles[roleIndex];
+      if (role.currentCount === role.requiredCount) {
+        await createNotification({
+          user: project.owner,
+          type: 'ROLE_FILLED',
+          message: `Role "${role.roleName}" in project "${project.title}" is now filled.`,
+          relatedProject: project._id,
+        });
+      }
+    } 
+    else if (status === 'REJECTED' && oldStatus === 'ACCEPTED') {
+      // Decrement currentCount (if previously accepted)
+      project.roles[roleIndex].currentCount -= 1;
+      await project.save();
+
+      // Remove from teamMembers
+      project.teamMembers = project.teamMembers.filter(id => id.toString() !== application.applicant.toString());
+      await project.save();
+
+      // Notify applicant
+      await createNotification({
+        user: application.applicant,
+        type: 'APPLICATION_STATUS',
+        message: `Your application for role "${application.role}" in project "${project.title}" has been rejected.`,
+        relatedProject: project._id,
+        relatedApplication: application._id,
+      });
+    }
+    else if (status === 'REJECTED' && oldStatus !== 'ACCEPTED') {
+      // No capacity change, just notify
+      await createNotification({
+        user: application.applicant,
+        type: 'APPLICATION_STATUS',
+        message: `Your application for role "${application.role}" in project "${project.title}" has been rejected.`,
+        relatedProject: project._id,
+        relatedApplication: application._id,
+      });
     }
 
     res.json({ message: `Application ${status.toLowerCase()} successfully`, application });
@@ -386,5 +496,5 @@ module.exports = {
   updateApplicationStatus,
   getProjectTeam,
   removeTeamMember,
-  cvUpload, // export for use in routes
+  cvUpload,// export for use in routes
 };

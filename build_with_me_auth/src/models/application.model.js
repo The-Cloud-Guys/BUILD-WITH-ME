@@ -12,10 +12,14 @@ const applicationSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    role: {
+      type: String,
+      required: true, // the specific role name the applicant applies for
+    },
     message: {
       type: String,
-      required: [true, 'Please include an introduction message'],
-      maxlength: [1000, 'Message cannot exceed 1000 characters'],
+      required: true,
+      maxlength: 1000,
     },
     portfolioLink: {
       type: String,
@@ -24,7 +28,7 @@ const applicationSchema = new mongoose.Schema(
     },
     cvPath: {
       type: String,
-      default: null, // path in Supabase storage
+      default: null,
     },
     status: {
       type: String,
@@ -37,7 +41,6 @@ const applicationSchema = new mongoose.Schema(
   }
 );
 
-// Ensure one application per user per project
 applicationSchema.index({ project: 1, applicant: 1 }, { unique: true });
 
 module.exports = mongoose.model('Application', applicationSchema);

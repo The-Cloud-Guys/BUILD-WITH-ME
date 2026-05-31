@@ -1,34 +1,44 @@
 const mongoose = require('mongoose');
 
+const roleSchema = new mongoose.Schema({
+  roleName: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+  requiredCount: {
+    type: Number,
+    required: true,
+    min: 1,
+  },
+  currentCount: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+}, { _id: false });
+
 const projectSchema = new mongoose.Schema(
   {
     title: {
       type: String,
-      required: [true, 'Please add a project title'],
+      required: true,
       trim: true,
-      maxlength: [100, 'Title cannot exceed 100 characters'],
+      maxlength: 100,
     },
     description: {
       type: String,
-      required: [true, 'Please add a project description'],
+      required: true,
       trim: true,
-      maxlength: [2000, 'Description cannot exceed 2000 characters'],
+      maxlength: 2000,
     },
     requiredSkills: {
       type: [String],
-      required: [true, 'Please specify required skills'],
-      validate: {
-        validator: (v) => Array.isArray(v) && v.length > 0,
-        message: 'At least one required skill is needed',
-      },
+      required: true,
     },
     techStack: {
       type: [String],
-      required: [true, 'Please specify tech stack'],
-      validate: {
-        validator: (v) => Array.isArray(v) && v.length > 0,
-        message: 'At least one technology is needed',
-      },
+      required: true,
     },
     stage: {
       type: String,
@@ -47,12 +57,7 @@ const projectSchema = new mongoose.Schema(
         ref: 'User',
       },
     ],
-    developersNeeded: {
-      type: Number,
-      required: true,
-      min: 1,
-      max: 50,
-    },
+    roles: [roleSchema], // new: array of roles with capacity
   },
   {
     timestamps: true,
@@ -61,9 +66,9 @@ const projectSchema = new mongoose.Schema(
   }
 );
 
-// Virtual to get current team size (owner + members)
-projectSchema.virtual('currentTeamSize').get(function () {
-  return 1 + (this.teamMembers ? this.teamMembers.length : 0);
+// Virtual to compute total developers needed (sum of requiredCount)
+projectSchema.virtual('totalDevelopersNeeded').get(function () {
+  return this.roles.reduce((sum, role) => sum + role.requiredCount, 0);
 });
 
 module.exports = mongoose.model('Project', projectSchema);

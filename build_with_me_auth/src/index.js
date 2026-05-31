@@ -11,6 +11,7 @@ const authRoutes = require('./routes/auth.routes');
 const onboardingRoutes = require('./routes/onboarding.routes');
 const profileRoutes = require('./routes/profile.routes');
 const projectRoutes = require('./routes/project.routes');
+const notificationRoutes = require('./routes/notification.routes');
 
 dotenv.config();
 connectDB();
@@ -69,7 +70,8 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/profile', profileRoutes);
-app.use('/api/projects', projectRoutes);
+app.use('/api', projectRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 
 // =============================

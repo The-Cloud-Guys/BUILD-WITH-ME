@@ -16,22 +16,22 @@ const {
 
 const router = express.Router();
 
-// Public routes (but authentication optional for listing)
-router.get('/', getProjects);
-router.get('/:id', getProjectById);
-router.get('/:id/team', getProjectTeam);
+// All routes below require authentication except GET /projects and GET /projects/:id and GET /projects/:id/team
+router.get('/projects', getProjects);                           // public
+router.get('/projects/:id', getProjectById);                   // public
+router.get('/projects/:id/team', getProjectTeam);              // public
 
 // Protected routes
-router.use(protect); // all routes below require authentication
+router.use(protect);
 
-router.post('/', createProject);
-router.put('/:id', updateProject);
-router.delete('/:id', deleteProject);
+router.post('/projects', createProject);
+router.put('/projects/:id', updateProject);
+router.delete('/projects/:id', deleteProject);
 
-router.post('/:id/apply', cvUpload.single('cv'), applyToProject);
-router.get('/:id/applications', getProjectApplications);
-router.put('/applications/:id', updateApplicationStatus);
+router.post('/projects/:id/apply', cvUpload.single('cv'), applyToProject);
+router.get('/projects/:id/applications', getProjectApplications);
+router.put('/applications/:id', updateApplicationStatus);      // now matches /api/applications/:id
 
-router.delete('/:id/team/:userId', removeTeamMember);
+router.delete('/projects/:id/team/:userId', removeTeamMember);
 
 module.exports = router;
