@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Build With Me - Full API (Auth + Onboarding + Profile + Storage + Projects)",
-    "description": "Complete test suite for authentication, onboarding, profile, projects (CRUD, applications, team management), and negative tests. Uses HTTP‑only cookies – Postman manages them automatically.",
+    "description": "Complete test suite for authentication, onboarding, profile (combined only), projects (role-based CRUD, applications with role selection, team management), and negative tests. Uses HTTP‑only cookies – Postman manages them automatically.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -408,40 +408,6 @@
               "path": ["api", "onboarding", "skills"]
             }
           }
-        },
-        {
-          "name": "13. Complete Profile (text only) - using /onboarding/profile",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Profile completed successfully', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Profile completed successfully');",
-                  "  pm.expect(jsonData).to.have.property('onboardingComplete', true);",
-                  "  pm.expect(jsonData.user).to.have.property('firstName', pm.variables.get('testFirstName'));",
-                  "  pm.expect(jsonData.user).to.have.property('lastName', pm.variables.get('testLastName'));",
-                  "  pm.expect(jsonData).to.have.property('onboardingStatus', 'completed');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"firstName\": \"{{testFirstName}}\",\n  \"lastName\": \"{{testLastName}}\",\n  \"bio\": \"{{testBio}}\",\n  \"externalLink\": \"{{testExternalLink}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/onboarding/profile",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "onboarding", "profile"]
-            }
-          }
         }
       ]
     },
@@ -449,7 +415,7 @@
       "name": "🖼️ Combined Profile + Photo Endpoints",
       "item": [
         {
-          "name": "14a. Create Full Profile with Photo (multipart) - POST /api/userProfile",
+          "name": "13a. Create Full Profile with Photo (multipart) - POST /api/profile/userProfile",
           "event": [
             {
               "listen": "test",
@@ -491,7 +457,7 @@
           }
         },
         {
-          "name": "14b. Update Full Profile with Photo (multipart) - PATCH /api/userProfile",
+          "name": "13b. Update Full Profile with Photo (multipart) - PATCH /api/profile/userProfile",
           "event": [
             {
               "listen": "test",
@@ -532,134 +498,10 @@
       ]
     },
     {
-      "name": "🖼️ Legacy Profile Management (separate endpoints)",
-      "item": [
-        {
-          "name": "15. Get Current Profile (after onboarding)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Profile contains firstName, lastName, skills, etc.', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('firstName', pm.variables.get('testFirstName'));",
-                  "  pm.expect(jsonData).to.have.property('skills').that.is.an('array');",
-                  "  pm.expect(jsonData).to.have.property('onboardingStatus', 'completed');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/api/profile/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "profile", "me"]
-            }
-          }
-        },
-        {
-          "name": "16. Update Profile (partial update, JSON)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Profile updated successfully', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Profile updated successfully');",
-                  "  pm.expect(jsonData.user).to.have.property('bio', 'Updated bio text');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"bio\": \"Updated bio text\",\n  \"skills\": [\"Node.js\", \"React\", \"TypeScript\"],\n  \"externalLink\": \"https://johndoe.dev\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/profile/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "profile", "me"]
-            }
-          }
-        },
-        {
-          "name": "17. Upload Profile Photo (standalone)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains signed URL for photo', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Profile photo uploaded successfully');",
-                  "  pm.expect(jsonData).to.have.property('profilePhoto').that.includes('signed');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "photo",
-                  "type": "file",
-                  "src": "/path/to/sample-avatar.jpg"
-                }
-              ]
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/profile/me/photo",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "profile", "me", "photo"]
-            },
-            "description": "⚠️ Replace '/path/to/sample-avatar.jpg' with an actual image file path on your computer."
-          }
-        },
-        {
-          "name": "18. Delete Profile Photo",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Photo deleted successfully', () => {",
-                  "  pm.expect(pm.response.json()).to.have.property('message', 'Profile photo deleted successfully');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "DELETE",
-            "url": {
-              "raw": "{{baseUrl}}/api/profile/me/photo",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "profile", "me", "photo"]
-            }
-          }
-        }
-      ]
-    },
-    {
       "name": "🚀 Projects",
       "item": [
         {
-          "name": "19. Create Project",
+          "name": "14. Create Project (with roles)",
           "event": [
             {
               "listen": "test",
@@ -670,6 +512,7 @@
                   "  const jsonData = pm.response.json();",
                   "  pm.expect(jsonData).to.have.property('message', 'Project created successfully');",
                   "  pm.expect(jsonData).to.have.property('project');",
+                  "  pm.expect(jsonData.project).to.have.property('roles').that.is.an('array');",
                   "  pm.collectionVariables.set('projectId', jsonData.project._id);",
                   "});"
                 ]
@@ -681,7 +524,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"AI-Powered Code Reviewer\",\n  \"description\": \"Build an AI tool to review pull requests and suggest improvements.\",\n  \"requiredSkills\": [\"Machine Learning\", \"Node.js\", \"OpenAI API\"],\n  \"techStack\": [\"Python\", \"FastAPI\", \"React\"],\n  \"stage\": \"PROTOTYPE\",\n  \"developersNeeded\": 3\n}"
+              "raw": "{\n  \"title\": \"AI-Powered Code Reviewer\",\n  \"description\": \"Build an AI tool to review pull requests and suggest improvements.\",\n  \"requiredSkills\": [\"Machine Learning\", \"Node.js\", \"OpenAI API\"],\n  \"techStack\": [\"Python\", \"FastAPI\", \"React\"],\n  \"stage\": \"PROTOTYPE\",\n  \"roles\": [\n    { \"roleName\": \"Backend Developer\", \"requiredCount\": 2 },\n    { \"roleName\": \"Frontend Developer\", \"requiredCount\": 1 }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/projects",
@@ -691,7 +534,7 @@
           }
         },
         {
-          "name": "20. Get All Projects (with optional filters)",
+          "name": "15. Get All Projects (with optional filters)",
           "event": [
             {
               "listen": "test",
@@ -717,7 +560,7 @@
           }
         },
         {
-          "name": "21. Get Single Project by ID",
+          "name": "16. Get Single Project by ID",
           "event": [
             {
               "listen": "test",
@@ -742,7 +585,7 @@
           }
         },
         {
-          "name": "22. Update Project (owner only)",
+          "name": "17. Update Project (owner only)",
           "event": [
             {
               "listen": "test",
@@ -762,7 +605,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"AI Code Reviewer (Updated)\",\n  \"developersNeeded\": 4\n}"
+              "raw": "{\n  \"title\": \"AI Code Reviewer (Updated)\",\n  \"roles\": [\n    { \"roleName\": \"Backend Developer\", \"requiredCount\": 3 },\n    { \"roleName\": \"Frontend Developer\", \"requiredCount\": 1 }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/projects/{{projectId}}",
@@ -772,7 +615,7 @@
           }
         },
         {
-          "name": "23. Apply to Project (with CV)",
+          "name": "18. Apply to Project (with CV and role)",
           "event": [
             {
               "listen": "test",
@@ -783,6 +626,7 @@
                   "  const jsonData = pm.response.json();",
                   "  pm.expect(jsonData).to.have.property('message').that.includes('Application sent');",
                   "  pm.expect(jsonData).to.have.property('application');",
+                  "  pm.expect(jsonData.application).to.have.property('role', 'Backend Developer');",
                   "  pm.collectionVariables.set('applicationId', jsonData.application._id);",
                   "});"
                 ]
@@ -797,6 +641,7 @@
               "formdata": [
                 { "key": "message", "value": "I have 5 years of experience in ML and Python.", "type": "text" },
                 { "key": "portfolioLink", "value": "https://github.com/yourhandle", "type": "text" },
+                { "key": "role", "value": "Backend Developer", "type": "text" },
                 { "key": "cv", "type": "file", "src": "/path/to/cv.pdf" }
               ]
             },
@@ -809,7 +654,7 @@
           }
         },
         {
-          "name": "24. Get Project Applications (owner only)",
+          "name": "19. Get Project Applications (owner only)",
           "event": [
             {
               "listen": "test",
@@ -834,7 +679,7 @@
           }
         },
         {
-          "name": "25. Accept Application (owner only)",
+          "name": "20. Accept Application (owner only)",
           "event": [
             {
               "listen": "test",
@@ -864,7 +709,7 @@
           }
         },
         {
-          "name": "26. Get Project Team",
+          "name": "21. Get Project Team",
           "event": [
             {
               "listen": "test",
@@ -890,7 +735,7 @@
           }
         },
         {
-          "name": "27. Delete Project (owner only)",
+          "name": "22. Delete Project (owner only)",
           "event": [
             {
               "listen": "test",
@@ -920,7 +765,7 @@
       "name": "⚠️ Negative Tests",
       "item": [
         {
-          "name": "28. Register with Existing Email",
+          "name": "23. Register with Existing Email",
           "event": [
             {
               "listen": "test",
@@ -949,7 +794,7 @@
           }
         },
         {
-          "name": "29. Login with Unverified Email",
+          "name": "24. Login with Unverified Email",
           "event": [
             {
               "listen": "test",
@@ -978,7 +823,7 @@
           }
         },
         {
-          "name": "30. Access Protected Route Without Login",
+          "name": "25. Access Protected Route Without Login",
           "event": [
             {
               "listen": "test",
