@@ -1,3 +1,4 @@
+const Application = require('../models/application.model');
 const Post = require('../models/post.model');
 const Comment = require('../models/comment.model');
 const Like = require('../models/like.model');
@@ -520,9 +521,9 @@ const reportPost = async (req, res) => {
 // USER PROFILE & STATS
 // ==============================
 
-// @desc    Get user profile (public)
+// @desc    Get user profile (public stats)
 // @route   GET /api/community/profile/:userId
-// @access  Private (or public? We'll allow authenticated users)
+// @access  Private (authenticated users can view any profile)
 const getUserProfile = async (req, res) => {
   try {
     const userId = req.params.userId;
@@ -533,21 +534,26 @@ const getUserProfile = async (req, res) => {
     const projectsCount = await Project.countDocuments({
       $or: [{ owner: userId }, { teamMembers: userId }]
     });
-    const collaborationsCount = await Project.countDocuments({ teamMembers: userId }); // projects where user is member (not owner)
+    const collaborationsCount = await Project.countDocuments({ teamMembers: userId });
     const postsCount = await Post.countDocuments({ author: userId });
+
     // Get user's projects (with role info)
     const projects = await Project.find({ $or: [{ owner: userId }, { teamMembers: userId }] })
       .select('title stage roles teamMembers owner')
       .lean();
-    const projectsWithRole = projects.map(p => {
+
+    // Use a for loop to handle async await inside
+    const projectsWithRole = [];
+    for (const p of projects) {
       let role = '';
-      if (p.owner.toString() === userId) role = 'Creator';
-      else {
+      if (p.owner.toString() === userId) {
+        role = 'Creator';
+      } else {
         const application = await Application.findOne({ project: p._id, applicant: userId, status: 'ACCEPTED' });
         if (application) role = application.role;
       }
-      return { _id: p._id, title: p.title, stage: p.stage, role };
-    });
+      projectsWithRole.push({ _id: p._id, title: p.title, stage: p.stage, role });
+    }
 
     // Get user's posts
     const posts = await Post.find({ author: userId }).populate('author', 'firstName lastName profilePhoto email').sort('-createdAt').lean();
