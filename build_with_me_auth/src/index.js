@@ -12,6 +12,7 @@ const onboardingRoutes = require('./routes/onboarding.routes');
 const profileRoutes = require('./routes/profile.routes');
 const projectRoutes = require('./routes/project.routes');
 const notificationRoutes = require('./routes/notification.routes');
+const communityRoutes = require('./routes/community.routes');
 
 dotenv.config();
 connectDB();
@@ -72,6 +73,7 @@ app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api', projectRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/community', communityRoutes);
 
 
 // =============================
