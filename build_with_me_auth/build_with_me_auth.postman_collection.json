@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Build With Me - Full API (Auth + Onboarding + Profile + Storage + Projects)",
-    "description": "Complete test suite for authentication, onboarding, profile (combined only), projects (role-based CRUD, applications with role selection, team management), and negative tests. Uses HTTP‑only cookies – Postman manages them automatically.",
+    "name": "Build With Me - Full API (Auth + Onboarding + Profile + Projects + Community)",
+    "description": "Complete test suite for authentication, onboarding, profile (combined), projects (role-based CRUD, applications with role selection, team management), community (posts, comments, likes, saves, follows, mute, report, profile stats), and negative tests. Uses HTTP-only cookies – Postman manages them automatically.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -10,15 +10,18 @@
     { "key": "testPassword", "value": "test1234" },
     { "key": "testFirstName", "value": "John" },
     { "key": "testLastName", "value": "Doe" },
-    { "key": "testBio", "value": "Passionate full‑stack developer." },
+    { "key": "testBio", "value": "Passionate full-stack developer." },
     { "key": "testExternalLink", "value": "https://github.com/johndoe" },
     { "key": "newPassword", "value": "newpass5678" },
     { "key": "resetOtp", "value": "", "description": "Copy from password reset OTP email (6 digits)" },
     { "key": "resetToken", "value": "", "description": "Temporary JWT returned by /verify-reset-otp" },
     { "key": "verificationOtp", "value": "", "description": "Copy from email OTP (6 digits)" },
-    { "key": "firebaseIdToken", "value": "", "description": "Obtain from frontend Google sign‑in" },
+    { "key": "firebaseIdToken", "value": "", "description": "Obtain from frontend Google sign-in" },
     { "key": "projectId", "value": "", "description": "ID of created project" },
-    { "key": "applicationId", "value": "", "description": "ID of submitted application" }
+    { "key": "applicationId", "value": "", "description": "ID of submitted application" },
+    { "key": "postId", "value": "", "description": "ID of created post" },
+    { "key": "commentId", "value": "", "description": "ID of created comment" },
+    { "key": "targetUserId", "value": "", "description": "ID of another user (for follow tests)" }
   ],
   "item": [
     {
@@ -481,6 +484,8 @@
             "body": {
               "mode": "formdata",
               "formdata": [
+                { "key": "firstName", "value": "UpdatedFirstName", "type": "text" },
+                { "key": "lastName", "value": "UpdatedLastName", "type": "text" },
                 { "key": "bio", "value": "Updated bio via multipart", "type": "text" },
                 { "key": "skills", "value": "TypeScript,GraphQL", "type": "text" },
                 { "key": "externalLink", "value": "https://updated.dev", "type": "text" },
@@ -762,10 +767,549 @@
       ]
     },
     {
+      "name": "💬 Community",
+      "item": [
+        {
+          "name": "23. Create Post (text only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Response contains post id', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('message', 'Post created successfully');",
+                  "  pm.expect(jsonData).to.have.property('post');",
+                  "  pm.collectionVariables.set('postId', jsonData.post._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Excited to share my latest project! #buildwithme\",\n  \"tags\": [\"AI\", \"Node.js\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/community/posts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "posts"]
+            }
+          }
+        },
+        {
+          "name": "24. Create Post (with media file)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Post created with media', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('post');",
+                  "  pm.expect(jsonData.post.media).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "content", "value": "Check out this cool video!", "type": "text" },
+                { "key": "tags", "value": "video,demo", "type": "text" },
+                { "key": "media", "type": "file", "src": "/path/to/sample-image.jpg" }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/community/posts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "posts"]
+            },
+            "description": "⚠️ Replace '/path/to/sample-image.jpg' with an actual image/video file (max 5 files)."
+          }
+        },
+        {
+          "name": "25. Get Feed (paginated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contains posts array', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('posts');",
+                  "  pm.expect(jsonData.posts).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/community/feed?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "feed"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "26. Get Single Post",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Post details match', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('_id', pm.variables.get('postId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/community/posts/{{postId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "posts", "{{postId}}"]
+            }
+          }
+        },
+        {
+          "name": "27. Like Post",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Like toggled', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('liked', true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetType\": \"Post\",\n  \"targetId\": \"{{postId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/community/like",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "like"]
+            }
+          }
+        },
+        {
+          "name": "28. Unlike Post (toggle again)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Unlike toggled', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('liked', false);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetType\": \"Post\",\n  \"targetId\": \"{{postId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/community/like",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "like"]
+            }
+          }
+        },
+        {
+          "name": "29. Add Comment to Post",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Comment added', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('message', 'Comment added');",
+                  "  pm.expect(jsonData).to.have.property('comment');",
+                  "  pm.collectionVariables.set('commentId', jsonData.comment._id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Great post!\",\n  \"postId\": \"{{postId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/community/comments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "comments"]
+            }
+          }
+        },
+        {
+          "name": "30. Get Comments for Post",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contains comments array', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('comments');",
+                  "  pm.expect(jsonData.comments).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/community/posts/{{postId}}/comments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "posts", "{{postId}}", "comments"]
+            }
+          }
+        },
+        {
+          "name": "31. Reply to Comment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Reply added', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('message', 'Comment added');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Thanks for the feedback!\",\n  \"postId\": \"{{postId}}\",\n  \"parentCommentId\": \"{{commentId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/community/comments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "comments"]
+            }
+          }
+        },
+        {
+          "name": "32. Like Comment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Comment liked', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('liked', true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetType\": \"Comment\",\n  \"targetId\": \"{{commentId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/community/like",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "like"]
+            }
+          }
+        },
+        {
+          "name": "33. Save Post",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Post saved', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('saved', true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/community/save/{{postId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "save", "{{postId}}"]
+            }
+          }
+        },
+        {
+          "name": "34. Get Saved Posts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contains saved posts array', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/community/saved",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "saved"]
+            }
+          }
+        },
+        {
+          "name": "35. Unsave Post (toggle)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Post unsaved', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('saved', false);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/community/save/{{postId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "save", "{{postId}}"]
+            }
+          }
+        },
+        {
+          "name": "36. Follow Another User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('User followed', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('following', true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/community/follow/{{targetUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "follow", "{{targetUserId}}"]
+            }
+          }
+        },
+        {
+          "name": "37. Get Followers List",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contains array of followers', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/community/followers/{{targetUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "followers", "{{targetUserId}}"]
+            }
+          }
+        },
+        {
+          "name": "38. Get Following List",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contains array of following', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/community/following/{{targetUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "following", "{{targetUserId}}"]
+            }
+          }
+        },
+        {
+          "name": "39. Mute Post Notifications",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Post muted', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('muted', true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/community/mute/{{postId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "mute", "{{postId}}"]
+            }
+          }
+        },
+        {
+          "name": "40. Report Post",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Post reported', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('message', 'Post reported. Our team will review it.');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Spam content\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/community/report/{{postId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "report", "{{postId}}"]
+            }
+          }
+        },
+        {
+          "name": "41. Get User Profile (public stats)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Profile contains stats and posts', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('user');",
+                  "  pm.expect(jsonData).to.have.property('stats');",
+                  "  pm.expect(jsonData.stats).to.have.property('projects');",
+                  "  pm.expect(jsonData.stats).to.have.property('posts');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/community/profile/{{targetUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "community", "profile", "{{targetUserId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "⚠️ Negative Tests",
       "item": [
         {
-          "name": "23. Register with Existing Email",
+          "name": "42. Register with Existing Email",
           "event": [
             {
               "listen": "test",
@@ -794,7 +1338,7 @@
           }
         },
         {
-          "name": "24. Login with Unverified Email",
+          "name": "43. Login with Unverified Email",
           "event": [
             {
               "listen": "test",
@@ -823,7 +1367,7 @@
           }
         },
         {
-          "name": "25. Access Protected Route Without Login",
+          "name": "44. Access Protected Route Without Login",
           "event": [
             {
               "listen": "test",

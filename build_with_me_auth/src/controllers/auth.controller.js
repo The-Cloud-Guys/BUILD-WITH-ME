@@ -23,7 +23,7 @@ const { getOnboardingStatus } = require('../utils/onboardingStatus');
 
 const generateTokens = (user) => {
   const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
+    expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '5h',
   });
 
   const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_REFRESH_SECRET, {
@@ -156,7 +156,7 @@ const verifyEmail = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 15 * 60 * 1000,
+      maxAge: 5 * 60 * 60 * 1000, // 5 hours
       path: '/',
     });
     res.cookie('refreshToken', refreshToken, {
@@ -310,7 +310,11 @@ const refreshToken = async (req, res) => {
       path: '/',
     });
 
-    res.json({ message: 'Token refreshed', accessToken: newAccessToken });
+  res.json({
+  message: 'Token refreshed',
+  accessToken: newAccessToken,
+  refreshToken: newRefreshToken,
+});
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
