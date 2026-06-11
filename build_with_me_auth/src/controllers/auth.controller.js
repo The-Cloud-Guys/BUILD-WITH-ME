@@ -151,6 +151,7 @@ const verifyEmail = async (req, res) => {
 
     const { accessToken, refreshToken } = generateTokens(user);
     await storeRefreshToken(user._id, refreshToken);
+    
 
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
@@ -170,6 +171,7 @@ const verifyEmail = async (req, res) => {
 res.json({
   message: 'Email verified successfully',
   accessToken,
+  refreshToken,
   user: { _id: user._id, email: user.email, onboardingStep: user.onboardingStep, onboardingCompleted: user.onboardingCompleted },
   onboardingCompleted: user.onboardingCompleted,
   onboardingStatus: getOnboardingStatus(user.onboardingStep)
@@ -241,7 +243,7 @@ const login = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 15 * 60 * 1000,
+      maxAge: 5 * 60 * 60 * 1000, // 5 hours
       path: '/',
     });
     res.cookie('refreshToken', refreshToken, {
@@ -252,18 +254,14 @@ const login = async (req, res) => {
       path: '/',
     });
 
-    res.json({
-      message: 'Login successful',
-      accessToken,
-      user: {
-        _id: user._id,
-        email: user.email,
-        onboardingStep: user.onboardingStep,
-        onboardingCompleted: user.onboardingCompleted
-      },
-      onboardingCompleted: user.onboardingCompleted,
-      onboardingStatus: getOnboardingStatus(user.onboardingStep)
-    });
+  res.json({
+    message: 'Login successful',
+    accessToken,
+    refreshToken,
+    user: { _id: user._id, email: user.email, onboardingStep: user.onboardingStep, onboardingCompleted: user.onboardingCompleted },
+    onboardingCompleted: user.onboardingCompleted,
+    onboardingStatus: getOnboardingStatus(user.onboardingStep)
+  });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -299,7 +297,7 @@ const refreshToken = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 15 * 60 * 1000,
+      maxAge: 5 * 60 * 60 * 1000, // 5 hours
       path: '/',
     });
     res.cookie('refreshToken', newRefreshToken, {
@@ -489,7 +487,7 @@ const resetPassword = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 15 * 60 * 1000,
+      maxAge: 5 * 60 * 60 * 1000, // 5 hours
       path: '/',
     });
     res.cookie('refreshToken', refreshToken, {
@@ -550,7 +548,7 @@ const firebaseAuth = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 15 * 60 * 1000,
+      maxAge: 5 * 60 * 60 * 1000, // 5 hours
       path: '/',
     });
     res.cookie('refreshToken', refreshToken, {
@@ -563,19 +561,21 @@ const firebaseAuth = async (req, res) => {
 
     const isProfileCompleted = user.onboardingStep === 3;
 
-    res.json({
-      message: 'Firebase login successful',
-      accessToken,
-      isProfileCompleted,
-      user: {
-        id: user._id,
-        email: user.email,
-        onboardingStep: user.onboardingStep,
-        onboardingCompleted: user.onboardingCompleted
-      },
-      onboardingCompleted: user.onboardingCompleted,
-      onboardingStatus: getOnboardingStatus(user.onboardingStep)
-    });
+  res.json({
+    message: 'Firebase login successful',
+    accessToken,
+    refreshToken,
+    isProfileCompleted,
+    user: {
+      id: user._id,
+      email: user.email,
+      onboardingStep: user.onboardingStep,
+      onboardingCompleted: user.onboardingCompleted
+    },
+    onboardingCompleted: user.onboardingCompleted,
+    onboardingStatus: getOnboardingStatus(user.onboardingStep)
+  });
+
   } catch (error) {
     console.error(error);
     res.status(401).json({ message: 'Firebase auth failed' });
