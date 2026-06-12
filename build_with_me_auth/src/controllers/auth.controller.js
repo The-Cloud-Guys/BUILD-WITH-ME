@@ -16,6 +16,7 @@ const {
 const { verifyFirebaseToken } = require('../services/firebase.service');
 const { generateNumericOTP, hashOTP } = require('../utils/otp.util');
 const { getOnboardingStatus } = require('../utils/onboardingStatus');
+const { getSignedUrl } = require('../services/supabase.service');
 
 // ==============================
 // TOKEN HELPERS
@@ -341,10 +342,10 @@ const logout = async (req, res) => {
   }
 };
 
+
 // ==============================
 // GET CURRENT USER (PROTECTED)
 // ==============================
-
 const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select(
@@ -355,13 +356,19 @@ const getMe = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    const userObject = user.toObject();
+    const userObj = user.toObject();
 
-    res.json({
-      ...userObject,
-      onboardingCompleted: user.onboardingCompleted,
-      onboardingStatus: getOnboardingStatus(user.onboardingStep),
-    });
+    // Generate signed URL for profile photo if it's a stored path (private bucket)
+    if (userObj.profilePhoto && typeof userObj.profilePhoto === 'string' && userObj.profilePhoto.startsWith('users/')) {
+      try {
+        const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, userObj.profilePhoto);
+        userObj.profilePhoto = signedUrl;
+      } catch (err) {
+        console.error('Signed URL generation failed:', err.message);
+      }
+    }
+
+    res.json(userObj);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
