@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Build With Me - Full API (Auth + Onboarding + Profile + Projects + Community)",
-    "description": "Complete test suite for authentication, onboarding, profile (combined), projects (role-based CRUD, applications with role selection, team management), community (posts, comments, likes, saves, follows, mute, report, profile stats), and negative tests. Uses HTTP-only cookies – Postman manages them automatically.",
+    "description": "Complete test suite for authentication, onboarding, profile (combined), projects (role-based CRUD, applications, team management, featured & recommended), community (posts, comments, likes, saves, follows, mute, report, profile stats), and negative tests. Uses HTTP-only cookies – Postman manages them automatically.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -569,7 +569,33 @@
           }
         },
         {
-          "name": "16. Get Single Project by ID",
+          "name": "16. Get Projects with Role Filter",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contains projects filtered by role', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('projects');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/projects?role=Frontend%20Developer",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects"],
+              "query": [{ "key": "role", "value": "Frontend Developer" }]
+            }
+          }
+        },
+        {
+          "name": "17. Get Single Project by ID",
           "event": [
             {
               "listen": "test",
@@ -594,7 +620,7 @@
           }
         },
         {
-          "name": "17. Update Project (owner only)",
+          "name": "18. Update Project (owner only)",
           "event": [
             {
               "listen": "test",
@@ -628,7 +654,7 @@
           }
         },
         {
-          "name": "18. Apply to Project (with CV and role)",
+          "name": "19. Apply to Project (with CV and role)",
           "event": [
             {
               "listen": "test",
@@ -667,7 +693,7 @@
           }
         },
         {
-          "name": "19. Get Project Applications (owner only)",
+          "name": "20. Get Project Applications (owner only)",
           "event": [
             {
               "listen": "test",
@@ -692,7 +718,7 @@
           }
         },
         {
-          "name": "20. Accept Application (owner only)",
+          "name": "21. Accept Application (owner only)",
           "event": [
             {
               "listen": "test",
@@ -722,7 +748,7 @@
           }
         },
         {
-          "name": "21. Get Project Team",
+          "name": "22. Get Project Team",
           "event": [
             {
               "listen": "test",
@@ -748,7 +774,7 @@
           }
         },
         {
-          "name": "22. Delete Project (owner only)",
+          "name": "23. Delete Project (owner only)",
           "event": [
             {
               "listen": "test",
@@ -771,6 +797,57 @@
               "path": ["api", "projects", "{{projectId}}"]
             }
           }
+        },
+        {
+          "name": "24. Get Featured Projects",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contains projects array', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/featured?limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "featured"],
+              "query": [{ "key": "limit", "value": "5" }]
+            }
+          }
+        },
+        {
+          "name": "25. Get Recommended Projects (requires authentication)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contains recommended projects array', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/recommended",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "recommended"]
+            }
+          }
         }
       ]
     },
@@ -778,7 +855,7 @@
       "name": "💬 Community",
       "item": [
         {
-          "name": "23. Create Post (text only)",
+          "name": "26. Create Post (text only)",
           "event": [
             {
               "listen": "test",
@@ -810,7 +887,7 @@
           }
         },
         {
-          "name": "24. Create Post (with media file)",
+          "name": "27. Create Post (with media file)",
           "event": [
             {
               "listen": "test",
@@ -846,7 +923,7 @@
           }
         },
         {
-          "name": "25. Get Feed (paginated)",
+          "name": "28. Get Feed (paginated)",
           "event": [
             {
               "listen": "test",
@@ -876,7 +953,7 @@
           }
         },
         {
-          "name": "26. Get Single Post",
+          "name": "29. Get Single Post",
           "event": [
             {
               "listen": "test",
@@ -901,7 +978,7 @@
           }
         },
         {
-          "name": "27. Like Post",
+          "name": "30. Like Post",
           "event": [
             {
               "listen": "test",
@@ -931,7 +1008,7 @@
           }
         },
         {
-          "name": "28. Unlike Post (toggle again)",
+          "name": "31. Unlike Post (toggle again)",
           "event": [
             {
               "listen": "test",
@@ -961,7 +1038,7 @@
           }
         },
         {
-          "name": "29. Add Comment to Post",
+          "name": "32. Add Comment to Post",
           "event": [
             {
               "listen": "test",
@@ -993,7 +1070,7 @@
           }
         },
         {
-          "name": "30. Get Comments for Post",
+          "name": "33. Get Comments for Post",
           "event": [
             {
               "listen": "test",
@@ -1019,7 +1096,7 @@
           }
         },
         {
-          "name": "31. Reply to Comment",
+          "name": "34. Reply to Comment",
           "event": [
             {
               "listen": "test",
@@ -1049,7 +1126,7 @@
           }
         },
         {
-          "name": "32. Like Comment",
+          "name": "35. Like Comment",
           "event": [
             {
               "listen": "test",
@@ -1079,7 +1156,7 @@
           }
         },
         {
-          "name": "33. Save Post",
+          "name": "36. Save Post",
           "event": [
             {
               "listen": "test",
@@ -1104,7 +1181,7 @@
           }
         },
         {
-          "name": "34. Get Saved Posts",
+          "name": "37. Get Saved Posts",
           "event": [
             {
               "listen": "test",
@@ -1129,7 +1206,7 @@
           }
         },
         {
-          "name": "35. Unsave Post (toggle)",
+          "name": "38. Unsave Post (toggle)",
           "event": [
             {
               "listen": "test",
@@ -1154,7 +1231,7 @@
           }
         },
         {
-          "name": "36. Follow Another User",
+          "name": "39. Follow Another User",
           "event": [
             {
               "listen": "test",
@@ -1179,7 +1256,7 @@
           }
         },
         {
-          "name": "37. Get Followers List",
+          "name": "40. Get Followers List",
           "event": [
             {
               "listen": "test",
@@ -1204,7 +1281,7 @@
           }
         },
         {
-          "name": "38. Get Following List",
+          "name": "41. Get Following List",
           "event": [
             {
               "listen": "test",
@@ -1229,7 +1306,7 @@
           }
         },
         {
-          "name": "39. Mute Post Notifications",
+          "name": "42. Mute Post Notifications",
           "event": [
             {
               "listen": "test",
@@ -1254,7 +1331,7 @@
           }
         },
         {
-          "name": "40. Report Post",
+          "name": "43. Report Post",
           "event": [
             {
               "listen": "test",
@@ -1284,7 +1361,7 @@
           }
         },
         {
-          "name": "41. Get User Profile (public stats)",
+          "name": "44. Get User Profile (public stats)",
           "event": [
             {
               "listen": "test",
@@ -1317,7 +1394,7 @@
       "name": "⚠️ Negative Tests",
       "item": [
         {
-          "name": "42. Register with Existing Email",
+          "name": "45. Register with Existing Email",
           "event": [
             {
               "listen": "test",
@@ -1346,7 +1423,7 @@
           }
         },
         {
-          "name": "43. Login with Unverified Email",
+          "name": "46. Login with Unverified Email",
           "event": [
             {
               "listen": "test",
@@ -1375,7 +1452,7 @@
           }
         },
         {
-          "name": "44. Access Protected Route Without Login",
+          "name": "47. Access Protected Route Without Login",
           "event": [
             {
               "listen": "test",

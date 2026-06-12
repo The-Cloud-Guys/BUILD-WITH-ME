@@ -18,7 +18,7 @@ const {
 
 const router = express.Router();
 
-// All routes below require authentication except GET /projects and GET /projects/:id and GET /projects/:id/team
+// Public routes
 router.get('/', getProjects);
 router.get('/featured', getFeaturedProjects);
 router.get('/:id', getProjectById);
@@ -35,11 +35,5 @@ router.post('/:id/apply', cvUpload.single('cv'), applyToProject);
 router.get('/:id/applications', getProjectApplications);
 router.put('/applications/:id', updateApplicationStatus);
 router.delete('/:id/team/:userId', removeTeamMember);
-
-router.post('/projects/:id/apply', cvUpload.single('cv'), applyToProject);
-router.get('/projects/:id/applications', getProjectApplications);
-router.put('/applications/:id', updateApplicationStatus);      // now matches /api/applications/:id
-
-router.delete('/projects/:id/team/:userId', removeTeamMember);
 
 module.exports = router;
