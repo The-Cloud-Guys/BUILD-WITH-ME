@@ -85,31 +85,42 @@ const createProject = async (req, res) => {
 
 // @desc    Get all projects with filters
 // @route   GET /api/projects
-// @access  Public (or private? for MVP, public)
+// @access  Public (or private – we keep public)
 const getProjects = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, skill, tech, stage, tag } = req.query;
+    const { page = 1, limit = 10, search, skill, tech, stage, tag, role, owner } = req.query;
     const filter = {};
 
+    // Search (title, description, requiredSkills, techStack, roleName)
     if (search) {
       filter.$or = [
         { title: { $regex: search, $options: 'i' } },
         { description: { $regex: search, $options: 'i' } },
+        { requiredSkills: { $regex: search, $options: 'i' } },
+        { techStack: { $regex: search, $options: 'i' } },
+        { 'roles.roleName': { $regex: search, $options: 'i' } }
       ];
     }
+
     if (skill) filter.requiredSkills = { $in: [skill] };
     if (tech) filter.techStack = { $in: [tech] };
     if (stage) filter.stage = stage;
     if (tag) {
-      // tag can be skill or tech – combine
       filter.$or = [
         { requiredSkills: { $in: [tag] } },
-        { techStack: { $in: [tag] } },
+        { techStack: { $in: [tag] } }
       ];
+    }
+    if (role) {
+      filter['roles.roleName'] = { $regex: role, $options: 'i' };
+    }
+    if (owner) {
+      // Owner filter: expects a user ID (only for authenticated users)
+      filter.owner = owner;
     }
 
     const projects = await Project.find(filter)
-      .populate('owner', 'firstName lastName profilePhoto')
+      .populate('owner', 'firstName lastName profilePhoto email')
       .sort('-createdAt')
       .limit(limit * 1)
       .skip((page - 1) * limit)
@@ -123,7 +134,6 @@ const getProjects = async (req, res) => {
     }
 
     const total = await Project.countDocuments(filter);
-
     res.json({
       projects,
       totalPages: Math.ceil(total / limit),
@@ -159,6 +169,99 @@ const getProjectById = async (req, res) => {
     }
 
     res.json(project);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Get featured projects (sorted by number of applications + recency)
+// @route   GET /api/projects/featured
+// @access  Public
+const getFeaturedProjects = async (req, res) => {
+  try {
+    const { limit = 10 } = req.query;
+    // Aggregate: project with application count
+    const featured = await Project.aggregate([
+      {
+        $lookup: {
+          from: 'applications',
+          localField: '_id',
+          foreignField: 'project',
+          as: 'applications'
+        }
+      },
+      {
+        $addFields: {
+          applicationCount: { $size: '$applications' }
+        }
+      },
+      {
+        $sort: { applicationCount: -1, createdAt: -1 }
+      },
+      {
+        $limit: parseInt(limit)
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'owner',
+          foreignField: '_id',
+          as: 'owner'
+        }
+      },
+      { $unwind: '$owner' }
+    ]);
+
+    // Convert profile photos to signed URLs
+    for (let p of featured) {
+      if (p.owner?.profilePhoto && p.owner.profilePhoto.startsWith('users/')) {
+        p.owner.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, p.owner.profilePhoto);
+      }
+    }
+
+    res.json(featured);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Get recommended projects for logged-in user
+// @route   GET /api/projects/recommended
+// @access  Private
+const getRecommendedProjects = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('skills role');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Get IDs of projects user already applied to or is a member of
+    const appliedProjects = await Application.distinct('project', { applicant: req.user.id });
+    const memberProjects = await Project.distinct('_id', { teamMembers: req.user.id });
+    const excluded = [...appliedProjects, ...memberProjects];
+
+    const filter = {
+      _id: { $nin: excluded },
+      $or: [
+        { requiredSkills: { $in: user.skills } },
+        { techStack: { $in: user.skills } },
+        { 'roles.roleName': { $regex: user.role || '', $options: 'i' } }
+      ]
+    };
+
+    const projects = await Project.find(filter)
+      .populate('owner', 'firstName lastName profilePhoto email')
+      .sort('-createdAt')
+      .limit(20)
+      .lean();
+
+    for (let p of projects) {
+      if (p.owner?.profilePhoto && p.owner.profilePhoto.startsWith('users/')) {
+        p.owner.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, p.owner.profilePhoto);
+      }
+    }
+
+    res.json(projects);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -489,6 +592,8 @@ module.exports = {
   createProject,
   getProjects,
   getProjectById,
+  getFeaturedProjects,
+  getRecommendedProjects,
   updateProject,
   deleteProject,
   applyToProject,

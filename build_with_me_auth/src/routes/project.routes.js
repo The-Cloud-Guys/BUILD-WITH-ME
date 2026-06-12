@@ -4,6 +4,8 @@ const {
   createProject,
   getProjects,
   getProjectById,
+  getFeaturedProjects,
+  getRecommendedProjects,
   updateProject,
   deleteProject,
   applyToProject,
@@ -11,22 +13,28 @@ const {
   updateApplicationStatus,
   getProjectTeam,
   removeTeamMember,
-  cvUpload,
+  cvUpload
 } = require('../controllers/project.controller');
 
 const router = express.Router();
 
 // All routes below require authentication except GET /projects and GET /projects/:id and GET /projects/:id/team
-router.get('/projects', getProjects);                           // public
-router.get('/projects/:id', getProjectById);                   // public
-router.get('/projects/:id/team', getProjectTeam);              // public
+router.get('/', getProjects);
+router.get('/featured', getFeaturedProjects);
+router.get('/:id', getProjectById);
+router.get('/:id/team', getProjectTeam);
 
 // Protected routes
 router.use(protect);
 
-router.post('/projects', createProject);
-router.put('/projects/:id', updateProject);
-router.delete('/projects/:id', deleteProject);
+router.get('/recommended', getRecommendedProjects);
+router.post('/', createProject);
+router.put('/:id', updateProject);
+router.delete('/:id', deleteProject);
+router.post('/:id/apply', cvUpload.single('cv'), applyToProject);
+router.get('/:id/applications', getProjectApplications);
+router.put('/applications/:id', updateApplicationStatus);
+router.delete('/:id/team/:userId', removeTeamMember);
 
 router.post('/projects/:id/apply', cvUpload.single('cv'), applyToProject);
 router.get('/projects/:id/applications', getProjectApplications);
