@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Build With Me - Full API (Auth + Onboarding + Profile + Projects + Community)",
-    "description": "Complete test suite for authentication, onboarding, profile (combined), projects (role-based CRUD, applications, team management, featured & recommended), community (posts, comments, likes, saves, follows, mute, report, profile stats), and negative tests. Uses HTTP-only cookies – Postman manages them automatically.",
+    "description": "Complete test suite for authentication (register, OTP, login, get me, refresh, logout, password reset, Firebase), onboarding, profile (combined), projects (role-based CRUD, applications, team, featured & recommended), community, and negative tests.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -140,7 +140,41 @@
           }
         },
         {
-          "name": "4. Refresh Token",
+          "name": "4. Get Current User (Protected, uses cookie)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns user profile without password', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('email', pm.variables.get('testEmail'));",
+                  "  pm.expect(jsonData).to.not.have.property('password');",
+                  "});",
+                  "pm.test('Profile photo is a signed URL if exists', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  if (jsonData.profilePhoto) {",
+                  "    pm.expect(jsonData.profilePhoto).to.be.a('string');",
+                  "    pm.expect(jsonData.profilePhoto).to.match(/https?:\\/\\/.*signed.*/);",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "5. Refresh Token",
           "event": [
             {
               "listen": "test",
@@ -167,7 +201,7 @@
           }
         },
         {
-          "name": "5. Logout (clears cookies)",
+          "name": "6. Logout (clears cookies)",
           "event": [
             {
               "listen": "test",
@@ -191,7 +225,7 @@
           }
         },
         {
-          "name": "6. Forgot Password (request OTP)",
+          "name": "7. Forgot Password (request OTP)",
           "event": [
             {
               "listen": "test",
@@ -221,7 +255,7 @@
           }
         },
         {
-          "name": "7. Verify Reset OTP (returns temporary token)",
+          "name": "8. Verify Reset OTP (returns temporary token)",
           "event": [
             {
               "listen": "test",
@@ -253,7 +287,7 @@
           }
         },
         {
-          "name": "8. Reset Password (using token, returns cookies)",
+          "name": "9. Reset Password (using token, returns cookies)",
           "event": [
             {
               "listen": "test",
@@ -286,7 +320,7 @@
           }
         },
         {
-          "name": "9. Firebase Google Auth",
+          "name": "10. Firebase Google Auth",
           "event": [
             {
               "listen": "test",
@@ -326,7 +360,7 @@
       "name": "📝 Onboarding Flow",
       "item": [
         {
-          "name": "10. Get Onboarding Status",
+          "name": "11. Get Onboarding Status",
           "event": [
             {
               "listen": "test",
@@ -351,7 +385,7 @@
           }
         },
         {
-          "name": "11. Set User Role",
+          "name": "12. Set User Role",
           "event": [
             {
               "listen": "test",
@@ -384,7 +418,7 @@
           }
         },
         {
-          "name": "12. Set User Skills",
+          "name": "13. Set User Skills",
           "event": [
             {
               "listen": "test",
@@ -422,7 +456,7 @@
       "name": "🖼️ Combined Profile + Photo Endpoints",
       "item": [
         {
-          "name": "13a. Create Full Profile with Photo (multipart) - POST /api/profile/userProfile",
+          "name": "14a. Create Full Profile with Photo (multipart) - POST /api/profile/userProfile",
           "event": [
             {
               "listen": "test",
@@ -464,7 +498,7 @@
           }
         },
         {
-          "name": "13b. Update Full Profile with Photo (multipart) - PATCH /api/profile/userProfile",
+          "name": "14b. Update Full Profile with Photo (multipart) - PATCH /api/profile/userProfile",
           "event": [
             {
               "listen": "test",
@@ -510,7 +544,7 @@
       "name": "🚀 Projects",
       "item": [
         {
-          "name": "14. Create Project (with roles)",
+          "name": "15. Create Project (with roles)",
           "event": [
             {
               "listen": "test",
@@ -543,7 +577,7 @@
           }
         },
         {
-          "name": "15. Get All Projects (with optional filters)",
+          "name": "16. Get All Projects (with optional filters)",
           "event": [
             {
               "listen": "test",
@@ -569,7 +603,7 @@
           }
         },
         {
-          "name": "16. Get Projects with Role Filter",
+          "name": "17. Get Projects with Role Filter",
           "event": [
             {
               "listen": "test",
@@ -595,7 +629,7 @@
           }
         },
         {
-          "name": "17. Get Single Project by ID",
+          "name": "18. Get Single Project by ID",
           "event": [
             {
               "listen": "test",
@@ -620,7 +654,7 @@
           }
         },
         {
-          "name": "18. Update Project (owner only)",
+          "name": "19. Update Project (owner only)",
           "event": [
             {
               "listen": "test",
@@ -654,7 +688,7 @@
           }
         },
         {
-          "name": "19. Apply to Project (with CV and role)",
+          "name": "20. Apply to Project (with CV and role)",
           "event": [
             {
               "listen": "test",
@@ -693,7 +727,7 @@
           }
         },
         {
-          "name": "20. Get Project Applications (owner only)",
+          "name": "21. Get Project Applications (owner only)",
           "event": [
             {
               "listen": "test",
@@ -718,7 +752,7 @@
           }
         },
         {
-          "name": "21. Accept Application (owner only)",
+          "name": "22. Accept Application (owner only)",
           "event": [
             {
               "listen": "test",
@@ -748,7 +782,7 @@
           }
         },
         {
-          "name": "22. Get Project Team",
+          "name": "23. Get Project Team",
           "event": [
             {
               "listen": "test",
@@ -774,7 +808,7 @@
           }
         },
         {
-          "name": "23. Delete Project (owner only)",
+          "name": "24. Delete Project (owner only)",
           "event": [
             {
               "listen": "test",
@@ -799,7 +833,7 @@
           }
         },
         {
-          "name": "24. Get Featured Projects",
+          "name": "25. Get Featured Projects",
           "event": [
             {
               "listen": "test",
@@ -825,7 +859,7 @@
           }
         },
         {
-          "name": "25. Get Recommended Projects (requires authentication)",
+          "name": "26. Get Recommended Projects (requires authentication)",
           "event": [
             {
               "listen": "test",
@@ -855,7 +889,7 @@
       "name": "💬 Community",
       "item": [
         {
-          "name": "26. Create Post (text only)",
+          "name": "27. Create Post (text only)",
           "event": [
             {
               "listen": "test",
@@ -887,7 +921,7 @@
           }
         },
         {
-          "name": "27. Create Post (with media file)",
+          "name": "28. Create Post (with media file)",
           "event": [
             {
               "listen": "test",
@@ -923,7 +957,7 @@
           }
         },
         {
-          "name": "28. Get Feed (paginated)",
+          "name": "29. Get Feed (paginated)",
           "event": [
             {
               "listen": "test",
@@ -953,7 +987,7 @@
           }
         },
         {
-          "name": "29. Get Single Post",
+          "name": "30. Get Single Post",
           "event": [
             {
               "listen": "test",
@@ -978,7 +1012,7 @@
           }
         },
         {
-          "name": "30. Like Post",
+          "name": "31. Like Post",
           "event": [
             {
               "listen": "test",
@@ -1008,7 +1042,7 @@
           }
         },
         {
-          "name": "31. Unlike Post (toggle again)",
+          "name": "32. Unlike Post (toggle again)",
           "event": [
             {
               "listen": "test",
@@ -1038,7 +1072,7 @@
           }
         },
         {
-          "name": "32. Add Comment to Post",
+          "name": "33. Add Comment to Post",
           "event": [
             {
               "listen": "test",
@@ -1070,7 +1104,7 @@
           }
         },
         {
-          "name": "33. Get Comments for Post",
+          "name": "34. Get Comments for Post",
           "event": [
             {
               "listen": "test",
@@ -1096,7 +1130,7 @@
           }
         },
         {
-          "name": "34. Reply to Comment",
+          "name": "35. Reply to Comment",
           "event": [
             {
               "listen": "test",
@@ -1126,7 +1160,7 @@
           }
         },
         {
-          "name": "35. Like Comment",
+          "name": "36. Like Comment",
           "event": [
             {
               "listen": "test",
@@ -1156,7 +1190,7 @@
           }
         },
         {
-          "name": "36. Save Post",
+          "name": "37. Save Post",
           "event": [
             {
               "listen": "test",
@@ -1181,7 +1215,7 @@
           }
         },
         {
-          "name": "37. Get Saved Posts",
+          "name": "38. Get Saved Posts",
           "event": [
             {
               "listen": "test",
@@ -1206,7 +1240,7 @@
           }
         },
         {
-          "name": "38. Unsave Post (toggle)",
+          "name": "39. Unsave Post (toggle)",
           "event": [
             {
               "listen": "test",
@@ -1231,7 +1265,7 @@
           }
         },
         {
-          "name": "39. Follow Another User",
+          "name": "40. Follow Another User",
           "event": [
             {
               "listen": "test",
@@ -1256,7 +1290,7 @@
           }
         },
         {
-          "name": "40. Get Followers List",
+          "name": "41. Get Followers List",
           "event": [
             {
               "listen": "test",
@@ -1281,7 +1315,7 @@
           }
         },
         {
-          "name": "41. Get Following List",
+          "name": "42. Get Following List",
           "event": [
             {
               "listen": "test",
@@ -1306,7 +1340,7 @@
           }
         },
         {
-          "name": "42. Mute Post Notifications",
+          "name": "43. Mute Post Notifications",
           "event": [
             {
               "listen": "test",
@@ -1331,7 +1365,7 @@
           }
         },
         {
-          "name": "43. Report Post",
+          "name": "44. Report Post",
           "event": [
             {
               "listen": "test",
@@ -1361,7 +1395,7 @@
           }
         },
         {
-          "name": "44. Get User Profile (public stats)",
+          "name": "45. Get User Profile (public stats)",
           "event": [
             {
               "listen": "test",
@@ -1394,7 +1428,7 @@
       "name": "⚠️ Negative Tests",
       "item": [
         {
-          "name": "45. Register with Existing Email",
+          "name": "46. Register with Existing Email",
           "event": [
             {
               "listen": "test",
@@ -1423,7 +1457,7 @@
           }
         },
         {
-          "name": "46. Login with Unverified Email",
+          "name": "47. Login with Unverified Email",
           "event": [
             {
               "listen": "test",
@@ -1452,7 +1486,7 @@
           }
         },
         {
-          "name": "47. Access Protected Route Without Login",
+          "name": "48. Access Protected Route Without Login",
           "event": [
             {
               "listen": "test",
