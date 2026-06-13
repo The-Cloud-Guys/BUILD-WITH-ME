@@ -37,7 +37,7 @@ const uploadFile = async (bucket, filePath, fileBuffer, contentType) => {
  * @param {number} expiresIn - Expiry time in seconds (default: 3600)
  * @returns {Promise<string>} signed URL
  */
-const getSignedUrl = async (bucket, filePath, expiresIn = 3600) => {
+const getSignedUrl = async (bucket, filePath, expiresIn = 86400) => {
   const { data, error } = await supabase.storage.from(bucket).createSignedUrl(filePath, expiresIn);
   if (error) {
     throw new Error(`Signed URL failed: ${error.message}`);
