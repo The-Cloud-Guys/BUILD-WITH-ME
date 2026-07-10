@@ -16,24 +16,27 @@ const {
   cvUpload
 } = require('../controllers/project.controller');
 
+
 const router = express.Router();
 
-// Public routes
+// PUBLIC ROUTES
 router.get('/', getProjects);
 router.get('/featured', getFeaturedProjects);
-router.get('/:id', getProjectById);
+router.get('/recommended', getRecommendedProjects);
 router.get('/:id/team', getProjectTeam);
+router.get('/:id', getProjectById);
+// PROTECTED ROUTES
 
-// Protected routes
 router.use(protect);
 
-router.get('/recommended', getRecommendedProjects);
 router.post('/', createProject);
 router.put('/:id', updateProject);
 router.delete('/:id', deleteProject);
 router.post('/:id/apply', cvUpload.single('cv'), applyToProject);
 router.get('/:id/applications', getProjectApplications);
-router.put('/applications/:id', updateApplicationStatus);
 router.delete('/:id/team/:userId', removeTeamMember);
+router.put('/applications/:id', updateApplicationStatus);
+
+router.get('/recommended', getRecommendedProjects);
 
 module.exports = router;
