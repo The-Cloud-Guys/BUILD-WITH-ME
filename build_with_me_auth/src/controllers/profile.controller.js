@@ -74,29 +74,36 @@ const getMyProfile = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
-
 // @desc    Create full user profile (onboarding step 3) with optional photo
-// @route   POST /api/userProfile
+// @route   POST /api/profile/userProfile
 // @access  Private
 const createUserProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
+    // Extract fields from multipart body
     const { firstName, lastName, bio, externalLink } = req.body;
     const updateData = {};
+
+    // Validate required fields
+    if (!firstName || !lastName) {
+      return res.status(400).json({ message: 'First name and last name are required' });
+    }
 
     if (firstName) updateData.firstName = firstName.trim();
     if (lastName) updateData.lastName = lastName.trim();
     if (bio) updateData.bio = bio.slice(0, 500);
     if (externalLink) updateData.externalLink = externalLink.trim();
 
+    // Handle profile photo if provided
     if (req.file) {
       const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
       if (!allowedMimeTypes.includes(req.file.mimetype)) {
         return res.status(400).json({ message: 'Only JPG, PNG, and WEBP images are allowed' });
       }
 
+      // Delete old photo if exists
       if (user.profilePhoto && user.profilePhoto.startsWith('users/')) {
         try {
           await deleteFile(process.env.SUPABASE_BUCKET_AVATAR, user.profilePhoto);
@@ -109,14 +116,17 @@ const createUserProfile = async (req, res) => {
       updateData.profilePhoto = filePath;
     }
 
+    // Update user
     const updatedUser = await User.findByIdAndUpdate(req.user.id, updateData, { new: true })
       .select('-password -refreshToken -emailVerificationOTP -resetPasswordToken -resetPasswordExpires');
 
+    // Always set onboardingStep to 3 if not already
     if (updatedUser.onboardingStep < 3) {
       updatedUser.onboardingStep = 3;
       await updatedUser.save();
     }
 
+    // Generate signed URL for photo if needed
     const userObj = updatedUser.toObject();
     if (userObj.profilePhoto && userObj.profilePhoto.startsWith('users/')) {
       const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, userObj.profilePhoto);
@@ -130,8 +140,8 @@ const createUserProfile = async (req, res) => {
       user: userObj
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error in createUserProfile:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 

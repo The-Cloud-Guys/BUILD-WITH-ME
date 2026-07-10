@@ -556,12 +556,11 @@ const getUserProfile = async (req, res) => {
     }
 
     // Get user's posts
-    const posts = await Post.find({ author: userId }).populate('author', 'firstName lastName profilePhoto email').sort('-createdAt').lean();
-    for (let post of posts) {
-      if (post.author.profilePhoto && post.author.profilePhoto.startsWith('users/')) {
-        post.author.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, post.author.profilePhoto);
-      }
-    }
+    const posts = await Post.find({ author: userId })
+  .select('content tags media likeCount commentCount createdAt')
+  .populate('author', 'firstName lastName profilePhoto email')
+  .sort('-createdAt')
+  .lean();
 
     const profileObj = user.toObject();
     if (profileObj.profilePhoto && profileObj.profilePhoto.startsWith('users/')) {

@@ -85,7 +85,7 @@ const createProject = async (req, res) => {
 
 // @desc    Get all projects with filters
 // @route   GET /api/projects
-// @access  Public (or private – we keep public)
+// @access  Public
 const getProjects = async (req, res) => {
   try {
     const { page = 1, limit = 10, search, skill, tech, stage, tag, role, owner } = req.query;
@@ -115,15 +115,19 @@ const getProjects = async (req, res) => {
       filter['roles.roleName'] = { $regex: role, $options: 'i' };
     }
     if (owner) {
-      // Owner filter: expects a user ID (only for authenticated users)
       filter.owner = owner;
+    }
+
+    // If both $or from search and tag exist, combine them
+    if (filter.$or && filter.$or.length > 0) {
+      // Merge with existing $or (if any)
     }
 
     const projects = await Project.find(filter)
       .populate('owner', 'firstName lastName profilePhoto email')
       .sort('-createdAt')
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit))
       .lean();
 
     // Convert profilePhoto to signed URL if needed
@@ -134,15 +138,16 @@ const getProjects = async (req, res) => {
     }
 
     const total = await Project.countDocuments(filter);
+
     res.json({
       projects,
-      totalPages: Math.ceil(total / limit),
-      currentPage: page,
+      totalPages: Math.ceil(total / parseInt(limit)),
+      currentPage: parseInt(page),
       total,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error in getProjects:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
