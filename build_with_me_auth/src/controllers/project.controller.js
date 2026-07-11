@@ -236,6 +236,7 @@ const getFeaturedProjects = async (req, res) => {
 // @route   GET /api/projects/recommended
 // @access  Private
 const getRecommendedProjects = async (req, res) => {
+  console.log('🔹 getRecommendedProjects called');
   try {
     const user = await User.findById(req.user.id).select('skills role');
     if (!user) return res.status(404).json({ message: 'User not found' });
@@ -268,10 +269,11 @@ const getRecommendedProjects = async (req, res) => {
 
     res.json(projects);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error in getRecommendedProjects:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
+
 
 // @desc    Update project (owner only)
 // @route   PUT /api/projects/:id
