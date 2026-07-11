@@ -48,6 +48,11 @@ const uploadMedia = async (files, userId, postId) => {
 // @access  Private
 const createPost = async (req, res) => {
   try {
+    // Normalize tags if sent as comma-separated string
+    if (req.body.tags && typeof req.body.tags === 'string') {
+      req.body.tags = req.body.tags.split(',').map(tag => tag.trim()).filter(Boolean);
+    }
+    
     const { content, tags } = req.body;
     const { error } = require('../validation/community.validation').createPostValidation({ content, tags });
     if (error) return res.status(400).json({ message: error.details[0].message });
