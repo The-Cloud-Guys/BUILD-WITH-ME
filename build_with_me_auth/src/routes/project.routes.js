@@ -21,10 +21,14 @@ const router = express.Router();
 // ==============================
 // PUBLIC ROUTES
 // ==============================
+
+// IMPORTANT: Static routes MUST come before dynamic routes with :id
 router.get('/', getProjects);
 router.get('/featured', getFeaturedProjects);
 router.get('/:id/team', getProjectTeam);
-router.get('/:id', getProjectById);   // <-- dynamic route must be AFTER static ones
+
+// This is the dynamic route - must come AFTER all static routes
+router.get('/:id', getProjectById);
 
 // ==============================
 // PROTECTED ROUTES
@@ -38,5 +42,6 @@ router.delete('/:id', deleteProject);
 router.post('/:id/apply', cvUpload.single('cv'), applyToProject);
 router.get('/:id/applications', getProjectApplications);
 router.delete('/:id/team/:userId', removeTeamMember);
+
 
 module.exports = router;
