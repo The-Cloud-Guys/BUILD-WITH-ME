@@ -37,6 +37,7 @@ console.log('  - DELETE /:id/team/:userId (protected)');
 // STATIC ROUTES (must come BEFORE dynamic :id routes)
 router.get('/', getProjects);
 router.get('/featured', getFeaturedProjects);
+router.get('/recommended', getRecommendedProjects);
 router.get('/:id/team', getProjectTeam);
 
 // DYNAMIC ROUTE (comes LAST in the public section)
@@ -48,8 +49,7 @@ router.get('/:id', getProjectById);
 router.use(protect);
 
 // STATIC ROUTES inside protected section (must come BEFORE :id)
-router.post('/', createProject);
-router.get('/recommended', getRecommendedProjects); 
+router.post('/', createProject); 
 router.put('/:id', updateProject);
 router.delete('/:id', deleteProject);
 router.post('/:id/apply', cvUpload.single('cv'), applyToProject);
