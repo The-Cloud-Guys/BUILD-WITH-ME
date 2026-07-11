@@ -17,6 +17,18 @@ const {
 } = require('../controllers/project.controller');
 
 const router = express.Router();
+console.log('🔹 Project routes loaded:');
+console.log('  - GET / (public)');
+console.log('  - GET /featured (public)');
+console.log('  - GET /:id/team (public)');
+console.log('  - GET /:id (public)');
+console.log('  - POST / (protected)');
+console.log('  - GET /recommended (protected)');
+console.log('  - PUT /:id (protected)');
+console.log('  - DELETE /:id (protected)');
+console.log('  - POST /:id/apply (protected)');
+console.log('  - GET /:id/applications (protected)');
+console.log('  - DELETE /:id/team/:userId (protected)');
 
 // ==============================
 // PUBLIC ROUTES
