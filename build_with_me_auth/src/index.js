@@ -13,6 +13,7 @@ const profileRoutes = require('./routes/profile.routes');
 const projectRoutes = require('./routes/project.routes');
 const notificationRoutes = require('./routes/notification.routes');
 const communityRoutes = require('./routes/community.routes');
+const applicationRoutes = require('./routes/application.routes');
 
 dotenv.config();
 connectDB();
@@ -74,6 +75,8 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/community', communityRoutes);
+app.use('/api/applications', applicationRoutes);
+
 
 
 // =============================

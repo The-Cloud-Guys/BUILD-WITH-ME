@@ -37,7 +37,6 @@ router.put('/:id', updateProject);
 router.delete('/:id', deleteProject);
 router.post('/:id/apply', cvUpload.single('cv'), applyToProject);
 router.get('/:id/applications', getProjectApplications);
-router.put('/applications/:id', updateApplicationStatus);
 router.delete('/:id/team/:userId', removeTeamMember);
 
 module.exports = router;
