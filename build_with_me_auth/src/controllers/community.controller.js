@@ -112,14 +112,27 @@ const getFeed = async (req, res) => {
       if (post.author.profilePhoto && post.author.profilePhoto.startsWith('users/')) {
         post.author.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, post.author.profilePhoto);
       }
-      // Generate signed URLs for media
+      
+      // Generate signed URLs for media only if they are paths (not full URLs)
       if (post.media && post.media.length) {
-        post.media = await Promise.all(post.media.map(async (url) => {
-        if (url.startsWith('users/') || url.includes('/posts/')) {
-            return await getSignedUrl(process.env.SUPABASE_BUCKET_COMMUNITY, url, 3600);
+        const signedMedia = [];
+        for (const mediaItem of post.media) {
+          // If it's already a full URL (starts with http), keep it as is
+          if (mediaItem.startsWith('http://') || mediaItem.startsWith('https://')) {
+            signedMedia.push(mediaItem);
+          } else {
+            // Otherwise, treat it as a path and generate a signed URL
+            try {
+              const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_COMMUNITY, mediaItem, 3600);
+              signedMedia.push(signedUrl);
+            } catch (err) {
+              console.error('Failed to generate signed URL for media:', mediaItem, err.message);
+              // If signed URL fails, keep the original path
+              signedMedia.push(mediaItem);
+            }
+          }
         }
-          return url;
-        }));
+        post.media = signedMedia;
       }
     }
 
@@ -132,8 +145,8 @@ const getFeed = async (req, res) => {
       total,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error in getFeed:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
