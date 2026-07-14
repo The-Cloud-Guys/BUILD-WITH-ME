@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Get Firebase ID Token</title>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+    <h2>Firebase Auth – Get ID Token</h2>
+    <button id="googleSignIn">Sign in with Google</button>
+    <pre id="tokenDisplay" style="background:#e3a9a9; padding:10px; width:90%; overflow:auto;"></pre>
+    <script>
+        const firebaseConfig = {
+  "apiKey": "AIzaSyA0RY-WgD1gT28X7uQBIy3XROD_4kHfzAk",
+  "authDomain": "build-with-me-c494d.firebaseapp.com",
+  "projectId": "build-with-me-c494d",
+  "storageBucket": "build-with-me-c494d.firebasestorage.app",
+  "messagingSenderId": "1061147621159",
+  "appId": "1:1061147621159:web:a7c3b3c4e65b7088f61b02"
+};
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        document.getElementById('googleSignIn').onclick = async () => {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            try {
+                const result = await auth.signInWithPopup(provider);
+                const idToken = await result.user.getIdToken();
+                document.getElementById('tokenDisplay').innerText = idToken;
+            } catch (err) {
+                document.getElementById('tokenDisplay').innerText = err.message;
+            }
+        };
+    </script>
+</body>
+</html>
