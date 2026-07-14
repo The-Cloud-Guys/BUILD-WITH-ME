@@ -272,20 +272,27 @@ const login = async (req, res) => {
 // ==============================
 // REFRESH TOKEN
 // ==============================
-
 const refreshToken = async (req, res) => {
   try {
-    const refreshTokenCookie = req.cookies.refreshToken;
-    if (!refreshTokenCookie) return res.status(401).json({ message: 'No refresh token' });
+    // Accept refresh token from cookie OR JSON body (for mobile apps)
+    let refreshTokenCookie = req.cookies.refreshToken;
+    let refreshTokenBody = req.body?.refreshToken;
+
+    // Use cookie if available, otherwise use body
+    const refreshToken = refreshTokenCookie || refreshTokenBody;
+
+    if (!refreshToken) {
+      return res.status(401).json({ message: 'No refresh token provided' });
+    }
 
     let decoded;
     try {
-      decoded = jwt.verify(refreshTokenCookie, process.env.JWT_REFRESH_SECRET);
+      decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
     } catch (err) {
       return res.status(401).json({ message: 'Invalid refresh token' });
     }
 
-    const isValid = await verifyRefreshTokenFromDB(decoded.id, refreshTokenCookie);
+    const isValid = await verifyRefreshTokenFromDB(decoded.id, refreshToken);
     if (!isValid) return res.status(401).json({ message: 'Refresh token revoked' });
 
     const user = await User.findById(decoded.id);
@@ -294,11 +301,12 @@ const refreshToken = async (req, res) => {
     const { accessToken: newAccessToken, refreshToken: newRefreshToken } = generateTokens(user);
     await storeRefreshToken(user._id, newRefreshToken);
 
+    // Set cookies
     res.cookie('accessToken', newAccessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 5 * 60 * 60 * 1000, // 5 hours
+      maxAge: 15 * 60 * 1000,
       path: '/',
     });
     res.cookie('refreshToken', newRefreshToken, {
@@ -309,11 +317,11 @@ const refreshToken = async (req, res) => {
       path: '/',
     });
 
-  res.json({
-  message: 'Token refreshed',
-  accessToken: newAccessToken,
-  refreshToken: newRefreshToken,
-});
+    res.json({
+      message: 'Token refreshed',
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });

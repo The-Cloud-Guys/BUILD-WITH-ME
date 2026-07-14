@@ -124,7 +124,8 @@ const getProjects = async (req, res) => {
     }
 
     const projects = await Project.find(filter)
-      .populate('owner', 'firstName lastName profilePhoto email')
+      .populate('owner', 'firstName lastName profilePhoto email role')  // Added 'role'
+      .populate('teamMembers', 'firstName lastName profilePhoto email role')  // Added teamMembers population
       .sort('-createdAt')
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit))
@@ -134,6 +135,14 @@ const getProjects = async (req, res) => {
     for (let p of projects) {
       if (p.owner?.profilePhoto && p.owner.profilePhoto.startsWith('users/')) {
         p.owner.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, p.owner.profilePhoto);
+      }
+      // Convert team members profile photos
+      if (p.teamMembers && p.teamMembers.length > 0) {
+        for (let member of p.teamMembers) {
+          if (member.profilePhoto && member.profilePhoto.startsWith('users/')) {
+            member.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, member.profilePhoto);
+          }
+        }
       }
     }
 
@@ -157,8 +166,8 @@ const getProjects = async (req, res) => {
 const getProjectById = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id)
-      .populate('owner', 'firstName lastName profilePhoto email')
-      .populate('teamMembers', 'firstName lastName profilePhoto email')
+      .populate('owner', 'firstName lastName profilePhoto email role')  // Added 'role'
+      .populate('teamMembers', 'firstName lastName profilePhoto email role')  // Added teamMembers population
       .lean();
 
     if (!project) return res.status(404).json({ message: 'Project not found' });
@@ -167,9 +176,11 @@ const getProjectById = async (req, res) => {
     if (project.owner?.profilePhoto && project.owner.profilePhoto.startsWith('users/')) {
       project.owner.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, project.owner.profilePhoto);
     }
-    for (let member of project.teamMembers) {
-      if (member.profilePhoto && member.profilePhoto.startsWith('users/')) {
-        member.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, member.profilePhoto);
+    if (project.teamMembers && project.teamMembers.length > 0) {
+      for (let member of project.teamMembers) {
+        if (member.profilePhoto && member.profilePhoto.startsWith('users/')) {
+          member.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, member.profilePhoto);
+        }
       }
     }
 
@@ -215,13 +226,28 @@ const getFeaturedProjects = async (req, res) => {
           as: 'owner'
         }
       },
-      { $unwind: '$owner' }
+      { $unwind: '$owner' },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'teamMembers',
+          foreignField: '_id',
+          as: 'teamMembers'
+        }
+      }
     ]);
 
     // Convert profile photos to signed URLs
     for (let p of featured) {
       if (p.owner?.profilePhoto && p.owner.profilePhoto.startsWith('users/')) {
         p.owner.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, p.owner.profilePhoto);
+      }
+      if (p.teamMembers && p.teamMembers.length > 0) {
+        for (let member of p.teamMembers) {
+          if (member.profilePhoto && member.profilePhoto.startsWith('users/')) {
+            member.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, member.profilePhoto);
+          }
+        }
       }
     }
 
@@ -256,7 +282,8 @@ const getRecommendedProjects = async (req, res) => {
     };
 
     const projects = await Project.find(filter)
-      .populate('owner', 'firstName lastName profilePhoto email')
+      .populate('owner', 'firstName lastName profilePhoto email role')  // Added 'role'
+      .populate('teamMembers', 'firstName lastName profilePhoto email role')  // Added teamMembers population
       .sort('-createdAt')
       .limit(20)
       .lean();
@@ -264,6 +291,13 @@ const getRecommendedProjects = async (req, res) => {
     for (let p of projects) {
       if (p.owner?.profilePhoto && p.owner.profilePhoto.startsWith('users/')) {
         p.owner.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, p.owner.profilePhoto);
+      }
+      if (p.teamMembers && p.teamMembers.length > 0) {
+        for (let member of p.teamMembers) {
+          if (member.profilePhoto && member.profilePhoto.startsWith('users/')) {
+            member.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, member.profilePhoto);
+          }
+        }
       }
     }
 
@@ -359,14 +393,8 @@ const applyToProject = async (req, res) => {
     if (!message) return res.status(400).json({ message: 'Application message is required' });
     if (!role) return res.status(400).json({ message: 'Role is required' });
 
-    // Check if role exists and has capacity
-    const roleObj = project.roles.find(r => r.roleName === role);
-    if (!roleObj) {
-      return res.status(400).json({ message: 'Invalid role for this project' });
-    }
-    if (roleObj.currentCount >= roleObj.requiredCount) {
-      return res.status(400).json({ message: 'This role is already filled' });
-    }
+    // REMOVE the role existence check and capacity check
+    // Just allow any role to be applied for
 
     const existing = await Application.findOne({ project: project._id, applicant: req.user.id });
     if (existing) {
@@ -424,7 +452,7 @@ const getProjectApplications = async (req, res) => {
     }
 
     const applications = await Application.find({ project: project._id })
-      .populate('applicant', 'firstName lastName email profilePhoto')
+      .populate('applicant', 'firstName lastName email profilePhoto role')  // Added 'role'
       .sort('-createdAt');
 
     // Generate signed URLs for CVs and profile photos
@@ -549,8 +577,8 @@ const updateApplicationStatus = async (req, res) => {
 const getProjectTeam = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id)
-      .populate('owner', 'firstName lastName profilePhoto email')
-      .populate('teamMembers', 'firstName lastName profilePhoto email');
+      .populate('owner', 'firstName lastName profilePhoto email role')  // Added 'role'
+      .populate('teamMembers', 'firstName lastName profilePhoto email role');  // Added 'role'
     if (!project) return res.status(404).json({ message: 'Project not found' });
 
     const ownerObj = project.owner.toObject();
