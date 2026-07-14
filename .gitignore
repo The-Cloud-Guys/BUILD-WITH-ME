@@ -35,3 +35,50 @@ Thumbs.db
 .idea/
 dist/
 build/
+
+# Secret files (anywhere)
+*.key
+*.pem
+*.crt
+*.p12
+
+# Environment files (anywhere)
+*.env
+*.env.local
+*.env.*.local
+
+# Backup files
+*.bak
+*.swp
+*~
+
+# OS specific
+Thumbs.db
+.DS_Store
+Desktop.ini
+
+# IDE specific
+.vscode/
+.idea/
+*.iml
+
+# Node specific
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+build/
+.vercel/
+.netlify/
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Misc
+*.log
+*.tmp
+.cache/
