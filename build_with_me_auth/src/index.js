@@ -77,24 +77,6 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/community', communityRoutes);
 app.use('/api/applications', applicationRoutes);
 
-// Temporary test endpoint for Supabase
-app.get('/test-supabase', async (req, res) => {
-  try {
-    const { createClient } = require('@supabase/supabase-js');
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
-    const { data, error } = await supabase.storage.listBuckets();
-    if (error) {
-      return res.status(500).json({ error: error.message });
-    }
-    res.json({ success: true, buckets: data });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // =============================
 // 404 Route Handler
 // =============================
