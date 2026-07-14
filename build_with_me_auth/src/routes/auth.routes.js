@@ -23,6 +23,7 @@ router.post('/verify-email', verifyEmail);
 router.post('/resend-verification', resendVerificationOTP);
 router.post('/login', authLimiter, login);
 router.post('/refresh-token', refreshToken);
+router.post('/refresh-token', express.json(), refreshToken);
 router.post('/logout', logout);
 router.post('/forgot-password', authLimiter, forgotPassword);
 router.post('/verify-reset-otp', authLimiter, verifyResetOtp);
