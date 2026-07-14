@@ -1,0 +1,37 @@
+# Node.js dependencies
+node_modules/
+
+# Package lock files
+package-lock.json
+build_with_me_auth/package-lock.json
+
+# Environment variables
+.env
+build_with_me_auth/.env
+
+# Firebase token helper (contains API keys)
+firebase-token.html
+build_with_me_auth/firebase-token.html
+
+# Firebase service account key
+serviceAccountKey.json
+build_with_me_auth/serviceAccountKey.json
+
+# Documentation / scratch files
+Build_With_Me_-_Authentication_&_Account_System_(MVP).docx
+folde and file setup.docx
+firebase-getToken.js
+setup.js
+
+# Root package.json (ignore only at root, NOT the one in build_with_me_auth)
+/package.json
+
+# Logs, OS junk, IDE, build outputs...
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+dist/
+build/
