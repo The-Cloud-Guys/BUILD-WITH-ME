@@ -46,6 +46,11 @@ const projectSchema = new mongoose.Schema(
       required: true,
       default: 'IDEA',
     },
+    status: {
+      type: String,
+      enum: ['OPEN', 'ACTIVE', 'CLOSED', 'COMPLETED'],
+      default: 'OPEN',
+    },
     owner: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -57,7 +62,7 @@ const projectSchema = new mongoose.Schema(
         ref: 'User',
       },
     ],
-    roles: [roleSchema], // new: array of roles with capacity
+    roles: [roleSchema],
   },
   {
     timestamps: true,
@@ -66,7 +71,7 @@ const projectSchema = new mongoose.Schema(
   }
 );
 
-// Virtual to compute total developers needed (sum of requiredCount)
+// Virtual to compute total developers needed
 projectSchema.virtual('totalDevelopersNeeded').get(function () {
   return this.roles.reduce((sum, role) => sum + role.requiredCount, 0);
 });

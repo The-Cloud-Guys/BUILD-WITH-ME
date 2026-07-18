@@ -7,7 +7,7 @@ const {
   registerValidation,
   loginValidation,
   forgotPasswordValidation,
-  verifyResetOtpValidation,  
+  verifyResetOtpValidation,
   resetPasswordValidation,
   verifyEmailValidation,
   resendOTPValidation,
@@ -15,7 +15,7 @@ const {
 
 const { verifyFirebaseToken } = require('../services/firebase.service');
 const { generateNumericOTP, hashOTP } = require('../utils/otp.util');
-const { getOnboardingStatus } = require('../utils/onboardingStatus');
+
 const { getSignedUrl } = require('../services/supabase.service');
 
 // ==============================
@@ -152,13 +152,12 @@ const verifyEmail = async (req, res) => {
 
     const { accessToken, refreshToken } = generateTokens(user);
     await storeRefreshToken(user._id, refreshToken);
-    
 
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 5 * 60 * 60 * 1000, // 5 hours
+      maxAge: 15 * 60 * 1000,
       path: '/',
     });
     res.cookie('refreshToken', refreshToken, {
@@ -169,14 +168,19 @@ const verifyEmail = async (req, res) => {
       path: '/',
     });
 
-res.json({
-  message: 'Email verified successfully',
-  accessToken,
-  refreshToken,
-  user: { _id: user._id, email: user.email, onboardingStep: user.onboardingStep, onboardingCompleted: user.onboardingCompleted },
-  onboardingCompleted: user.onboardingCompleted,
-  onboardingStatus: getOnboardingStatus(user.onboardingStep)
-});
+    res.json({
+      message: 'Email verified successfully',
+      accessToken,
+      refreshToken,
+      user: {
+        _id: user._id,
+        email: user.email,
+        onboardingStep: user.onboardingStep,
+        onboardingCompleted: user.onboardingCompleted
+      },
+      onboardingCompleted: user.onboardingCompleted,
+      onboardingStatus: user.onboardingStep === 0 ? 'email_verified' : 'unknown'
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -244,7 +248,7 @@ const login = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 5 * 60 * 60 * 1000, // 5 hours
+      maxAge: 15 * 60 * 1000,
       path: '/',
     });
     res.cookie('refreshToken', refreshToken, {
@@ -255,14 +259,19 @@ const login = async (req, res) => {
       path: '/',
     });
 
-  res.json({
-    message: 'Login successful',
-    accessToken,
-    refreshToken,
-    user: { _id: user._id, email: user.email, onboardingStep: user.onboardingStep, onboardingCompleted: user.onboardingCompleted },
-    onboardingCompleted: user.onboardingCompleted,
-    onboardingStatus: getOnboardingStatus(user.onboardingStep)
-  });
+    res.json({
+      message: 'Login successful',
+      accessToken,
+      refreshToken,
+      user: {
+        _id: user._id,
+        email: user.email,
+        onboardingStep: user.onboardingStep,
+        onboardingCompleted: user.onboardingCompleted
+      },
+      onboardingCompleted: user.onboardingCompleted,
+      onboardingStatus: user.onboardingStep === 0 ? 'email_verified' : 'unknown'
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -270,8 +279,9 @@ const login = async (req, res) => {
 };
 
 // ==============================
-// REFRESH TOKEN
+// REFRESH TOKEN (FIXED)
 // ==============================
+
 const refreshToken = async (req, res) => {
   try {
     // Accept refresh token from cookie OR JSON body (for mobile apps)
@@ -350,10 +360,10 @@ const logout = async (req, res) => {
   }
 };
 
+// ==============================
+// GET CURRENT USER (PROTECTED) - FIXED FOR SIGNED URL
+// ==============================
 
-// ==============================
-// GET CURRENT USER (PROTECTED)
-// ==============================
 const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select(
@@ -384,12 +394,9 @@ const getMe = async (req, res) => {
 };
 
 // ==============================
-// FORGOT PASSWORD (step 1: request OTP)
+// FORGOT PASSWORD
 // ==============================
 
-// ==============================
-// FORGOT PASSWORD step 1: Request reset OTP (requires verified email)
-// ==============================
 const forgotPassword = async (req, res) => {
   try {
     if (req.body.email) req.body.email = req.body.email.toLowerCase().trim();
@@ -398,23 +405,17 @@ const forgotPassword = async (req, res) => {
 
     const { email } = req.body;
     const user = await User.findOne({ email });
-
-    // Check if email exists AND is verified
     if (!user) {
-      return res.status(404).json({ message: 'Email not found' });
-    }
-    if (!user.emailVerified) {
-      return res.status(400).json({ message: 'Email not verified. Please verify your email first.' });
+      // For security, don't reveal whether email exists
+      return res.status(200).json({ message: 'If that email exists, we have sent a reset OTP.' });
     }
 
-    // Generate 6-digit numeric OTP
     const otp = generateNumericOTP(6);
     const hashedOTP = hashOTP(otp);
     user.resetPasswordOTP = hashedOTP;
-    user.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+    user.resetPasswordExpires = Date.now() + 10 * 60 * 1000;
     await user.save();
 
-    // Send OTP via email (using Brevo)
     const html = `<p>Your password reset OTP is: <strong>${otp}</strong>. It expires in 10 minutes.</p>`;
     try {
       await sendEmail({ email: user.email, subject: 'Password Reset OTP', html });
@@ -430,8 +431,9 @@ const forgotPassword = async (req, res) => {
 };
 
 // ==============================
-// VERIFY RESET OTP (step 2)
+// VERIFY RESET OTP
 // ==============================
+
 const verifyResetOtp = async (req, res) => {
   try {
     if (req.body.email) req.body.email = req.body.email.toLowerCase().trim();
@@ -469,8 +471,9 @@ const verifyResetOtp = async (req, res) => {
 };
 
 // ==============================
-// RESET PASSWORD (step 3)
+// RESET PASSWORD
 // ==============================
+
 const resetPassword = async (req, res) => {
   try {
     const { error } = resetPasswordValidation(req.body);
@@ -502,7 +505,7 @@ const resetPassword = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 5 * 60 * 60 * 1000, // 5 hours
+      maxAge: 15 * 60 * 1000,
       path: '/',
     });
     res.cookie('refreshToken', refreshToken, {
@@ -525,8 +528,9 @@ const resetPassword = async (req, res) => {
 };
 
 // ==============================
-// FIREBASE AUTH (no profile photo sync, includes token and onboarding status)
+// FIREBASE AUTH
 // ==============================
+
 const firebaseAuth = async (req, res) => {
   try {
     const { idToken } = req.body;
@@ -563,7 +567,7 @@ const firebaseAuth = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 5 * 60 * 60 * 1000, // 5 hours
+      maxAge: 15 * 60 * 1000,
       path: '/',
     });
     res.cookie('refreshToken', refreshToken, {
@@ -576,21 +580,20 @@ const firebaseAuth = async (req, res) => {
 
     const isProfileCompleted = user.onboardingStep === 3;
 
-  res.json({
-    message: 'Firebase login successful',
-    accessToken,
-    refreshToken,
-    isProfileCompleted,
-    user: {
-      id: user._id,
-      email: user.email,
-      onboardingStep: user.onboardingStep,
-      onboardingCompleted: user.onboardingCompleted
-    },
-    onboardingCompleted: user.onboardingCompleted,
-    onboardingStatus: getOnboardingStatus(user.onboardingStep)
-  });
-
+    res.json({
+      message: 'Firebase login successful',
+      accessToken,
+      refreshToken,
+      isProfileCompleted,
+      user: {
+        id: user._id,
+        email: user.email,
+        onboardingStep: user.onboardingStep,
+        onboardingCompleted: user.onboardingCompleted
+      },
+      onboardingCompleted: user.onboardingCompleted,
+      onboardingStatus: user.onboardingStep === 0 ? 'email_verified' : 'unknown'
+    });
   } catch (error) {
     console.error(error);
     res.status(401).json({ message: 'Firebase auth failed' });

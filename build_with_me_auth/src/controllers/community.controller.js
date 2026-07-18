@@ -1,4 +1,3 @@
-const Application = require('../models/application.model');
 const Post = require('../models/post.model');
 const Comment = require('../models/comment.model');
 const Like = require('../models/like.model');
@@ -8,6 +7,7 @@ const Mute = require('../models/mute.model');
 const Report = require('../models/report.model');
 const User = require('../models/user.model');
 const Project = require('../models/project.model');
+const Application = require('../models/application.model');
 const { uploadFile, deleteFile, getSignedUrl } = require('../services/supabase.service');
 const multer = require('multer');
 const path = require('path');
@@ -15,7 +15,7 @@ const path = require('path');
 // Configure multer for media upload (memory storage)
 const mediaUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp|mp4|mov|avi/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -33,7 +33,7 @@ const uploadMedia = async (files, userId, postId) => {
     const timestamp = Date.now();
     const filePath = `posts/${userId}/${postId}/${timestamp}_${Math.random().toString(36).substring(7)}${ext}`;
     await uploadFile(process.env.SUPABASE_BUCKET_COMMUNITY, filePath, file.buffer, file.mimetype);
-    const signedUrl = await getSignedUrl('community-media', filePath, 3600);
+    const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_COMMUNITY, filePath, 3600);
     urls.push(signedUrl);
   }
   return urls;
@@ -52,7 +52,7 @@ const createPost = async (req, res) => {
     if (req.body.tags && typeof req.body.tags === 'string') {
       req.body.tags = req.body.tags.split(',').map(tag => tag.trim()).filter(Boolean);
     }
-    
+
     const { content, tags } = req.body;
     const { error } = require('../validation/community.validation').createPostValidation({ content, tags });
     if (error) return res.status(400).json({ message: error.details[0].message });
@@ -70,8 +70,10 @@ const createPost = async (req, res) => {
       await post.save();
     }
 
-    const populatedPost = await Post.findById(post._id).populate('author', 'firstName lastName profilePhoto email');
-    // Convert profilePhoto to signed URL
+    const populatedPost = await Post.findById(post._id)
+      .populate('author', 'firstName lastName profilePhoto email role')
+      .lean();
+
     if (populatedPost.author.profilePhoto && populatedPost.author.profilePhoto.startsWith('users/')) {
       populatedPost.author.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, populatedPost.author.profilePhoto);
     }
@@ -83,9 +85,9 @@ const createPost = async (req, res) => {
   }
 };
 
-// @desc    Get feed (recent posts, paginated)
+// @desc    Get feed (recent posts, paginated) - FIXED: author role
 // @route   GET /api/community/feed
-// @access  Private (or public? We'll keep private to show personalized feed later)
+// @access  Private
 const getFeed = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -93,13 +95,12 @@ const getFeed = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const posts = await Post.find()
-      .populate('author', 'firstName lastName profilePhoto email')
+      .populate('author', 'firstName lastName profilePhoto email role')
       .sort('-createdAt')
       .skip(skip)
       .limit(limit)
       .lean();
 
-    // Check if current user has liked each post
     const userId = req.user.id;
     for (let post of posts) {
       const liked = await Like.findOne({ user: userId, targetType: 'Post', targetId: post._id });
@@ -108,26 +109,21 @@ const getFeed = async (req, res) => {
       const saved = await Save.findOne({ user: userId, post: post._id });
       post.isSaved = !!saved;
 
-      // Convert author profile photo to signed URL
       if (post.author.profilePhoto && post.author.profilePhoto.startsWith('users/')) {
         post.author.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, post.author.profilePhoto);
       }
-      
-      // Generate signed URLs for media only if they are paths (not full URLs)
+
       if (post.media && post.media.length) {
         const signedMedia = [];
         for (const mediaItem of post.media) {
-          // If it's already a full URL (starts with http), keep it as is
           if (mediaItem.startsWith('http://') || mediaItem.startsWith('https://')) {
             signedMedia.push(mediaItem);
           } else {
-            // Otherwise, treat it as a path and generate a signed URL
             try {
               const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_COMMUNITY, mediaItem, 3600);
               signedMedia.push(signedUrl);
             } catch (err) {
               console.error('Failed to generate signed URL for media:', mediaItem, err.message);
-              // If signed URL fails, keep the original path
               signedMedia.push(mediaItem);
             }
           }
@@ -150,14 +146,15 @@ const getFeed = async (req, res) => {
   }
 };
 
-// @desc    Get single post by ID
+// @desc    Get single post by ID - FIXED: author role
 // @route   GET /api/community/posts/:id
 // @access  Private
 const getPostById = async (req, res) => {
   try {
     const post = await Post.findById(req.params.id)
-      .populate('author', 'firstName lastName profilePhoto email')
+      .populate('author', 'firstName lastName profilePhoto email role')
       .lean();
+
     if (!post) return res.status(404).json({ message: 'Post not found' });
 
     const userId = req.user.id;
@@ -209,7 +206,6 @@ const deletePost = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
-    // Delete all associated comments, likes, saves, mutes, reports
     await Comment.deleteMany({ post: post._id });
     await Like.deleteMany({ targetType: 'Post', targetId: post._id });
     await Save.deleteMany({ post: post._id });
@@ -225,7 +221,7 @@ const deletePost = async (req, res) => {
 };
 
 // ==============================
-// LIKES (Post & Comment)
+// LIKES
 // ==============================
 
 // @desc    Like/Unlike a post or comment
@@ -240,9 +236,7 @@ const toggleLike = async (req, res) => {
 
     const existing = await Like.findOne({ user: req.user.id, targetType, targetId });
     if (existing) {
-      // Unlike
       await existing.deleteOne();
-      // Decrement count on target
       if (targetType === 'Post') {
         await Post.findByIdAndUpdate(targetId, { $inc: { likeCount: -1 } });
       } else {
@@ -250,7 +244,6 @@ const toggleLike = async (req, res) => {
       }
       return res.json({ message: 'Unliked', liked: false });
     } else {
-      // Like
       await Like.create({ user: req.user.id, targetType, targetId });
       if (targetType === 'Post') {
         await Post.findByIdAndUpdate(targetId, { $inc: { likeCount: 1 } });
@@ -266,7 +259,7 @@ const toggleLike = async (req, res) => {
 };
 
 // ==============================
-// COMMENTS & REPLIES
+// COMMENTS
 // ==============================
 
 // @desc    Create comment on post or reply to comment
@@ -294,16 +287,18 @@ const createComment = async (req, res) => {
       content,
     });
 
-    // Increment post's comment count
     await Post.findByIdAndUpdate(postId, { $inc: { commentCount: 1 } });
 
-    const populatedComment = await Comment.findById(comment._id).populate('author', 'firstName lastName profilePhoto email');
+    const populatedComment = await Comment.findById(comment._id)
+      .populate('author', 'firstName lastName profilePhoto email role')
+      .lean();
+
     if (populatedComment.author.profilePhoto && populatedComment.author.profilePhoto.startsWith('users/')) {
       populatedComment.author.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, populatedComment.author.profilePhoto);
     }
-    // Mark if author is also post author
+
     const isPostAuthor = post.author.toString() === req.user.id;
-    populatedComment._doc.isAuthor = isPostAuthor;
+    populatedComment.isAuthor = isPostAuthor;
 
     res.status(201).json({ message: 'Comment added', comment: populatedComment });
   } catch (error) {
@@ -323,8 +318,8 @@ const getComments = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const comments = await Comment.find({ post: postId, parentComment: null })
-      .populate('author', 'firstName lastName profilePhoto email')
-      .sort('-likeCount') // most liked first? Or use '-createdAt'? We'll use '-createdAt'
+      .populate('author', 'firstName lastName profilePhoto email role')
+      .sort('-createdAt')
       .skip(skip)
       .limit(limit)
       .lean();
@@ -333,16 +328,15 @@ const getComments = async (req, res) => {
     const userId = req.user.id;
 
     for (let comment of comments) {
-      // Check if user liked this comment
       const liked = await Like.findOne({ user: userId, targetType: 'Comment', targetId: comment._id });
       comment.isLiked = !!liked;
-      // Mark if comment author is post author
       comment.isAuthor = post.author.toString() === comment.author._id.toString();
-      // Get replies
+
       const replies = await Comment.find({ parentComment: comment._id })
-        .populate('author', 'firstName lastName profilePhoto email')
+        .populate('author', 'firstName lastName profilePhoto email role')
         .sort('createdAt')
         .lean();
+
       for (let reply of replies) {
         const replyLiked = await Like.findOne({ user: userId, targetType: 'Comment', targetId: reply._id });
         reply.isLiked = !!replyLiked;
@@ -381,7 +375,6 @@ const deleteComment = async (req, res) => {
     if (comment.author.toString() !== req.user.id && post.author.toString() !== req.user.id) {
       return res.status(403).json({ message: 'Not authorized' });
     }
-    // Delete all replies recursively (optional: cascade)
     await Comment.deleteMany({ parentComment: comment._id });
     await Like.deleteMany({ targetType: 'Comment', targetId: comment._id });
     await comment.deleteOne();
@@ -394,7 +387,7 @@ const deleteComment = async (req, res) => {
 };
 
 // ==============================
-// SAVE / UNSAVE POST
+// SAVES
 // ==============================
 
 // @desc    Save a post
@@ -423,7 +416,7 @@ const getSavedPosts = async (req, res) => {
   try {
     const saves = await Save.find({ user: req.user.id }).populate({
       path: 'post',
-      populate: { path: 'author', select: 'firstName lastName profilePhoto email' }
+      populate: { path: 'author', select: 'firstName lastName profilePhoto email role' }
     }).sort('-createdAt');
     const posts = saves.map(s => s.post).filter(p => p);
     res.json(posts);
@@ -434,7 +427,7 @@ const getSavedPosts = async (req, res) => {
 };
 
 // ==============================
-// FOLLOW / UNFOLLOW
+// FOLLOWS
 // ==============================
 
 // @desc    Follow a user
@@ -465,7 +458,7 @@ const followUser = async (req, res) => {
 const getFollowers = async (req, res) => {
   try {
     const userId = req.params.userId;
-    const followers = await Follow.find({ following: userId }).populate('follower', 'firstName lastName profilePhoto email');
+    const followers = await Follow.find({ following: userId }).populate('follower', 'firstName lastName profilePhoto email role');
     res.json(followers.map(f => f.follower));
   } catch (error) {
     console.error(error);
@@ -479,7 +472,7 @@ const getFollowers = async (req, res) => {
 const getFollowing = async (req, res) => {
   try {
     const userId = req.params.userId;
-    const following = await Follow.find({ follower: userId }).populate('following', 'firstName lastName profilePhoto email');
+    const following = await Follow.find({ follower: userId }).populate('following', 'firstName lastName profilePhoto email role');
     res.json(following.map(f => f.following));
   } catch (error) {
     console.error(error);
@@ -488,7 +481,7 @@ const getFollowing = async (req, res) => {
 };
 
 // ==============================
-// MUTE NOTIFICATIONS
+// MUTE & REPORT
 // ==============================
 
 // @desc    Mute notifications for a post
@@ -509,10 +502,6 @@ const mutePost = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
-
-// ==============================
-// REPORT POST
-// ==============================
 
 // @desc    Report a post
 // @route   POST /api/community/report/:postId
@@ -536,12 +525,12 @@ const reportPost = async (req, res) => {
 };
 
 // ==============================
-// USER PROFILE & STATS
+// USER PROFILE STATS (FIXED: added project details, status, team size, applications count)
 // ==============================
 
 // @desc    Get user profile (public stats)
 // @route   GET /api/community/profile/:userId
-// @access  Private (authenticated users can view any profile)
+// @access  Private
 const getUserProfile = async (req, res) => {
   try {
     const userId = req.params.userId;
@@ -555,30 +544,47 @@ const getUserProfile = async (req, res) => {
     const collaborationsCount = await Project.countDocuments({ teamMembers: userId });
     const postsCount = await Post.countDocuments({ author: userId });
 
-    // Get user's projects (with role info)
+    // Get user's projects with full details
     const projects = await Project.find({ $or: [{ owner: userId }, { teamMembers: userId }] })
-      .select('title stage roles teamMembers owner')
+      .select('title stage status teamMembers roles owner createdAt updatedAt')
       .lean();
 
-    // Use a for loop to handle async await inside
-    const projectsWithRole = [];
-    for (const p of projects) {
-      let role = '';
+    const projectsWithDetails = await Promise.all(projects.map(async (p) => {
+      const applicationsCount = await Application.countDocuments({ project: p._id });
+      const teamSize = 1 + (p.teamMembers ? p.teamMembers.length : 0);
+
+      let userRole = '';
       if (p.owner.toString() === userId) {
-        role = 'Creator';
+        userRole = 'Creator';
       } else {
         const application = await Application.findOne({ project: p._id, applicant: userId, status: 'ACCEPTED' });
-        if (application) role = application.role;
+        if (application) userRole = application.role;
       }
-      projectsWithRole.push({ _id: p._id, title: p.title, stage: p.stage, role });
-    }
+
+      return {
+        _id: p._id,
+        title: p.title,
+        stage: p.stage,
+        status: p.status || 'OPEN',
+        userRole,
+        teamSize,
+        applicationsCount,
+        updatedAt: p.updatedAt,
+        createdAt: p.createdAt
+      };
+    }));
 
     // Get user's posts
     const posts = await Post.find({ author: userId })
-  .select('content tags media likeCount commentCount createdAt')
-  .populate('author', 'firstName lastName profilePhoto email')
-  .sort('-createdAt')
-  .lean();
+      .populate('author', 'firstName lastName profilePhoto email role')
+      .sort('-createdAt')
+      .lean();
+
+    for (let post of posts) {
+      if (post.author.profilePhoto && post.author.profilePhoto.startsWith('users/')) {
+        post.author.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, post.author.profilePhoto);
+      }
+    }
 
     const profileObj = user.toObject();
     if (profileObj.profilePhoto && profileObj.profilePhoto.startsWith('users/')) {
@@ -592,19 +598,14 @@ const getUserProfile = async (req, res) => {
         collaborations: collaborationsCount,
         posts: postsCount,
       },
-      projects: projectsWithRole,
+      projects: projectsWithDetails,
       posts,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error in getUserProfile:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
-
-// ==============================
-// COPY LINK (returns post URL)
-// ==============================
-// No backend endpoint needed – frontend constructs URL from post ID.
 
 module.exports = {
   createPost,
@@ -624,5 +625,5 @@ module.exports = {
   mutePost,
   reportPost,
   getUserProfile,
-  mediaUpload, // export for routes
+  mediaUpload,
 };
