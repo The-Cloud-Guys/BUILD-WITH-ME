@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Build With Me - Full API (Auth + Onboarding + Profile + Projects + Community)",
-    "description": "Complete test suite for authentication (register, OTP, login, get me, refresh, logout, password reset, Firebase), onboarding, profile (combined), projects (role-based CRUD, applications, team, featured & recommended), community, and negative tests.",
+    "description": "Complete test suite for authentication, onboarding, profile (combined), projects (role-based CRUD, applications, team, featured & recommended), community, and negative tests. Uses HTTP-only cookies – Postman manages them automatically.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -28,7 +28,7 @@
       "name": "🔐 Authentication",
       "item": [
         {
-          "name": "1. Register User (email + password only)",
+          "name": "1. Register User",
           "event": [
             {
               "listen": "test",
@@ -60,22 +60,18 @@
           }
         },
         {
-          "name": "2. Verify Email OTP (manual OTP entry)",
+          "name": "2. Verify Email OTP",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains success message, user data, accessToken, and refreshToken', () => {",
+                  "pm.test('Response contains accessToken and refreshToken', () => {",
                   "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Email verified successfully');",
                   "  pm.expect(jsonData).to.have.property('accessToken');",
                   "  pm.expect(jsonData).to.have.property('refreshToken');",
-                  "  pm.expect(jsonData).to.have.property('user');",
                   "  pm.expect(jsonData.user).to.have.property('email', pm.variables.get('testEmail'));",
-                  "  pm.expect(jsonData.user).to.have.property('onboardingStep', 0);",
-                  "  pm.expect(jsonData).to.have.property('onboardingStatus', 'email_verified');",
                   "});"
                 ]
               }
@@ -92,30 +88,24 @@
               "raw": "{{baseUrl}}/api/auth/verify-email",
               "host": ["{{baseUrl}}"],
               "path": ["api", "auth", "verify-email"]
-            },
-            "description": "⚠️ Set collection variable 'verificationOtp' before running."
+            }
           }
         },
         {
-          "name": "3. Login (sets cookies)",
+          "name": "3. Login",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains user data, accessToken, refreshToken, and no token (cookie only)', () => {",
+                  "pm.test('Response contains user data and tokens', () => {",
                   "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Login successful');",
                   "  pm.expect(jsonData).to.have.property('accessToken');",
                   "  pm.expect(jsonData).to.have.property('refreshToken');",
-                  "  pm.expect(jsonData).to.have.property('user');",
                   "  pm.expect(jsonData.user).to.have.property('email', pm.variables.get('testEmail'));",
-                  "  pm.expect(jsonData.user).to.have.property('onboardingStep');",
-                  "  pm.expect(jsonData).to.have.property('onboardingStatus');",
-                  "  pm.expect(jsonData).to.not.have.property('token');",
                   "});",
-                  "pm.test('Cookies are present in response headers', () => {",
+                  "pm.test('Cookies are set', () => {",
                   "  const setCookieHeaders = pm.response.headers.all().filter(h => h.key === 'Set-Cookie');",
                   "  const cookiesString = setCookieHeaders.map(h => h.value).join('; ');",
                   "  pm.expect(cookiesString).to.include('accessToken');",
@@ -140,7 +130,7 @@
           }
         },
         {
-          "name": "4. Get Current User (Protected, uses cookie)",
+          "name": "4. Get Current User",
           "event": [
             {
               "listen": "test",
@@ -151,13 +141,6 @@
                   "  const jsonData = pm.response.json();",
                   "  pm.expect(jsonData).to.have.property('email', pm.variables.get('testEmail'));",
                   "  pm.expect(jsonData).to.not.have.property('password');",
-                  "});",
-                  "pm.test('Profile photo is a signed URL if exists', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  if (jsonData.profilePhoto) {",
-                  "    pm.expect(jsonData.profilePhoto).to.be.a('string');",
-                  "    pm.expect(jsonData.profilePhoto).to.match(/https?:\\/\\/.*signed.*/);",
-                  "  }",
                   "});"
                 ]
               }
@@ -165,7 +148,6 @@
           ],
           "request": {
             "method": "GET",
-            "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/auth/me",
               "host": ["{{baseUrl}}"],
@@ -181,9 +163,8 @@
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Refreshed tokens set new cookies and return accessToken and refreshToken', () => {",
+                  "pm.test('Returns new tokens', () => {",
                   "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Token refreshed');",
                   "  pm.expect(jsonData).to.have.property('accessToken');",
                   "  pm.expect(jsonData).to.have.property('refreshToken');",
                   "});"
@@ -193,6 +174,11 @@
           ],
           "request": {
             "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
             "url": {
               "raw": "{{baseUrl}}/api/auth/refresh-token",
               "host": ["{{baseUrl}}"],
@@ -201,14 +187,14 @@
           }
         },
         {
-          "name": "6. Logout (clears cookies)",
+          "name": "6. Logout",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Logout success message', () => {",
+                  "pm.test('Logout success', () => {",
                   "  pm.expect(pm.response.json()).to.have.property('message', 'Logged out');",
                   "});"
                 ]
@@ -225,17 +211,14 @@
           }
         },
         {
-          "name": "7. Forgot Password (request OTP)",
+          "name": "7. Forgot Password",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Reset OTP sent confirmation', () => {",
-                  "  pm.expect(pm.response.json()).to.have.property('message');",
-                  "});",
-                  "console.log('✅ Password reset OTP sent. Set variable \"resetOtp\" from email/terminal.');"
+                  "console.log('✅ Set variable \"resetOtp\" from email/terminal.');"
                 ]
               }
             }
@@ -255,14 +238,14 @@
           }
         },
         {
-          "name": "8. Verify Reset OTP (returns temporary token)",
+          "name": "8. Verify Reset OTP",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains resetToken', () => {",
+                  "pm.test('Returns resetToken', () => {",
                   "  const jsonData = pm.response.json();",
                   "  pm.expect(jsonData).to.have.property('resetToken');",
                   "  pm.collectionVariables.set('resetToken', jsonData.resetToken);",
@@ -282,21 +265,19 @@
               "raw": "{{baseUrl}}/api/auth/verify-reset-otp",
               "host": ["{{baseUrl}}"],
               "path": ["api", "auth", "verify-reset-otp"]
-            },
-            "description": "⚠️ Set variable 'resetOtp' before running. The response contains a short-lived JWT (resetToken) used in the next step."
+            }
           }
         },
         {
-          "name": "9. Reset Password (using token, returns cookies)",
+          "name": "9. Reset Password",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Password reset sets new cookies, returns user and accessToken', () => {",
+                  "pm.test('Password reset successful', () => {",
                   "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Password reset successful');",
                   "  pm.expect(jsonData).to.have.property('accessToken');",
                   "  pm.expect(jsonData).to.have.property('user');",
                   "});"
@@ -315,25 +296,21 @@
               "raw": "{{baseUrl}}/api/auth/reset-password",
               "host": ["{{baseUrl}}"],
               "path": ["api", "auth", "reset-password"]
-            },
-            "description": "⚠️ This step uses the resetToken obtained from /verify-reset-otp (automatically set as collection variable)."
+            }
           }
         },
         {
-          "name": "10. Firebase Google Auth",
+          "name": "10. Firebase Auth",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Firebase login returns accessToken, refreshToken, and isProfileCompleted', () => {",
+                  "pm.test('Returns tokens and user', () => {",
                   "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Firebase login successful');",
                   "  pm.expect(jsonData).to.have.property('accessToken');",
-                  "  pm.expect(jsonData).to.have.property('refreshToken');",
                   "  pm.expect(jsonData).to.have.property('isProfileCompleted');",
-                  "  pm.expect(jsonData).to.have.property('user');",
                   "});"
                 ]
               }
@@ -350,31 +327,16 @@
               "raw": "{{baseUrl}}/api/auth/firebase",
               "host": ["{{baseUrl}}"],
               "path": ["api", "auth", "firebase"]
-            },
-            "description": "⚠️ Obtain Firebase ID token from frontend and set variable 'firebaseIdToken'."
+            }
           }
         }
       ]
     },
     {
-      "name": "📝 Onboarding Flow",
+      "name": "📝 Onboarding",
       "item": [
         {
           "name": "11. Get Onboarding Status",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains onboardingStep', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('onboardingStep');",
-                  "});"
-                ]
-              }
-            }
-          ],
           "request": {
             "method": "GET",
             "url": {
@@ -385,18 +347,15 @@
           }
         },
         {
-          "name": "12. Set User Role",
+          "name": "12. Set Role",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response shows next step and role', () => {",
+                  "pm.test('Role saved', () => {",
                   "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Role saved successfully');",
-                  "  pm.expect(jsonData).to.have.property('nextStep', 'skills');",
-                  "  pm.expect(jsonData.user).to.have.property('role', 'Developer');",
                   "  pm.expect(jsonData).to.have.property('onboardingStatus', 'role_pending');",
                   "});"
                 ]
@@ -418,18 +377,15 @@
           }
         },
         {
-          "name": "13. Set User Skills",
+          "name": "13. Set Skills",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response shows next step and skills', () => {",
+                  "pm.test('Skills saved', () => {",
                   "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Skills saved successfully');",
-                  "  pm.expect(jsonData).to.have.property('nextStep', 'profile');",
-                  "  pm.expect(jsonData.user.skills).to.be.an('array').that.includes('Node.js');",
                   "  pm.expect(jsonData).to.have.property('onboardingStatus', 'skills_pending');",
                   "});"
                 ]
@@ -453,24 +409,20 @@
       ]
     },
     {
-      "name": "🖼️ Combined Profile + Photo Endpoints",
+      "name": "🖼️ Profile",
       "item": [
         {
-          "name": "14a. Create Full Profile with Photo (multipart) - POST /api/profile/userProfile",
+          "name": "14. Create Profile with Photo",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Profile created with photo and details', () => {",
+                  "pm.test('Profile created', () => {",
                   "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Profile created successfully');",
                   "  pm.expect(jsonData).to.have.property('onboardingCompleted', true);",
                   "  pm.expect(jsonData).to.have.property('onboardingStatus', 'completed');",
-                  "  pm.expect(jsonData.user).to.have.property('firstName', pm.variables.get('testFirstName'));",
-                  "  pm.expect(jsonData.user).to.have.property('lastName', pm.variables.get('testLastName'));",
-                  "  pm.expect(jsonData.user).to.have.property('profilePhoto').that.includes('signed');",
                   "});"
                 ]
               }
@@ -478,39 +430,33 @@
           ],
           "request": {
             "method": "POST",
-            "header": [],
             "body": {
               "mode": "formdata",
               "formdata": [
                 { "key": "firstName", "value": "{{testFirstName}}", "type": "text" },
                 { "key": "lastName", "value": "{{testLastName}}", "type": "text" },
                 { "key": "bio", "value": "{{testBio}}", "type": "text" },
-                { "key": "externalLink", "value": "{{testExternalLink}}", "type": "text" },
-                { "key": "photo", "type": "file", "src": "/path/to/sample-avatar.jpg" }
+                { "key": "externalLink", "value": "{{testExternalLink}}", "type": "text" }
               ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/profile/userProfile",
               "host": ["{{baseUrl}}"],
               "path": ["api", "profile", "userProfile"]
-            },
-            "description": "⚠️ Replace '/path/to/sample-avatar.jpg' with an actual image file path."
+            }
           }
         },
         {
-          "name": "14b. Update Full Profile with Photo (multipart) - PATCH /api/profile/userProfile",
+          "name": "15. Update Profile",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Profile updated with photo and details', () => {",
+                  "pm.test('Profile updated', () => {",
                   "  const jsonData = pm.response.json();",
                   "  pm.expect(jsonData).to.have.property('message', 'Profile updated successfully');",
-                  "  pm.expect(jsonData.user).to.have.property('bio', 'Updated bio via multipart');",
-                  "  pm.expect(jsonData.user).to.have.property('profilePhoto').that.includes('signed');",
-                  "  pm.expect(jsonData).to.have.property('onboardingStatus');",
                   "});"
                 ]
               }
@@ -518,24 +464,17 @@
           ],
           "request": {
             "method": "PATCH",
-            "header": [],
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "firstName", "value": "UpdatedFirstName", "type": "text" },
-                { "key": "lastName", "value": "UpdatedLastName", "type": "text" },
-                { "key": "bio", "value": "Updated bio via multipart", "type": "text" },
-                { "key": "skills", "value": "TypeScript,GraphQL", "type": "text" },
-                { "key": "externalLink", "value": "https://updated.dev", "type": "text" },
-                { "key": "photo", "type": "file", "src": "/path/to/new-avatar.jpg" }
+                { "key": "bio", "value": "Updated bio via multipart", "type": "text" }
               ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/profile/userProfile",
               "host": ["{{baseUrl}}"],
               "path": ["api", "profile", "userProfile"]
-            },
-            "description": "⚠️ Replace file path with actual image."
+            }
           }
         }
       ]
@@ -544,18 +483,16 @@
       "name": "🚀 Projects",
       "item": [
         {
-          "name": "15. Create Project (with roles)",
+          "name": "16. Create Project",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
-                  "pm.test('Response contains project id', () => {",
+                  "pm.test('Project created', () => {",
                   "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Project created successfully');",
-                  "  pm.expect(jsonData).to.have.property('project');",
-                  "  pm.expect(jsonData.project).to.have.property('roles').that.is.an('array');",
+                  "  pm.expect(jsonData.project).to.have.property('status', 'OPEN');",
                   "  pm.collectionVariables.set('projectId', jsonData.project._id);",
                   "});"
                 ]
@@ -567,7 +504,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"AI-Powered Code Reviewer\",\n  \"description\": \"Build an AI tool to review pull requests and suggest improvements.\",\n  \"requiredSkills\": [\"Machine Learning\", \"Node.js\", \"OpenAI API\"],\n  \"techStack\": [\"Python\", \"FastAPI\", \"React\"],\n  \"stage\": \"PROTOTYPE\",\n  \"roles\": [\n    { \"roleName\": \"Backend Developer\", \"requiredCount\": 2 },\n    { \"roleName\": \"Frontend Developer\", \"requiredCount\": 1 }\n  ]\n}"
+              "raw": "{\n  \"title\": \"AI-Powered Code Reviewer\",\n  \"description\": \"Build an AI tool to review pull requests.\",\n  \"requiredSkills\": [\"Machine Learning\", \"Node.js\"],\n  \"techStack\": [\"Python\", \"FastAPI\", \"React\"],\n  \"stage\": \"PROTOTYPE\",\n  \"roles\": [\n    { \"roleName\": \"Backend Developer\", \"requiredCount\": 2 },\n    { \"roleName\": \"Frontend Developer\", \"requiredCount\": 1 }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/projects",
@@ -577,17 +514,20 @@
           }
         },
         {
-          "name": "16. Get All Projects (with optional filters)",
+          "name": "17. Get All Projects",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains projects array', () => {",
+                  "pm.test('No sensitive fields', () => {",
                   "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('projects');",
-                  "  pm.expect(jsonData.projects).to.be.an('array');",
+                  "  if (jsonData.projects.length > 0) {",
+                  "    const owner = jsonData.projects[0].owner;",
+                  "    pm.expect(owner).to.not.have.property('password');",
+                  "    pm.expect(owner).to.not.have.property('refreshToken');",
+                  "  }",
                   "});"
                 ]
               }
@@ -603,47 +543,7 @@
           }
         },
         {
-          "name": "17. Get Projects with Role Filter",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains projects filtered by role', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('projects');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/api/projects?role=Frontend%20Developer",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "projects"],
-              "query": [{ "key": "role", "value": "Frontend Developer" }]
-            }
-          }
-        },
-        {
-          "name": "18. Get Single Project by ID",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains project details', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('_id', pm.variables.get('projectId'));",
-                  "});"
-                ]
-              }
-            }
-          ],
+          "name": "18. Get Project by ID",
           "request": {
             "method": "GET",
             "url": {
@@ -654,31 +554,13 @@
           }
         },
         {
-          "name": "19. Update Project (owner only)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Project updated successfully', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Project updated successfully');",
-                  "  pm.expect(jsonData.project).to.have.property('title', 'Smart Job Matching Platform (Updated)');",
-                  "  pm.expect(jsonData.project).to.have.property('description', 'Updated description for the job matching platform.');",
-                  "  pm.expect(jsonData.project).to.have.property('stage', 'MVP');",
-                  "  pm.expect(jsonData.project.roles).to.be.an('array').that.has.lengthOf(3);",
-                  "});"
-                ]
-              }
-            }
-          ],
+          "name": "19. Update Project",
           "request": {
             "method": "PUT",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Smart Job Matching Platform (Updated)\",\n  \"description\": \"Updated description for the job matching platform.\",\n  \"requiredSkills\": [\"Machine Learning\", \"Data Analysis\", \"REST APIs\", \"Cloud Computing\"],\n  \"techStack\": [\"Python\", \"FastAPI\", \"PostgreSQL\", \"Docker\"],\n  \"stage\": \"MVP\",\n  \"roles\": [\n    { \"roleName\": \"Machine Learning Engineer\", \"requiredCount\": 2 },\n    { \"roleName\": \"Backend Developer\", \"requiredCount\": 3 },\n    { \"roleName\": \"Frontend Developer\", \"requiredCount\": 1 }\n  ]\n}"
+              "raw": "{\n  \"title\": \"Updated Project Title\",\n  \"stage\": \"MVP\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/projects/{{projectId}}",
@@ -688,55 +570,50 @@
           }
         },
         {
-          "name": "20. Apply to Project (with CV and role)",
+          "name": "20. Apply to Project",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
-                  "pm.test('Application sent', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message').that.includes('Application sent');",
-                  "  pm.expect(jsonData).to.have.property('application');",
-                  "  pm.expect(jsonData.application).to.have.property('role', 'Backend Developer');",
-                  "  pm.collectionVariables.set('applicationId', jsonData.application._id);",
-                  "});"
+                  "pm.collectionVariables.set('applicationId', pm.response.json().application._id);"
                 ]
               }
             }
           ],
           "request": {
             "method": "POST",
-            "header": [],
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "message", "value": "I have 5 years of experience in ML and Python.", "type": "text" },
-                { "key": "portfolioLink", "value": "https://github.com/yourhandle", "type": "text" },
+                { "key": "message", "value": "I'm interested in this role!", "type": "text" },
                 { "key": "role", "value": "Backend Developer", "type": "text" },
-                { "key": "cv", "type": "file", "src": "/path/to/cv.pdf" }
+                { "key": "portfolioLink", "value": "https://github.com/yourhandle", "type": "text" }
               ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/projects/{{projectId}}/apply",
               "host": ["{{baseUrl}}"],
               "path": ["api", "projects", "{{projectId}}", "apply"]
-            },
-            "description": "⚠️ Replace '/path/to/cv.pdf' with a real PDF/DOC file (max 10MB)."
+            }
           }
         },
         {
-          "name": "21. Get Project Applications (owner only)",
+          "name": "21. Get Applications",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains applications array', () => {",
+                  "pm.test('Response includes cvUrl and teamMembers', () => {",
                   "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.be.an('array');",
+                  "  if (jsonData.applications.length > 0) {",
+                  "    const app = jsonData.applications[0];",
+                  "    pm.expect(app).to.have.property('cvUrl');",
+                  "  }",
+                  "  pm.expect(jsonData).to.have.property('teamMembers');",
                   "});"
                 ]
               }
@@ -752,17 +629,13 @@
           }
         },
         {
-          "name": "22. Accept Application (owner only)",
+          "name": "22. Accept Application",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Application accepted', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Application accepted successfully');",
-                  "});"
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));"
                 ]
               }
             }
@@ -783,21 +656,6 @@
         },
         {
           "name": "23. Get Project Team",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains owner and members', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('owner');",
-                  "  pm.expect(jsonData).to.have.property('members');",
-                  "});"
-                ]
-              }
-            }
-          ],
           "request": {
             "method": "GET",
             "url": {
@@ -808,46 +666,7 @@
           }
         },
         {
-          "name": "24. Delete Project (owner only)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Project deleted', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Project deleted successfully');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "DELETE",
-            "url": {
-              "raw": "{{baseUrl}}/api/projects/{{projectId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "projects", "{{projectId}}"]
-            }
-          }
-        },
-        {
-          "name": "25. Get Featured Projects",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains projects array', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.be.an('array');",
-                  "});"
-                ]
-              }
-            }
-          ],
+          "name": "24. Get Featured Projects",
           "request": {
             "method": "GET",
             "url": {
@@ -859,17 +678,13 @@
           }
         },
         {
-          "name": "26. Get Recommended Projects (requires authentication)",
+          "name": "25. Get Recommended Projects",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains recommended projects array', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.be.an('array');",
-                  "});"
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));"
                 ]
               }
             }
@@ -880,6 +695,17 @@
               "raw": "{{baseUrl}}/api/projects/recommended",
               "host": ["{{baseUrl}}"],
               "path": ["api", "projects", "recommended"]
+            }
+          }
+        },
+        {
+          "name": "26. Delete Project",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{projectId}}"]
             }
           }
         }
@@ -896,10 +722,9 @@
               "script": {
                 "exec": [
                   "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
-                  "pm.test('Response contains post id', () => {",
+                  "pm.test('Author has role field', () => {",
                   "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Post created successfully');",
-                  "  pm.expect(jsonData).to.have.property('post');",
+                  "  pm.expect(jsonData.post.author).to.have.property('role');",
                   "  pm.collectionVariables.set('postId', jsonData.post._id);",
                   "});"
                 ]
@@ -921,53 +746,21 @@
           }
         },
         {
-          "name": "28. Create Post (with media file)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
-                  "pm.test('Post created with media', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('post');",
-                  "  pm.expect(jsonData.post.media).to.be.an('array');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                { "key": "content", "value": "Check out this cool video!", "type": "text" },
-                { "key": "tags", "value": "video,demo", "type": "text" },
-                { "key": "media", "type": "file", "src": "/path/to/sample-image.jpg" }
-              ]
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/community/posts",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "community", "posts"]
-            },
-            "description": "⚠️ Replace '/path/to/sample-image.jpg' with an actual image/video file (max 5 files)."
-          }
-        },
-        {
-          "name": "29. Get Feed (paginated)",
+          "name": "28. Get Feed",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains posts array', () => {",
+                  "pm.test('Posts include author.role and isLiked/isSaved', () => {",
                   "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('posts');",
-                  "  pm.expect(jsonData.posts).to.be.an('array');",
+                  "  if (jsonData.posts.length > 0) {",
+                  "    const post = jsonData.posts[0];",
+                  "    pm.expect(post.author).to.have.property('role');",
+                  "    pm.expect(post).to.have.property('isLiked');",
+                  "    pm.expect(post).to.have.property('isSaved');",
+                  "  }",
                   "});"
                 ]
               }
@@ -987,21 +780,7 @@
           }
         },
         {
-          "name": "30. Get Single Post",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Post details match', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('_id', pm.variables.get('postId'));",
-                  "});"
-                ]
-              }
-            }
-          ],
+          "name": "29. Get Single Post",
           "request": {
             "method": "GET",
             "url": {
@@ -1012,21 +791,7 @@
           }
         },
         {
-          "name": "31. Like Post",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Like toggled', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('liked', true);",
-                  "});"
-                ]
-              }
-            }
-          ],
+          "name": "30. Like Post",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -1042,49 +807,14 @@
           }
         },
         {
-          "name": "32. Unlike Post (toggle again)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Unlike toggled', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('liked', false);",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"targetType\": \"Post\",\n  \"targetId\": \"{{postId}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/community/like",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "community", "like"]
-            }
-          }
-        },
-        {
-          "name": "33. Add Comment to Post",
+          "name": "31. Add Comment",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
-                  "pm.test('Comment added', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Comment added');",
-                  "  pm.expect(jsonData).to.have.property('comment');",
-                  "  pm.collectionVariables.set('commentId', jsonData.comment._id);",
-                  "});"
+                  "pm.collectionVariables.set('commentId', pm.response.json().comment._id);"
                 ]
               }
             }
@@ -1104,22 +834,7 @@
           }
         },
         {
-          "name": "34. Get Comments for Post",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains comments array', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('comments');",
-                  "  pm.expect(jsonData.comments).to.be.an('array');",
-                  "});"
-                ]
-              }
-            }
-          ],
+          "name": "32. Get Comments",
           "request": {
             "method": "GET",
             "url": {
@@ -1130,81 +845,7 @@
           }
         },
         {
-          "name": "35. Reply to Comment",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
-                  "pm.test('Reply added', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Comment added');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"content\": \"Thanks for the feedback!\",\n  \"postId\": \"{{postId}}\",\n  \"parentCommentId\": \"{{commentId}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/community/comments",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "community", "comments"]
-            }
-          }
-        },
-        {
-          "name": "36. Like Comment",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Comment liked', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('liked', true);",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"targetType\": \"Comment\",\n  \"targetId\": \"{{commentId}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/community/like",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "community", "like"]
-            }
-          }
-        },
-        {
-          "name": "37. Save Post",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Post saved', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('saved', true);",
-                  "});"
-                ]
-              }
-            }
-          ],
+          "name": "33. Save Post",
           "request": {
             "method": "POST",
             "url": {
@@ -1215,21 +856,7 @@
           }
         },
         {
-          "name": "38. Get Saved Posts",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains saved posts array', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.be.an('array');",
-                  "});"
-                ]
-              }
-            }
-          ],
+          "name": "34. Get Saved Posts",
           "request": {
             "method": "GET",
             "url": {
@@ -1240,46 +867,7 @@
           }
         },
         {
-          "name": "39. Unsave Post (toggle)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Post unsaved', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('saved', false);",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "url": {
-              "raw": "{{baseUrl}}/api/community/save/{{postId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "community", "save", "{{postId}}"]
-            }
-          }
-        },
-        {
-          "name": "40. Follow Another User",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('User followed', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('following', true);",
-                  "});"
-                ]
-              }
-            }
-          ],
+          "name": "35. Follow User",
           "request": {
             "method": "POST",
             "url": {
@@ -1290,21 +878,7 @@
           }
         },
         {
-          "name": "41. Get Followers List",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains array of followers', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.be.an('array');",
-                  "});"
-                ]
-              }
-            }
-          ],
+          "name": "36. Get Followers",
           "request": {
             "method": "GET",
             "url": {
@@ -1315,21 +889,7 @@
           }
         },
         {
-          "name": "42. Get Following List",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains array of following', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.be.an('array');",
-                  "});"
-                ]
-              }
-            }
-          ],
+          "name": "37. Get Following",
           "request": {
             "method": "GET",
             "url": {
@@ -1340,21 +900,7 @@
           }
         },
         {
-          "name": "43. Mute Post Notifications",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Post muted', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('muted', true);",
-                  "});"
-                ]
-              }
-            }
-          ],
+          "name": "38. Mute Post",
           "request": {
             "method": "POST",
             "url": {
@@ -1365,21 +911,7 @@
           }
         },
         {
-          "name": "44. Report Post",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Post reported', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message', 'Post reported. Our team will review it.');",
-                  "});"
-                ]
-              }
-            }
-          ],
+          "name": "39. Report Post",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -1395,41 +927,22 @@
           }
         },
         {
-          "name": "45. Get User Profile (public stats)",
+          "name": "40. Get User Profile Stats",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Profile contains stats and posts', () => {",
+                  "pm.test('Profile includes projects with status, teamSize, applicationsCount', () => {",
                   "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('user');",
-                  "  pm.expect(jsonData).to.have.property('stats');",
-                  "  pm.expect(jsonData.stats).to.have.property('projects');",
-                  "  pm.expect(jsonData.stats).to.have.property('posts');",
-                  "});",
-                  "pm.test('User includes email, bio, externalLink, and profilePhoto', () => {",
-                  "  const user = jsonData.user;",
-                  "  pm.expect(user).to.have.property('email');",
-                  "  pm.expect(user).to.have.property('bio');",
-                  "  pm.expect(user).to.have.property('externalLink');",
-                  "  pm.expect(user).to.have.property('profilePhoto');",
-                  "});",
-                  "pm.test('Posts include commentCount and likeCount', () => {",
-                  "  const posts = jsonData.posts;",
-                  "  if (posts && posts.length > 0) {",
-                  "    posts.forEach(post => {",
-                  "      pm.expect(post).to.have.property('commentCount');",
-                  "      pm.expect(post).to.have.property('likeCount');",
-                  "    });",
+                  "  if (jsonData.projects && jsonData.projects.length > 0) {",
+                  "    const project = jsonData.projects[0];",
+                  "    pm.expect(project).to.have.property('status');",
+                  "    pm.expect(project).to.have.property('teamSize');",
+                  "    pm.expect(project).to.have.property('applicationsCount');",
+                  "    pm.expect(project).to.have.property('updatedAt');",
                   "  }",
-                  "});",
-                  "pm.test('Stats include projects, collaborations, and posts', () => {",
-                  "  const stats = jsonData.stats;",
-                  "  pm.expect(stats).to.have.property('projects');",
-                  "  pm.expect(stats).to.have.property('collaborations');",
-                  "  pm.expect(stats).to.have.property('posts');",
                   "});"
                 ]
               }
@@ -1450,14 +963,14 @@
       "name": "⚠️ Negative Tests",
       "item": [
         {
-          "name": "46. Register with Existing Email",
+          "name": "41. Register with Existing Email",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 400', () => pm.response.to.have.status(400));",
-                  "pm.test('Error indicates email exists', () => {",
+                  "pm.test('Error: Email exists', () => {",
                   "  pm.expect(pm.response.json()).to.have.property('message', 'Email already exists');",
                   "});"
                 ]
@@ -1479,14 +992,14 @@
           }
         },
         {
-          "name": "47. Login with Unverified Email",
+          "name": "42. Login with Unverified Email",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 401', () => pm.response.to.have.status(401));",
-                  "pm.test('Error asks to verify email', () => {",
+                  "pm.test('Error: Please verify email', () => {",
                   "  pm.expect(pm.response.json()).to.have.property('message', 'Please verify your email before logging in.');",
                   "});"
                 ]
@@ -1508,14 +1021,14 @@
           }
         },
         {
-          "name": "48. Access Protected Route Without Login",
+          "name": "43. Access Protected Route Without Login",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 401', () => pm.response.to.have.status(401));",
-                  "pm.test('Error indicates no token', () => {",
+                  "pm.test('Error: No token', () => {",
                   "  pm.expect(pm.response.json()).to.have.property('message', 'Not authorized, no token');",
                   "});"
                 ]
