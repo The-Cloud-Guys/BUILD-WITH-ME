@@ -1,16 +1,24 @@
 {
   "name": "build_with_me_auth",
-  "version": "1.0.0",
-  "description": "JWT authentication with Express, MongoDB, and Joi validation",
+  "version": "6.0.0",
+  "description": "Build With Me - Complete Authentication & Project Management API with Chat, Notifications, and Admin Dashboard",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "gen-token-page": "node generate-token-page.js"
   },
-  "keywords": [],
+  "keywords": [
+    "authentication",
+    "project-management",
+    "chat",
+    "notifications",
+    "admin-dashboard",
+    "socket.io",
+    "webrtc"
+  ],
   "author": "Habeeb Olakunle",
-  "license": "",
+  "license": "ISC",
   "dependencies": {
     "@supabase/supabase-js": "^2.105.1",
     "axios": "^1.16.0",
@@ -27,7 +35,10 @@
     "mongoose": "^7.8.9",
     "morgan": "^1.10.1",
     "multer": "^2.1.1",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "socket.io": "^4.6.1",
+    "socket.io-client": "^4.6.1",
+    "simple-peer": "^9.11.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
