@@ -46,6 +46,15 @@ const projectSchema = new mongoose.Schema(
       required: true,
       default: 'IDEA',
     },
+    status: {
+      type: String,
+      enum: ['OPEN', 'ACTIVE', 'CLOSED', 'COMPLETED'],
+      default: 'OPEN',
+    },
+    views: {
+      type: Number,
+      default: 0,
+    },
     owner: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -57,7 +66,7 @@ const projectSchema = new mongoose.Schema(
         ref: 'User',
       },
     ],
-    roles: [roleSchema], // new: array of roles with capacity
+    roles: [roleSchema],
   },
   {
     timestamps: true,
