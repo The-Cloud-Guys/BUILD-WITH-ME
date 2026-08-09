@@ -22,16 +22,10 @@ const {
 
 const router = express.Router();
 
-// ==============================
-// PUBLIC ROUTES
-// ==============================
 router.get('/', getProjects);
-router.get('/featured', getFeaturedProjects); 
+router.get('/featured', getFeaturedProjects);
 router.get('/:id/team', getProjectTeam);
 
-// ==============================
-// PROTECTED ROUTES
-// ==============================
 router.use(protect);
 
 router.get('/my', getUserProjects);
@@ -48,9 +42,6 @@ router.delete('/:id/team/:userId', removeTeamMember);
 router.put('/applications/:id', updateApplicationStatus);
 router.get('/applications/:id', getApplicationDetails);
 
-// ==============================
-// DYNAMIC ROUTE (MUST BE LAST)
-// ==============================
 router.get('/:id', getProjectById);
 router.put('/:id', updateProject);
 
