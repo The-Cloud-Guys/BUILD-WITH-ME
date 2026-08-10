@@ -16,8 +16,7 @@ const {
   cvUpload,
   getUserProjects,
   getProjectApplicationsFiltered,
-  getApplicationDetails,
-  updateProjectEnhanced
+  getApplicationDetails
 } = require('../controllers/project.controller');
 
 const router = express.Router();
@@ -32,7 +31,6 @@ router.get('/my', getUserProjects);
 router.get('/recommended', getRecommendedProjects);
 
 router.post('/', createProject);
-router.put('/:id/enhanced', updateProjectEnhanced);
 router.delete('/:id', deleteProject);
 
 router.post('/:id/apply', cvUpload.single('cv'), applyToProject);

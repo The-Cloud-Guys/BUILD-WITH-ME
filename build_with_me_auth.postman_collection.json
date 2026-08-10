@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Build With Me - Full API v6.0 (Auth + Onboarding + Profile + Projects + Community + Chat + Admin)",
-    "description": "Complete test suite for authentication, onboarding, profile (combined with photo upload), projects (role-based CRUD, applications, team, featured & recommended), community, notifications, real-time chat, and admin dashboard. Routes are correctly ordered with specific routes before dynamic :id parameters.",
+    "name": "Build With Me - Full API v6.0 (Unified Project Update)",
+    "description": "Complete test suite with unified project update endpoint. PUT /api/projects/:id now handles all fields including status, skills, techStack, and roles.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -533,7 +533,7 @@
       ]
     },
     {
-      "name": "🚀 Projects (Routes Fixed - /my before /:id)",
+      "name": "🚀 Projects (Unified Update Endpoint)",
       "item": [
         {
           "name": "16. Create Project",
@@ -543,7 +543,7 @@
               "script": {
                 "exec": [
                   "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
-                  "pm.test('Project created with status and views fields', () => {",
+                  "pm.test('Project created with status and views', () => {",
                   "  const jsonData = pm.response.json();",
                   "  pm.expect(jsonData.project).to.have.property('status', 'OPEN');",
                   "  pm.expect(jsonData.project).to.have.property('views', 0);",
@@ -639,40 +639,7 @@
           }
         },
         {
-          "name": "19. Get Featured Projects",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/api/projects/featured?limit=5",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "projects", "featured"],
-              "query": [{ "key": "limit", "value": "5" }]
-            }
-          }
-        },
-        {
-          "name": "20. Get Recommended Projects",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/api/projects/recommended",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "projects", "recommended"]
-            }
-          }
-        },
-        {
-          "name": "21. Get Project by ID",
+          "name": "19. Get Project by ID",
           "event": [
             {
               "listen": "test",
@@ -699,23 +666,74 @@
           }
         },
         {
-          "name": "22. Update Project",
+          "name": "20. Update Project (Unified - All Fields)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Project updated with all fields', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('message', 'Project updated successfully');",
+                  "  pm.expect(jsonData.project).to.have.property('title', 'Full Stack AI Platform');",
+                  "  pm.expect(jsonData.project).to.have.property('stage', 'MVP');",
+                  "  pm.expect(jsonData.project).to.have.property('status', 'ACTIVE');",
+                  "  pm.expect(jsonData.project.requiredSkills).to.include('TypeScript');",
+                  "  pm.expect(jsonData.project.techStack).to.include('Docker');",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PUT",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Updated Project Title\",\n  \"stage\": \"MVP\",\n  \"status\": \"ACTIVE\"\n}"
+              "raw": "{\n  \"title\": \"Full Stack AI Platform\",\n  \"description\": \"Updated description for the AI platform with full stack capabilities.\",\n  \"requiredSkills\": [\"Machine Learning\", \"Node.js\", \"Python\", \"TypeScript\"],\n  \"techStack\": [\"FastAPI\", \"React\", \"MongoDB\", \"Docker\", \"Kubernetes\"],\n  \"stage\": \"MVP\",\n  \"status\": \"ACTIVE\",\n  \"roles\": [\n    { \"roleName\": \"Backend Developer\", \"requiredCount\": 3 },\n    { \"roleName\": \"Frontend Developer\", \"requiredCount\": 2 },\n    { \"roleName\": \"DevOps Engineer\", \"requiredCount\": 1 }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/projects/{{projectId}}",
               "host": ["{{baseUrl}}"],
               "path": ["api", "projects", "{{projectId}}"]
-            }
+            },
+            "description": "✅ Unified endpoint: PUT /api/projects/:id handles ALL fields including status"
           }
         },
         {
-          "name": "23. Apply to Project",
+          "name": "21. Update Project (Partial - Status Only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Status updated to CLOSED', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData.project).to.have.property('status', 'CLOSED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CLOSED\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{projectId}}"]
+            },
+            "description": "✅ Partial updates work too - only the fields provided are updated"
+          }
+        },
+        {
+          "name": "22. Apply to Project",
           "event": [
             {
               "listen": "test",
@@ -745,7 +763,7 @@
           }
         },
         {
-          "name": "24. Get Project Applications",
+          "name": "23. Get Project Applications",
           "event": [
             {
               "listen": "test",
@@ -774,7 +792,7 @@
           }
         },
         {
-          "name": "25. Accept Application",
+          "name": "24. Accept Application",
           "event": [
             {
               "listen": "test",
@@ -800,7 +818,7 @@
           }
         },
         {
-          "name": "26. Get Project Team",
+          "name": "25. Get Project Team",
           "request": {
             "method": "GET",
             "url": {
@@ -811,7 +829,40 @@
           }
         },
         {
-          "name": "27. Delete Project",
+          "name": "26. Get Featured Projects",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/featured?limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "featured"],
+              "query": [{ "key": "limit", "value": "5" }]
+            }
+          }
+        },
+        {
+          "name": "27. Get Recommended Projects",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/recommended",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "recommended"]
+            }
+          }
+        },
+        {
+          "name": "28. Delete Project",
           "request": {
             "method": "DELETE",
             "url": {
@@ -827,7 +878,7 @@
       "name": "💬 Community",
       "item": [
         {
-          "name": "28. Create Post (text only)",
+          "name": "29. Create Post (text only)",
           "event": [
             {
               "listen": "test",
@@ -858,7 +909,7 @@
           }
         },
         {
-          "name": "29. Get Feed",
+          "name": "30. Get Feed",
           "event": [
             {
               "listen": "test",
@@ -892,7 +943,7 @@
           }
         },
         {
-          "name": "30. Get Single Post",
+          "name": "31. Get Single Post",
           "request": {
             "method": "GET",
             "url": {
@@ -903,7 +954,7 @@
           }
         },
         {
-          "name": "31. Like Post",
+          "name": "32. Like Post",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -919,7 +970,7 @@
           }
         },
         {
-          "name": "32. Add Comment",
+          "name": "33. Add Comment",
           "event": [
             {
               "listen": "test",
@@ -946,7 +997,7 @@
           }
         },
         {
-          "name": "33. Get Comments",
+          "name": "34. Get Comments",
           "request": {
             "method": "GET",
             "url": {
@@ -957,7 +1008,7 @@
           }
         },
         {
-          "name": "34. Save Post",
+          "name": "35. Save Post",
           "request": {
             "method": "POST",
             "url": {
@@ -968,7 +1019,7 @@
           }
         },
         {
-          "name": "35. Get Saved Posts",
+          "name": "36. Get Saved Posts",
           "request": {
             "method": "GET",
             "url": {
@@ -979,7 +1030,7 @@
           }
         },
         {
-          "name": "36. Follow User",
+          "name": "37. Follow User",
           "request": {
             "method": "POST",
             "url": {
@@ -990,7 +1041,7 @@
           }
         },
         {
-          "name": "37. Get Followers",
+          "name": "38. Get Followers",
           "request": {
             "method": "GET",
             "url": {
@@ -1001,7 +1052,7 @@
           }
         },
         {
-          "name": "38. Get Following",
+          "name": "39. Get Following",
           "request": {
             "method": "GET",
             "url": {
@@ -1012,7 +1063,7 @@
           }
         },
         {
-          "name": "39. Mute Post",
+          "name": "40. Mute Post",
           "request": {
             "method": "POST",
             "url": {
@@ -1023,7 +1074,7 @@
           }
         },
         {
-          "name": "40. Report Post",
+          "name": "41. Report Post",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -1039,7 +1090,7 @@
           }
         },
         {
-          "name": "41. Get User Profile Stats",
+          "name": "42. Get User Profile Stats",
           "event": [
             {
               "listen": "test",
@@ -1076,7 +1127,7 @@
       "name": "📨 Notifications",
       "item": [
         {
-          "name": "42. Get All Notifications",
+          "name": "43. Get All Notifications",
           "event": [
             {
               "listen": "test",
@@ -1112,7 +1163,7 @@
           }
         },
         {
-          "name": "43. Get Project Notifications",
+          "name": "44. Get Project Notifications",
           "request": {
             "method": "GET",
             "url": {
@@ -1124,7 +1175,7 @@
           }
         },
         {
-          "name": "44. Get Social Notifications",
+          "name": "45. Get Social Notifications",
           "request": {
             "method": "GET",
             "url": {
@@ -1136,7 +1187,7 @@
           }
         },
         {
-          "name": "45. Get System Notifications",
+          "name": "46. Get System Notifications",
           "request": {
             "method": "GET",
             "url": {
@@ -1148,7 +1199,7 @@
           }
         },
         {
-          "name": "46. Mark Notification as Read",
+          "name": "47. Mark Notification as Read",
           "event": [
             {
               "listen": "test",
@@ -1172,7 +1223,7 @@
           }
         },
         {
-          "name": "47. Dismiss Notification",
+          "name": "48. Dismiss Notification",
           "event": [
             {
               "listen": "test",
@@ -1201,7 +1252,7 @@
       "name": "💬 Chat & Messaging",
       "item": [
         {
-          "name": "48. Get All User Rooms",
+          "name": "49. Get All User Rooms",
           "event": [
             {
               "listen": "test",
@@ -1231,7 +1282,7 @@
           }
         },
         {
-          "name": "49. Get or Create Direct Message Room",
+          "name": "50. Get or Create Direct Message Room",
           "event": [
             {
               "listen": "test",
@@ -1258,7 +1309,7 @@
           }
         },
         {
-          "name": "50. Create Group",
+          "name": "51. Create Group",
           "event": [
             {
               "listen": "test",
@@ -1289,7 +1340,7 @@
           }
         },
         {
-          "name": "51. Get Room Messages",
+          "name": "52. Get Room Messages",
           "event": [
             {
               "listen": "test",
@@ -1320,7 +1371,7 @@
           }
         },
         {
-          "name": "52. Send Message",
+          "name": "53. Send Message",
           "event": [
             {
               "listen": "test",
@@ -1351,7 +1402,7 @@
           }
         },
         {
-          "name": "53. Initiate Call",
+          "name": "54. Initiate Call",
           "event": [
             {
               "listen": "test",
@@ -1383,7 +1434,7 @@
       "name": "🛡️ Admin Dashboard",
       "item": [
         {
-          "name": "54. Get Dashboard Stats",
+          "name": "55. Get Dashboard Stats",
           "event": [
             {
               "listen": "test",
@@ -1414,7 +1465,7 @@
           }
         },
         {
-          "name": "55. Get Activities",
+          "name": "56. Get Activities",
           "event": [
             {
               "listen": "test",
@@ -1445,7 +1496,7 @@
           }
         },
         {
-          "name": "56. Get Reports",
+          "name": "57. Get Reports",
           "event": [
             {
               "listen": "test",
@@ -1479,7 +1530,7 @@
           }
         },
         {
-          "name": "57. Resolve Report",
+          "name": "58. Resolve Report",
           "event": [
             {
               "listen": "test",
@@ -1508,7 +1559,7 @@
           }
         },
         {
-          "name": "58. Get Admin Users",
+          "name": "59. Get Admin Users",
           "event": [
             {
               "listen": "test",
@@ -1533,7 +1584,7 @@
           }
         },
         {
-          "name": "59. Add Admin User",
+          "name": "60. Add Admin User",
           "event": [
             {
               "listen": "test",
@@ -1562,7 +1613,7 @@
           }
         },
         {
-          "name": "60. Remove Admin User",
+          "name": "61. Remove Admin User",
           "event": [
             {
               "listen": "test",
@@ -1591,7 +1642,7 @@
       "name": "⚠️ Negative Tests",
       "item": [
         {
-          "name": "61. Register with Existing Email",
+          "name": "62. Register with Existing Email",
           "event": [
             {
               "listen": "test",
@@ -1620,7 +1671,7 @@
           }
         },
         {
-          "name": "62. Login with Unverified Email",
+          "name": "63. Login with Unverified Email",
           "event": [
             {
               "listen": "test",
@@ -1649,7 +1700,7 @@
           }
         },
         {
-          "name": "63. Access Protected Route Without Login",
+          "name": "64. Access Protected Route Without Login",
           "event": [
             {
               "listen": "test",

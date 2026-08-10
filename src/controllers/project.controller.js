@@ -9,7 +9,7 @@ const path = require('path');
 // Configure multer for CV upload (memory storage)
 const cvUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /pdf|doc|docx/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -26,14 +26,15 @@ const generateCVPath = (userId, projectId, originalName) => {
   return `resumes/${userId}/${projectId}/cv_${timestamp}${ext}`;
 };
 
-// ==============================
-// PROJECT CRUD
-// ==============================
-
+// Helper to check if a role still has capacity
 const isRoleAvailable = (project, roleName) => {
   const role = project.roles.find(r => r.roleName === roleName);
   return role && role.currentCount < role.requiredCount;
 };
+
+// ==============================
+// PROJECT CRUD
+// ==============================
 
 // @desc    Create a new project
 // @route   POST /api/projects
@@ -46,7 +47,6 @@ const createProject = async (req, res) => {
       return res.status(400).json({ message: 'At least one role is required' });
     }
 
-    // Validate each role
     for (let role of roles) {
       if (!role.roleName || !role.requiredCount || role.requiredCount < 1) {
         return res.status(400).json({ message: 'Each role must have a name and required count (>=1)' });
@@ -61,6 +61,7 @@ const createProject = async (req, res) => {
       stage,
       owner: req.user.id,
       roles: roles.map(r => ({ roleName: r.roleName, requiredCount: r.requiredCount, currentCount: 0 })),
+      status: 'OPEN',
     });
 
     // Notify users whose skills match this project's requiredSkills
@@ -91,7 +92,6 @@ const getProjects = async (req, res) => {
     const { page = 1, limit = 10, search, skill, tech, stage, tag, role, owner } = req.query;
     const filter = {};
 
-    // Search (title, description, requiredSkills, techStack, roleName)
     if (search) {
       filter.$or = [
         { title: { $regex: search, $options: 'i' } },
@@ -118,14 +118,15 @@ const getProjects = async (req, res) => {
       filter.owner = owner;
     }
 
-    // If both $or from search and tag exist, combine them
-    if (filter.$or && filter.$or.length > 0) {
-      // Merge with existing $or (if any)
-    }
-
     const projects = await Project.find(filter)
-      .populate('owner', 'firstName lastName profilePhoto email role')  // Added 'role'
-      .populate('teamMembers', 'firstName lastName profilePhoto email role')  // Added teamMembers population
+      .populate({
+        path: 'owner',
+        select: 'firstName lastName profilePhoto email role'
+      })
+      .populate({
+        path: 'teamMembers',
+        select: 'firstName lastName profilePhoto email role'
+      })
       .sort('-createdAt')
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit))
@@ -136,7 +137,6 @@ const getProjects = async (req, res) => {
       if (p.owner?.profilePhoto && p.owner.profilePhoto.startsWith('users/')) {
         p.owner.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, p.owner.profilePhoto);
       }
-      // Convert team members profile photos
       if (p.teamMembers && p.teamMembers.length > 0) {
         for (let member of p.teamMembers) {
           if (member.profilePhoto && member.profilePhoto.startsWith('users/')) {
@@ -166,8 +166,14 @@ const getProjects = async (req, res) => {
 const getProjectById = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id)
-      .populate('owner', 'firstName lastName profilePhoto email role')  // Added 'role'
-      .populate('teamMembers', 'firstName lastName profilePhoto email role')  // Added teamMembers population
+      .populate({
+        path: 'owner',
+        select: 'firstName lastName profilePhoto email role'
+      })
+      .populate({
+        path: 'teamMembers',
+        select: 'firstName lastName profilePhoto email role'
+      })
       .lean();
 
     if (!project) return res.status(404).json({ message: 'Project not found' });
@@ -191,13 +197,12 @@ const getProjectById = async (req, res) => {
   }
 };
 
-// @desc    Get featured projects (sorted by number of applications + recency)
+// @desc    Get featured projects (sorted by application count + recency)
 // @route   GET /api/projects/featured
 // @access  Public
 const getFeaturedProjects = async (req, res) => {
   try {
     const { limit = 10 } = req.query;
-    // Aggregate: project with application count
     const featured = await Project.aggregate([
       {
         $lookup: {
@@ -237,7 +242,6 @@ const getFeaturedProjects = async (req, res) => {
       }
     ]);
 
-    // Convert profile photos to signed URLs
     for (let p of featured) {
       if (p.owner?.profilePhoto && p.owner.profilePhoto.startsWith('users/')) {
         p.owner.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, p.owner.profilePhoto);
@@ -267,7 +271,6 @@ const getRecommendedProjects = async (req, res) => {
     const user = await User.findById(req.user.id).select('skills role');
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    // Get IDs of projects user already applied to or is a member of
     const appliedProjects = await Application.distinct('project', { applicant: req.user.id });
     const memberProjects = await Project.distinct('_id', { teamMembers: req.user.id });
     const excluded = [...appliedProjects, ...memberProjects];
@@ -282,8 +285,14 @@ const getRecommendedProjects = async (req, res) => {
     };
 
     const projects = await Project.find(filter)
-      .populate('owner', 'firstName lastName profilePhoto email role')  // Added 'role'
-      .populate('teamMembers', 'firstName lastName profilePhoto email role')  // Added teamMembers population
+      .populate({
+        path: 'owner',
+        select: 'firstName lastName profilePhoto email role'
+      })
+      .populate({
+        path: 'teamMembers',
+        select: 'firstName lastName profilePhoto email role'
+      })
       .sort('-createdAt')
       .limit(20)
       .lean();
@@ -308,7 +317,6 @@ const getRecommendedProjects = async (req, res) => {
   }
 };
 
-
 // @desc    Update project (owner only)
 // @route   PUT /api/projects/:id
 // @access  Private
@@ -320,16 +328,40 @@ const updateProject = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
-    const { title, description, requiredSkills, techStack, stage, roles } = req.body;
+    const { 
+      title, 
+      description, 
+      requiredSkills, 
+      techStack, 
+      stage, 
+      status, 
+      roles 
+    } = req.body;
 
+    // Update basic fields
     if (title) project.title = title;
     if (description) project.description = description;
-    if (requiredSkills) project.requiredSkills = Array.isArray(requiredSkills) ? requiredSkills : requiredSkills.split(',');
-    if (techStack) project.techStack = Array.isArray(techStack) ? techStack : techStack.split(',');
     if (stage) project.stage = stage;
+    if (status) project.status = status;
+
+    // Update skills with proper trimming
+    if (requiredSkills) {
+      project.requiredSkills = Array.isArray(requiredSkills) 
+        ? requiredSkills.map(s => s.trim()).filter(Boolean)
+        : requiredSkills.split(',').map(s => s.trim()).filter(Boolean);
+    }
+
+    // Update tech stack with proper trimming
+    if (techStack) {
+      project.techStack = Array.isArray(techStack) 
+        ? techStack.map(s => s.trim()).filter(Boolean)
+        : techStack.split(',').map(s => s.trim()).filter(Boolean);
+    }
+
+    // Update roles with validation
     if (roles) {
-      // Validate roles: cannot reduce requiredCount below currentCount if there are existing applications
-      for (let newRole of roles) {
+      // Validate: cannot reduce requiredCount below currentCount
+      for (const newRole of roles) {
         const existingRole = project.roles.find(r => r.roleName === newRole.roleName);
         if (existingRole && newRole.requiredCount < existingRole.currentCount) {
           return res.status(400).json({
@@ -337,6 +369,7 @@ const updateProject = async (req, res) => {
           });
         }
       }
+
       project.roles = roles.map(r => ({
         roleName: r.roleName,
         requiredCount: r.requiredCount,
@@ -352,7 +385,6 @@ const updateProject = async (req, res) => {
   }
 };
 
-
 // @desc    Delete project (owner only)
 // @route   DELETE /api/projects/:id
 // @access  Private
@@ -360,15 +392,11 @@ const deleteProject = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
     if (!project) return res.status(404).json({ message: 'Project not found' });
-
     if (project.owner.toString() !== req.user.id) {
-      return res.status(403).json({ message: 'Not authorized to delete this project' });
+      return res.status(403).json({ message: 'Not authorized' });
     }
 
-    // Delete all associated applications (optional)
     await Application.deleteMany({ project: project._id });
-
-    // Delete project
     await project.deleteOne();
 
     res.json({ message: 'Project deleted successfully' });
@@ -381,7 +409,8 @@ const deleteProject = async (req, res) => {
 // ==============================
 // APPLICATIONS
 // ==============================
-// @desc    Apply to project (with CV)
+
+// @desc    Apply to a project (with CV)
 // @route   POST /api/projects/:id/apply
 // @access  Private
 const applyToProject = async (req, res) => {
@@ -392,9 +421,6 @@ const applyToProject = async (req, res) => {
     const { message, portfolioLink, role } = req.body;
     if (!message) return res.status(400).json({ message: 'Application message is required' });
     if (!role) return res.status(400).json({ message: 'Role is required' });
-
-    // REMOVE the role existence check and capacity check
-    // Just allow any role to be applied for
 
     const existing = await Application.findOne({ project: project._id, applicant: req.user.id });
     if (existing) {
@@ -417,7 +443,6 @@ const applyToProject = async (req, res) => {
       cvPath,
     });
 
-    // Notify project owner
     await createNotification({
       user: project.owner,
       type: 'NEW_APPLICATION',
@@ -439,42 +464,65 @@ const applyToProject = async (req, res) => {
   }
 };
 
-// @desc    Get applications for a project (owner only)
+// @desc    Get project applications (owner only)
 // @route   GET /api/projects/:id/applications
 // @access  Private
 const getProjectApplications = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
     if (!project) return res.status(404).json({ message: 'Project not found' });
-
     if (project.owner.toString() !== req.user.id) {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
     const applications = await Application.find({ project: project._id })
-      .populate('applicant', 'firstName lastName email profilePhoto role')  // Added 'role'
-      .sort('-createdAt');
+      .populate({
+        path: 'applicant',
+        select: 'firstName lastName email profilePhoto bio externalLink skills role'
+      })
+      .sort('-createdAt')
+      .lean();
 
     // Generate signed URLs for CVs and profile photos
     for (let app of applications) {
       if (app.cvPath) {
-        app.cvUrl = await getSignedUrl('resumes', app.cvPath, 3600);
+        app.cvUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_RESUMES, app.cvPath, 3600);
       }
       if (app.applicant?.profilePhoto && app.applicant.profilePhoto.startsWith('users/')) {
         app.applicant.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, app.applicant.profilePhoto);
       }
     }
 
-    res.json(applications);
+    // Get team members list for context
+    const teamMembers = await User.find(
+      { _id: { $in: project.teamMembers } },
+      'firstName lastName profilePhoto email role'
+    ).lean();
+
+    for (let member of teamMembers) {
+      if (member.profilePhoto && member.profilePhoto.startsWith('users/')) {
+        member.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, member.profilePhoto);
+      }
+    }
+
+    res.json({
+      applications,
+      teamMembers,
+      projectDetails: {
+        title: project.title,
+        status: project.status || 'OPEN',
+        roles: project.roles,
+      }
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// @desc    Update application status (accept/reject)
+// @desc    Update application status (accept/reject) – owner only
 // @route   PUT /api/applications/:id
-// @access  Private (project owner only)
+// @access  Private
 const updateApplicationStatus = async (req, res) => {
   try {
     const application = await Application.findById(req.params.id).populate('project');
@@ -501,17 +549,14 @@ const updateApplicationStatus = async (req, res) => {
     }
 
     if (status === 'ACCEPTED' && oldStatus !== 'ACCEPTED') {
-      // Increment currentCount
       project.roles[roleIndex].currentCount += 1;
       await project.save();
 
-      // Add user to teamMembers
       if (!project.teamMembers.includes(application.applicant)) {
         project.teamMembers.push(application.applicant);
         await project.save();
       }
 
-      // Notify applicant
       await createNotification({
         user: application.applicant,
         type: 'APPLICATION_STATUS',
@@ -520,7 +565,6 @@ const updateApplicationStatus = async (req, res) => {
         relatedApplication: application._id,
       });
 
-      // If role is now filled, notify owner
       const role = project.roles[roleIndex];
       if (role.currentCount === role.requiredCount) {
         await createNotification({
@@ -530,17 +574,13 @@ const updateApplicationStatus = async (req, res) => {
           relatedProject: project._id,
         });
       }
-    } 
-    else if (status === 'REJECTED' && oldStatus === 'ACCEPTED') {
-      // Decrement currentCount (if previously accepted)
+    } else if (status === 'REJECTED' && oldStatus === 'ACCEPTED') {
       project.roles[roleIndex].currentCount -= 1;
       await project.save();
 
-      // Remove from teamMembers
       project.teamMembers = project.teamMembers.filter(id => id.toString() !== application.applicant.toString());
       await project.save();
 
-      // Notify applicant
       await createNotification({
         user: application.applicant,
         type: 'APPLICATION_STATUS',
@@ -548,9 +588,7 @@ const updateApplicationStatus = async (req, res) => {
         relatedProject: project._id,
         relatedApplication: application._id,
       });
-    }
-    else if (status === 'REJECTED' && oldStatus !== 'ACCEPTED') {
-      // No capacity change, just notify
+    } else if (status === 'REJECTED' && oldStatus !== 'ACCEPTED') {
       await createNotification({
         user: application.applicant,
         type: 'APPLICATION_STATUS',
@@ -573,27 +611,34 @@ const updateApplicationStatus = async (req, res) => {
 
 // @desc    Get project team (owner + members)
 // @route   GET /api/projects/:id/team
-// @access  Public (or private)
+// @access  Public
 const getProjectTeam = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id)
-      .populate('owner', 'firstName lastName profilePhoto email role')  // Added 'role'
-      .populate('teamMembers', 'firstName lastName profilePhoto email role');  // Added 'role'
+      .populate({
+        path: 'owner',
+        select: 'firstName lastName profilePhoto email role'
+      })
+      .populate({
+        path: 'teamMembers',
+        select: 'firstName lastName profilePhoto email role'
+      })
+      .lean();
+
     if (!project) return res.status(404).json({ message: 'Project not found' });
 
-    const ownerObj = project.owner.toObject();
-    if (ownerObj.profilePhoto && ownerObj.profilePhoto.startsWith('users/')) {
-      ownerObj.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, ownerObj.profilePhoto);
+    if (project.owner?.profilePhoto && project.owner.profilePhoto.startsWith('users/')) {
+      project.owner.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, project.owner.profilePhoto);
     }
-    const members = await Promise.all(project.teamMembers.map(async (member) => {
-      const m = member.toObject();
-      if (m.profilePhoto && m.profilePhoto.startsWith('users/')) {
-        m.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, m.profilePhoto);
+    if (project.teamMembers && project.teamMembers.length > 0) {
+      for (let member of project.teamMembers) {
+        if (member.profilePhoto && member.profilePhoto.startsWith('users/')) {
+          member.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, member.profilePhoto);
+        }
       }
-      return m;
-    }));
+    }
 
-    res.json({ owner: ownerObj, members });
+    res.json({ owner: project.owner, members: project.teamMembers });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -623,6 +668,132 @@ const removeTeamMember = async (req, res) => {
   }
 };
 
+// ==============================
+// ✅ NEW FUNCTIONS (ADDED)
+// ==============================
+
+// @desc    Get user's projects (creator view with stats)
+// @route   GET /api/projects/my
+// @access  Private
+const getUserProjects = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const projects = await Project.find({ owner: userId })
+      .populate('teamMembers', 'firstName lastName profilePhoto email role')
+      .sort('-createdAt')
+      .lean();
+
+    const projectsWithStats = await Promise.all(projects.map(async (project) => {
+      const applicants = await Application.find({ project: project._id });
+      const acceptedCount = applicants.filter(a => a.status === 'ACCEPTED').length;
+      const pendingCount = applicants.filter(a => a.status === 'PENDING').length;
+      const views = project.views || 0;
+      
+      return {
+        ...project,
+        stats: {
+          members: project.teamMembers.length,
+          applicants: applicants.length,
+          pending: pendingCount,
+          accepted: acceptedCount,
+          views
+        }
+      };
+    }));
+
+    res.json(projectsWithStats);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Get project applications (with filtering)
+// @route   GET /api/projects/:projectId/applications/filtered
+// @access  Private
+const getProjectApplicationsFiltered = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { status = 'all' } = req.query;
+    
+    const project = await Project.findById(projectId);
+    if (!project) return res.status(404).json({ message: 'Project not found' });
+    if (project.owner.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+
+    let filter = { project: projectId };
+    if (status === 'pending') filter.status = 'PENDING';
+    else if (status === 'reviewed') filter.status = { $in: ['ACCEPTED', 'REJECTED'] };
+
+    const applications = await Application.find(filter)
+      .populate('applicant', 'firstName lastName profilePhoto email bio externalLink skills role')
+      .sort('-createdAt')
+      .lean();
+
+    const counts = {
+      all: await Application.countDocuments({ project: projectId }),
+      pending: await Application.countDocuments({ project: projectId, status: 'PENDING' }),
+      reviewed: await Application.countDocuments({ 
+        project: projectId, 
+        status: { $in: ['ACCEPTED', 'REJECTED'] } 
+      })
+    };
+
+    for (const app of applications) {
+      if (app.cvPath) {
+        app.cvUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_RESUMES, app.cvPath, 3600);
+        app.cvSize = app.cvPath ? '2.5 MB' : null;
+        app.cvName = app.cvPath ? app.cvPath.split('/').pop() : null;
+      }
+    }
+
+    res.json({
+      applications,
+      counts,
+      projectDetails: {
+        title: project.title,
+        status: project.status,
+        teamMembers: project.teamMembers
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Get single application (for detailed view)
+// @route   GET /api/applications/:applicationId
+// @access  Private
+const getApplicationDetails = async (req, res) => {
+  try {
+    const { applicationId } = req.params;
+    
+    const application = await Application.findById(applicationId)
+      .populate('applicant', 'firstName lastName profilePhoto email bio externalLink skills role')
+      .populate('project', 'title status owner')
+      .lean();
+
+    if (!application) return res.status(404).json({ message: 'Application not found' });
+
+    const project = await Project.findById(application.project._id);
+    if (project.owner.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+
+    if (application.cvPath) {
+      application.cvUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_RESUMES, application.cvPath, 3600);
+    }
+
+    res.json(application);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   createProject,
   getProjects,
@@ -636,5 +807,8 @@ module.exports = {
   updateApplicationStatus,
   getProjectTeam,
   removeTeamMember,
-  cvUpload,// export for use in routes
+  cvUpload,
+  getUserProjects,
+  getProjectApplicationsFiltered,
+  getApplicationDetails
 };
