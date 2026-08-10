@@ -30,7 +30,7 @@
   ],
   "item": [
     {
-      "name": "🔐 Authentication",
+      "name": "Authentication",
       "item": [
         {
           "name": "1. Register User",
@@ -338,7 +338,7 @@
       ]
     },
     {
-      "name": "📝 Onboarding",
+      "name": "Onboarding",
       "item": [
         {
           "name": "11. Get Onboarding Status",
@@ -414,10 +414,10 @@
       ]
     },
     {
-      "name": "🖼️ Profile",
+      "name": "Profile",
       "item": [
         {
-          "name": "14a. Create Full Profile with Photo (multipart) - POST /api/profile/userProfile",
+          "name": "14a. Create Full Profile with Photo",
           "event": [
             {
               "listen": "test",
@@ -454,12 +454,11 @@
               "raw": "{{baseUrl}}/api/profile/userProfile",
               "host": ["{{baseUrl}}"],
               "path": ["api", "profile", "userProfile"]
-            },
-            "description": "⚠️ Replace '/path/to/sample-avatar.jpg' with an actual image file path."
+            }
           }
         },
         {
-          "name": "14b. Update Full Profile with Photo (multipart) - PATCH /api/profile/userProfile",
+          "name": "14b. Update Full Profile with Photo",
           "event": [
             {
               "listen": "test",
@@ -495,12 +494,11 @@
               "raw": "{{baseUrl}}/api/profile/userProfile",
               "host": ["{{baseUrl}}"],
               "path": ["api", "profile", "userProfile"]
-            },
-            "description": "⚠️ Replace file path with actual image."
+            }
           }
         },
         {
-          "name": "15. Update Profile (Without Photo)",
+          "name": "15. Update Profile Without Photo",
           "event": [
             {
               "listen": "test",
@@ -533,7 +531,7 @@
       ]
     },
     {
-      "name": "🚀 Projects (Unified Update Endpoint)",
+      "name": "Projects",
       "item": [
         {
           "name": "16. Create Project",
@@ -568,7 +566,7 @@
           }
         },
         {
-          "name": "17. Get My Projects (/my) - FIXED ROUTE",
+          "name": "17. Get My Projects",
           "event": [
             {
               "listen": "test",
@@ -597,8 +595,7 @@
               "raw": "{{baseUrl}}/api/projects/my",
               "host": ["{{baseUrl}}"],
               "path": ["api", "projects", "my"]
-            },
-            "description": "✅ Fixed: /my route now works correctly (placed before /:id)"
+            }
           }
         },
         {
@@ -666,7 +663,7 @@
           }
         },
         {
-          "name": "20. Update Project (Unified - All Fields)",
+          "name": "20. Update Project All Fields",
           "event": [
             {
               "listen": "test",
@@ -697,12 +694,11 @@
               "raw": "{{baseUrl}}/api/projects/{{projectId}}",
               "host": ["{{baseUrl}}"],
               "path": ["api", "projects", "{{projectId}}"]
-            },
-            "description": "✅ Unified endpoint: PUT /api/projects/:id handles ALL fields including status"
+            }
           }
         },
         {
-          "name": "21. Update Project (Partial - Status Only)",
+          "name": "21. Update Project Status Only",
           "event": [
             {
               "listen": "test",
@@ -728,8 +724,7 @@
               "raw": "{{baseUrl}}/api/projects/{{projectId}}",
               "host": ["{{baseUrl}}"],
               "path": ["api", "projects", "{{projectId}}"]
-            },
-            "description": "✅ Partial updates work too - only the fields provided are updated"
+            }
           }
         },
         {
@@ -875,10 +870,10 @@
       ]
     },
     {
-      "name": "💬 Community",
+      "name": "Community",
       "item": [
         {
-          "name": "29. Create Post (text only)",
+          "name": "29. Create Post",
           "event": [
             {
               "listen": "test",
@@ -1124,7 +1119,7 @@
       ]
     },
     {
-      "name": "📨 Notifications",
+      "name": "Notifications",
       "item": [
         {
           "name": "43. Get All Notifications",
@@ -1249,7 +1244,7 @@
       ]
     },
     {
-      "name": "💬 Chat & Messaging",
+      "name": "Chat and Messaging",
       "item": [
         {
           "name": "49. Get All User Rooms",
@@ -1431,7 +1426,7 @@
       ]
     },
     {
-      "name": "🛡️ Admin Dashboard",
+      "name": "Admin Dashboard",
       "item": [
         {
           "name": "55. Get Dashboard Stats",
@@ -1639,7 +1634,7 @@
       ]
     },
     {
-      "name": "⚠️ Negative Tests",
+      "name": "Negative Tests",
       "item": [
         {
           "name": "62. Register with Existing Email",
