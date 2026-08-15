@@ -13,6 +13,7 @@ class SocketManager {
       }
     });
     
+    this.activeCalls = new Map(); 
     this.setupMiddleware();
     this.setupHandlers();
   }
@@ -47,24 +48,19 @@ class SocketManager {
     this.io.on('connection', (socket) => {
       console.log(`User connected: ${socket.userId}`);
       
-      // Join user's rooms
       this.joinUserRooms(socket);
 
-      // Handle joining a room
       socket.on('join-room', (roomId) => {
         socket.join(`room:${roomId}`);
+        console.log(`User ${socket.userId} joined room: ${roomId}`);
       });
 
-      // Handle sending messages
       socket.on('send-message', async (data) => {
         try {
           const { roomId, content, media } = data;
           const message = await this.handleSendMessage(socket.userId, roomId, content, media);
           
-          // Emit to room
           this.io.to(`room:${roomId}`).emit('new-message', message);
-          
-          // Notify participants with unread count
           const room = await ChatRoom.findById(roomId);
           for (const participant of room.participants) {
             if (participant.toString() !== socket.userId) {
@@ -84,7 +80,6 @@ class SocketManager {
         }
       });
 
-      // Handle typing indicator
       socket.on('typing', (data) => {
         const { roomId, isTyping } = data;
         socket.to(`room:${roomId}`).emit('typing-indicator', {
@@ -94,26 +89,71 @@ class SocketManager {
         });
       });
 
-      // Handle call initiation
+      // ==============================
+      // CALL MANAGEMENT HANDLERS
+      // ==============================
+
       socket.on('call-initiate', (data) => {
         const { roomId, callType } = data;
+        
+        console.log(` Call initiated by ${socket.userId} in room ${roomId} (${callType})`);
+        
+        if (!this.activeCalls.has(roomId)) {
+          this.activeCalls.set(roomId, {
+            participants: new Set([socket.userId]),
+            callType: callType,
+            startedAt: new Date()
+          });
+        } else {
+          this.activeCalls.get(roomId).participants.add(socket.userId);
+        }
+
         socket.to(`room:${roomId}`).emit('call-incoming', {
           callerId: socket.userId,
           callerName: `${socket.user.firstName} ${socket.user.lastName}`,
-          callType
+          callType: callType
+        });
+
+        this.io.to(`room:${roomId}`).emit('call-state', {
+          participants: Array.from(this.activeCalls.get(roomId).participants),
+          callType: callType,
+          active: true,
+          startedAt: this.activeCalls.get(roomId).startedAt
         });
       });
 
-      // Handle call response
       socket.on('call-response', (data) => {
         const { roomId, accepted } = data;
-        socket.to(`room:${roomId}`).emit('call-response', {
-          callerId: socket.userId,
-          accepted
-        });
+        
+        console.log(` Call response from ${socket.userId}: ${accepted ? 'ACCEPTED' : 'REJECTED'}`);
+        
+        if (accepted) {
+          if (this.activeCalls.has(roomId)) {
+            this.activeCalls.get(roomId).participants.add(socket.userId);
+          }
+          
+          socket.to(`room:${roomId}`).emit('call-response', {
+            userId: socket.userId,
+            userName: `${socket.user.firstName} ${socket.user.lastName}`,
+            accepted: true
+          });
+          
+          this.broadcastCallState(roomId);
+        } else {
+          socket.to(`room:${roomId}`).emit('call-response', {
+            userId: socket.userId,
+            userName: `${socket.user.firstName} ${socket.user.lastName}`,
+            accepted: false
+          });
+        }
       });
 
-      // Handle WebRTC signaling
+      socket.on('leave-call', (data) => {
+        const { roomId } = data;
+        console.log(`📞 User ${socket.userId} leaving call in room ${roomId}`);
+        this.handleLeaveCall(socket.userId, roomId);
+      });
+
       socket.on('signal', (data) => {
         const { roomId, signal } = data;
         socket.to(`room:${roomId}`).emit('signal', {
@@ -122,9 +162,15 @@ class SocketManager {
         });
       });
 
-      // Handle disconnection
       socket.on('disconnect', () => {
         console.log(`User disconnected: ${socket.userId}`);
+        
+        for (const [roomId, call] of this.activeCalls) {
+          if (call.participants.has(socket.userId)) {
+            this.handleLeaveCall(socket.userId, roomId);
+          }
+        }
+        
         socket.rooms.forEach(room => {
           if (room.startsWith('room:')) {
             socket.to(room).emit('user-disconnected', socket.userId);
@@ -134,12 +180,17 @@ class SocketManager {
     });
   }
 
+  // ==============================
+  // HELPER METHODS
+  // ==============================
+
   async joinUserRooms(socket) {
     const rooms = await ChatRoom.find({ participants: socket.userId });
     for (const room of rooms) {
       socket.join(`room:${room._id.toString()}`);
     }
     socket.join(`user:${socket.userId}`);
+    console.log(`User ${socket.userId} joined ${rooms.length} rooms`);
   }
 
   async handleSendMessage(userId, roomId, content, media) {
@@ -166,6 +217,72 @@ class SocketManager {
   async getRoomParticipants(roomId) {
     const room = await ChatRoom.findById(roomId);
     return room.participants;
+  }
+
+  // ==============================
+  // CALL MANAGEMENT HELPERS
+  // ==============================
+
+  handleLeaveCall(userId, roomId) {
+    const call = this.activeCalls.get(roomId);
+    if (!call) {
+      console.log(` No active call found in room ${roomId}`);
+      return;
+    }
+
+    // Remove user from participants
+    call.participants.delete(userId);
+    const participantCount = call.participants.size;
+
+    console.log(`User ${userId} left call in room ${roomId} - ${participantCount} participant(s) remaining`);
+
+    this.io.to(`room:${roomId}`).emit('user-left-call', {
+      userId: userId,
+      remainingParticipants: Array.from(call.participants),
+      participantCount: participantCount
+    });
+
+    if (participantCount === 0) {
+      this.activeCalls.delete(roomId);
+      
+      this.io.to(`room:${roomId}`).emit('call-ended', {
+        reason: 'All participants have left the call',
+        endedAt: new Date()
+      });
+      
+      console.log(`📞 Call ended in room: ${roomId} - All participants left`);
+    } else {
+      this.io.to(`room:${roomId}`).emit('call-state', {
+        participants: Array.from(call.participants),
+        participantCount: participantCount,
+        callType: call.callType,
+        active: true,
+        startedAt: call.startedAt
+      });
+    }
+  }
+
+  broadcastCallState(roomId) {
+    const call = this.activeCalls.get(roomId);
+    if (!call) return;
+
+    this.io.to(`room:${roomId}`).emit('call-state', {
+      participants: Array.from(call.participants),
+      participantCount: call.participants.size,
+      callType: call.callType,
+      active: true,
+      startedAt: call.startedAt
+    });
+  }
+
+  getCallParticipants(roomId) {
+    const call = this.activeCalls.get(roomId);
+    return call ? Array.from(call.participants) : [];
+  }
+
+  isUserInCall(userId, roomId) {
+    const call = this.activeCalls.get(roomId);
+    return call ? call.participants.has(userId) : false;
   }
 }
 
