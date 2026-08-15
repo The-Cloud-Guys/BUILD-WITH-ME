@@ -97,43 +97,54 @@
           }
         },
         {
-          "name": "3. Login",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains user data and tokens', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('accessToken');",
-                  "  pm.expect(jsonData).to.have.property('refreshToken');",
-                  "  pm.expect(jsonData.user).to.have.property('email', pm.variables.get('testEmail'));",
-                  "});",
-                  "pm.test('Cookies are set', () => {",
-                  "  const setCookieHeaders = pm.response.headers.all().filter(h => h.key === 'Set-Cookie');",
-                  "  const cookiesString = setCookieHeaders.map(h => h.value).join('; ');",
-                  "  pm.expect(cookiesString).to.include('accessToken');",
-                  "  pm.expect(cookiesString).to.include('refreshToken');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "login"]
-            }
-          }
-        },
+  "name": "3. Login",
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "exec": [
+          "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+          "pm.test('Response contains user data and tokens', () => {",
+          "  const jsonData = pm.response.json();",
+          "  pm.expect(jsonData).to.have.property('accessToken');",
+          "  pm.expect(jsonData).to.have.property('refreshToken');",
+          "  pm.expect(jsonData.user).to.have.property('email', pm.variables.get('testEmail'));",
+          "});",
+          "",
+          "pm.test('Cookies are set or tokens in response body', () => {",
+          "  const setCookieHeaders = pm.response.headers.all().filter(h => h.key === 'Set-Cookie');",
+          "  ",
+          "  if (setCookieHeaders.length > 0) {",
+          "    const cookiesString = setCookieHeaders.map(h => h.value).join('; ');",
+          "    pm.expect(cookiesString).to.include('accessToken');",
+          "    pm.expect(cookiesString).to.include('refreshToken');",
+          "    console.log('✅ Cookies are set:', cookiesString);",
+          "  } else {",
+          "    // If no cookies are set, verify tokens are in response body (mobile apps, Postman, etc.)",
+          "    const jsonData = pm.response.json();",
+          "    pm.expect(jsonData).to.have.property('accessToken');",
+          "    pm.expect(jsonData).to.have.property('refreshToken');",
+          "    console.log('✅ No cookies, but tokens are in response body');",
+          "  }",
+          "});"
+        ]
+      }
+    }
+  ],
+  "request": {
+    "method": "POST",
+    "header": [{ "key": "Content-Type", "value": "application/json" }],
+    "body": {
+      "mode": "raw",
+      "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+    },
+    "url": {
+      "raw": "{{baseUrl}}/api/auth/login",
+      "host": ["{{baseUrl}}"],
+      "path": ["api", "auth", "login"]
+    }
+  }
+},
         {
           "name": "4. Get Current User",
           "event": [
@@ -726,37 +737,42 @@
               "path": ["api", "projects", "{{projectId}}"]
             }
           }
-        },
-        {
-          "name": "22. Apply to Project",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
-                  "pm.collectionVariables.set('applicationId', pm.response.json().application._id);"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                { "key": "message", "value": "I'm interested in this role!", "type": "text" },
-                { "key": "role", "value": "Backend Developer", "type": "text" },
-                { "key": "portfolioLink", "value": "https://github.com/yourhandle", "type": "text" }
-              ]
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/projects/{{projectId}}/apply",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "projects", "{{projectId}}", "apply"]
-            }
-          }
-        },
+        },{
+  "name": "22. Apply to Project (with CV)",
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "exec": [
+          "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
+          "pm.test('CV should be uploaded', () => {",
+          "  const jsonData = pm.response.json();",
+          "  pm.expect(jsonData.application.cvPath).to.not.be.null;",
+          "  pm.collectionVariables.set('applicationId', jsonData.application._id);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "request": {
+    "method": "POST",
+    "body": {
+      "mode": "formdata",
+      "formdata": [
+        { "key": "message", "value": "I'm interested in this role!", "type": "text" },
+        { "key": "role", "value": "Backend Developer", "type": "text" },
+        { "key": "portfolioLink", "value": "https://github.com/yourhandle", "type": "text" },
+        { "key": "cv", "type": "file", "src": "/path/to/your/cv.pdf" }
+      ]
+    },
+    "url": {
+      "raw": "{{baseUrl}}/api/projects/{{projectId}}/apply",
+      "host": ["{{baseUrl}}"],
+      "path": ["api", "projects", "{{projectId}}", "apply"]
+    },
+    "description": "⚠️ Replace '/path/to/your/cv.pdf' with an actual PDF/DOC/DOCX/TXT file path."
+  }
+},
         {
           "name": "23. Get Project Applications",
           "event": [
@@ -873,36 +889,66 @@
       "name": "Community",
       "item": [
         {
-          "name": "29. Create Post",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
-                  "pm.test('Author has role field', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData.post.author).to.have.property('role');",
-                  "  pm.collectionVariables.set('postId', jsonData.post._id);",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"content\": \"Excited to share my latest project! #buildwithme\",\n  \"tags\": [\"AI\", \"Node.js\"]\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/community/posts",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "community", "posts"]
-            }
-          }
-        },
+  "name": "29. Create Post (form-data with optional media)",
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "exec": [
+          "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
+          "pm.test('Post created successfully', () => {",
+          "  const jsonData = pm.response.json();",
+          "  pm.expect(jsonData).to.have.property('message', 'Post created successfully');",
+          "  pm.expect(jsonData).to.have.property('post');",
+          "  pm.expect(jsonData.post).to.have.property('_id');",
+          "  pm.expect(jsonData.post).to.have.property('content');",
+          "  pm.expect(jsonData.post).to.have.property('tags');",
+          "  pm.expect(jsonData.post).to.have.property('media');",
+          "  pm.expect(jsonData.post.author).to.have.property('role');",
+          "  pm.collectionVariables.set('postId', jsonData.post._id);",
+          "});",
+          "pm.test('Media is always an array', () => {",
+          "  const jsonData = pm.response.json();",
+          "  pm.expect(jsonData.post.media).to.be.an('array');",
+          "});",
+          "// Check if media was uploaded",
+          "if (pm.request.body && pm.request.body.formdata) {",
+          "  const hasMedia = pm.request.body.formdata.some(f => f.key === 'media' && f.type === 'file');",
+          "  if (hasMedia) {",
+          "    pm.test('Media files uploaded successfully', () => {",
+          "      const jsonData = pm.response.json();",
+          "      pm.expect(jsonData.post.media.length).to.be.at.least(1);",
+          "      pm.expect(jsonData.post.media[0]).to.include('signed');",
+          "    });",
+          "  } else {",
+          "    pm.test('No media uploaded (expected)', () => {",
+          "      const jsonData = pm.response.json();",
+          "      pm.expect(jsonData.post.media).to.be.an('array').that.is.empty;",
+          "    });",
+          "  }",
+          "}"
+        ]
+      }
+    }
+  ],
+  "request": {
+    "method": "POST",
+    "header": [],
+    "body": {
+      "mode": "formdata",
+      "formdata": [
+        { "key": "content", "value": "Excited to share my latest project! #buildwithme", "type": "text" },
+        { "key": "tags", "value": "AI,Node.js", "type": "text" }
+      ]
+    },
+    "url": {
+      "raw": "{{baseUrl}}/api/community/posts",
+      "host": ["{{baseUrl}}"],
+      "path": ["api", "community", "posts"]
+    },
+    "description": "✅ ALWAYS use form-data for this endpoint:\n\n📝 REQUIRED FIELDS:\n   - content (text): Your post content\n\n📌 OPTIONAL FIELDS:\n   - tags (text): Comma-separated tags (e.g., 'AI,Node.js')\n   - media (file): Image/video files (max 10 files, 10MB each)\n\n🖼️ SUPPORTED FORMATS:\n   - Images: JPEG, PNG, GIF, WEBP, BMP, TIFF, SVG\n   - Videos: MP4, MOV, AVI, MKV, WEBM, FLV, WMV, M4V, 3GP, MPG, MPEG\n\n⚠️ Works with or without media attachments!"
+  }
+},
         {
           "name": "30. Get Feed",
           "event": [

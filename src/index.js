@@ -5,6 +5,7 @@ const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 const helmet = require('helmet');
 const path = require('path');
+const { createServer } = require('http');
 
 const connectDB = require('./db');
 const authRoutes = require('./routes/auth.routes');
@@ -14,6 +15,9 @@ const projectRoutes = require('./routes/project.routes');
 const notificationRoutes = require('./routes/notification.routes');
 const communityRoutes = require('./routes/community.routes');
 const applicationRoutes = require('./routes/application.routes');
+const chatRoutes = require('./routes/chat.routes');
+
+const SocketManager = require('./socket');
 
 dotenv.config();
 connectDB();
@@ -24,13 +28,13 @@ app.set('trust proxy', 1);
 
 // =============================
 // Helper Route (Development Only)
-// Placed BEFORE helmet() to avoid CSP blocking external scripts.
 // =============================
 if (process.env.NODE_ENV !== 'production') {
   app.get('/firebase-token', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'firebase-token.html'));
   });
 }
+
 // =============================
 // Security & Global Middleware
 // =============================
@@ -46,16 +50,24 @@ app.use(
 
 app.use(
   express.json({
-    limit: '10mb',
+    limit: '50mb',
   })
 );
 
 app.use(
   express.urlencoded({
     extended: true,
-    limit: '10mb',
+    limit: '50mb',
   })
 );
+
+// Debug middleware (remove in production)
+app.use((req, res, next) => {
+  console.log(' Body:', req.body);
+  console.log(' Files:', req.files);
+  console.log(' Headers:', req.headers);
+  next();
+});
 
 app.use(cookieParser());
 
@@ -69,6 +81,9 @@ app.get('/', (req, res) => {
   });
 });
 
+// =============================
+// Routes
+// =============================
 app.use('/api/auth', authRoutes);
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/profile', profileRoutes);
@@ -76,8 +91,7 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/community', communityRoutes);
 app.use('/api/applications', applicationRoutes);
-
-
+app.use('/api/chat', chatRoutes);
 
 // =============================
 // 404 Route Handler
@@ -101,7 +115,9 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5050;
-
-app.listen(PORT, () => {
+const server = createServer(app);
+const socketManager = new SocketManager(server);
+console.log(' Socket.io initialized');
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

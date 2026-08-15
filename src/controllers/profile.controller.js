@@ -16,11 +16,8 @@ const processImage = async (buffer) => {
   try {
     const image = sharp(buffer);
     const metadata = await image.metadata();
-
     const maxSize = 500;
-
     let pipeline = image;
-
     if (metadata.width && metadata.height && (metadata.width > maxSize || metadata.height > maxSize)) {
       pipeline = pipeline.resize({
         width: maxSize,
@@ -28,7 +25,6 @@ const processImage = async (buffer) => {
         fit: 'inside',
       });
     }
-
     return await pipeline.jpeg({ quality: 80 }).toBuffer();
   } catch (error) {
     console.error('Image processing error:', error.message);
@@ -48,13 +44,10 @@ const getMyProfile = async (req, res) => {
     const user = await User.findById(req.user.id).select(
       '-password -refreshToken -emailVerificationOTP -resetPasswordToken -resetPasswordExpires'
     );
-
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-
     const userObj = user.toObject();
-
     if (userObj.profilePhoto && typeof userObj.profilePhoto === 'string' && userObj.profilePhoto.startsWith('users/')) {
       try {
         const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, userObj.profilePhoto);
@@ -63,7 +56,6 @@ const getMyProfile = async (req, res) => {
         console.error('Signed URL generation failed:', err.message);
       }
     }
-
     res.json({
       ...userObj,
       onboardingCompleted: user.onboardingCompleted,
@@ -74,15 +66,24 @@ const getMyProfile = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+// ✅ SINGLE createUserProfile function (removed duplicate)
 // @desc    Create full user profile (onboarding step 3) with optional photo
 // @route   POST /api/profile/userProfile
 // @access  Private
 const createUserProfile = async (req, res) => {
   try {
+    console.log('📝 Request body:', req.body);
+    console.log('📸 File:', req.file ? {
+      fieldname: req.file.fieldname,
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    } : 'No file');
+
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    // Extract fields from multipart body
     const { firstName, lastName, bio, externalLink } = req.body;
     const updateData = {};
 
@@ -98,6 +99,8 @@ const createUserProfile = async (req, res) => {
 
     // Handle profile photo if provided
     if (req.file) {
+      console.log('📸 Processing photo:', req.file.originalname);
+      
       const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
       if (!allowedMimeTypes.includes(req.file.mimetype)) {
         return res.status(400).json({ message: 'Only JPG, PNG, and WEBP images are allowed' });
@@ -153,6 +156,9 @@ const updateUserProfile = async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
+    console.log('📝 Update Request body:', req.body);
+    console.log('📸 Update File:', req.file ? req.file.originalname : 'No file');
+
     const { firstName, lastName, bio, skills, externalLink } = req.body;
     const updateData = {};
 
@@ -167,6 +173,8 @@ const updateUserProfile = async (req, res) => {
     }
 
     if (req.file) {
+      console.log('📸 Processing update photo:', req.file.originalname);
+      
       const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
       if (!allowedMimeTypes.includes(req.file.mimetype)) {
         return res.status(400).json({ message: 'Only JPG, PNG, and WEBP images are allowed' });
@@ -198,7 +206,7 @@ const updateUserProfile = async (req, res) => {
       user: userObj,
     });
   } catch (error) {
-    console.error(error);
+    console.error('Error in updateUserProfile:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -209,13 +217,11 @@ const updateUserProfile = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const { firstName, lastName, bio, skills, externalLink } = req.body;
-
     const updateData = {};
 
     if (firstName !== undefined) updateData.firstName = firstName.trim();
     if (lastName !== undefined) updateData.lastName = lastName.trim();
     if (bio !== undefined) updateData.bio = bio.slice(0, 500);
-
     if (skills !== undefined) {
       let normalizedSkills = [];
       if (Array.isArray(skills)) {
@@ -225,7 +231,6 @@ const updateProfile = async (req, res) => {
       }
       updateData.skills = normalizedSkills;
     }
-
     if (externalLink !== undefined) updateData.externalLink = externalLink.trim();
 
     const user = await User.findByIdAndUpdate(req.user.id, updateData, {
@@ -238,7 +243,6 @@ const updateProfile = async (req, res) => {
     }
 
     const userObj = user.toObject();
-
     if (userObj.profilePhoto && typeof userObj.profilePhoto === 'string' && userObj.profilePhoto.startsWith('users/')) {
       try {
         const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, userObj.profilePhoto);
@@ -302,7 +306,6 @@ const uploadProfilePhoto = async (req, res) => {
     await user.save();
 
     const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, filePath);
-
     res.json({ message: 'Profile photo uploaded successfully', profilePhoto: signedUrl });
   } catch (error) {
     console.error(error);

@@ -27,7 +27,7 @@ const router = express.Router();
 router.use(protect);
 
 // Posts
-router.post('/posts', mediaUpload.array('media', 5), createPost);
+router.post('/posts', mediaUpload.array('media', 10), createPost);
 router.get('/feed', getFeed);
 router.get('/posts/:id', getPostById);
 router.put('/posts/:id', updatePost);

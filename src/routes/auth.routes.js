@@ -3,6 +3,7 @@ const {
   register,
   verifyEmail,
   resendVerificationOTP,
+  resendResetPasswordOTP,
   login,
   refreshToken,
   logout,
@@ -21,6 +22,7 @@ const router = express.Router();
 router.post('/register', authLimiter, register);
 router.post('/verify-email', verifyEmail);
 router.post('/resend-verification', resendVerificationOTP);
+router.post('/resend-reset-otp', resendResetPasswordOTP);
 router.post('/login', authLimiter, login);
 router.post('/refresh-token', refreshToken);
 router.post('/refresh-token', express.json(), refreshToken);

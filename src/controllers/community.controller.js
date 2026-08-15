@@ -17,7 +17,7 @@ const mediaUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp|mp4|mov|avi/;
+    const allowedTypes = /jpeg|jpg|png|gif|webp|bmp|tiff|svg|mp4|mov|avi|mkv|webm|flv|wmv|m4v|3gp|mpg|mpeg/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
     if (mimetype && extname) return cb(null, true);
@@ -25,17 +25,28 @@ const mediaUpload = multer({
   },
 });
 
-// Helper to upload multiple media files
 const uploadMedia = async (files, userId, postId) => {
   const urls = [];
+  const bucket = process.env.SUPABASE_BUCKET_COMMUNITY;
+  
   for (const file of files) {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const timestamp = Date.now();
-    const filePath = `posts/${userId}/${postId}/${timestamp}_${Math.random().toString(36).substring(7)}${ext}`;
-    await uploadFile(process.env.SUPABASE_BUCKET_COMMUNITY, filePath, file.buffer, file.mimetype);
-    const signedUrl = await getSignedUrl('community-media', filePath, 3600);
-    urls.push(signedUrl);
+    try {
+      const ext = path.extname(file.originalname).toLowerCase();
+      const timestamp = Date.now();
+      const randomString = Math.random().toString(36).substring(7);
+      const filePath = `posts/${userId}/${postId}/${timestamp}_${randomString}${ext}`;
+      
+      console.log(`Uploading: ${file.originalname} (${file.size} bytes) to ${filePath}`);
+      await uploadFile(bucket, filePath, file.buffer, file.mimetype);
+      const signedUrl = await getSignedUrl(bucket, filePath, 3600);
+      urls.push(signedUrl);
+      
+      console.log(`Uploaded: ${file.originalname}`);
+    } catch (error) {
+      console.error(`Failed to upload ${file.originalname}:`, error.message);
+    }
   }
+  
   return urls;
 };
 
@@ -48,11 +59,10 @@ const uploadMedia = async (files, userId, postId) => {
 // @access  Private
 const createPost = async (req, res) => {
   try {
-    // Normalize tags if sent as comma-separated string
     if (req.body.tags && typeof req.body.tags === 'string') {
       req.body.tags = req.body.tags.split(',').map(tag => tag.trim()).filter(Boolean);
     }
-    
+
     const { content, tags } = req.body;
     const { error } = require('../validation/community.validation').createPostValidation({ content, tags });
     if (error) return res.status(400).json({ message: error.details[0].message });
@@ -64,21 +74,30 @@ const createPost = async (req, res) => {
     });
 
     let mediaUrls = [];
-    if (req.files && req.files.length) {
+    if (req.files && req.files.length > 0) {
+      console.log(` Uploading ${req.files.length} media files...`);
       mediaUrls = await uploadMedia(req.files, req.user.id, post._id);
       post.media = mediaUrls;
       await post.save();
     }
 
-    const populatedPost = await Post.findById(post._id).populate('author', 'firstName lastName profilePhoto email');
-    // Convert profilePhoto to signed URL
+    const populatedPost = await Post.findById(post._id)
+      .populate('author', 'firstName lastName profilePhoto email role')
+      .lean();
+
     if (populatedPost.author.profilePhoto && populatedPost.author.profilePhoto.startsWith('users/')) {
-      populatedPost.author.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, populatedPost.author.profilePhoto);
+      populatedPost.author.profilePhoto = await getSignedUrl(
+        process.env.SUPABASE_BUCKET_AVATAR,
+        populatedPost.author.profilePhoto
+      );
     }
 
-    res.status(201).json({ message: 'Post created successfully', post: populatedPost });
+    res.status(201).json({ 
+      message: 'Post created successfully', 
+      post: populatedPost 
+    });
   } catch (error) {
-    console.error(error);
+    console.error('Error in createPost:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -86,6 +105,7 @@ const createPost = async (req, res) => {
 // @desc    Get feed (recent posts, paginated)
 // @route   GET /api/community/feed
 // @access  Private (or public? We'll keep private to show personalized feed later)
+// In community.controller.js - FIXED getFeed
 const getFeed = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -93,41 +113,46 @@ const getFeed = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const posts = await Post.find()
-      .populate('author', 'firstName lastName profilePhoto email')
+      .populate('author', 'firstName lastName profilePhoto email role')
       .sort('-createdAt')
       .skip(skip)
       .limit(limit)
       .lean();
 
-    // Check if current user has liked each post
     const userId = req.user.id;
-    for (let post of posts) {
+
+    const validPosts = posts.filter(post => post.author !== null);
+
+    for (let post of validPosts) {
       const liked = await Like.findOne({ user: userId, targetType: 'Post', targetId: post._id });
       post.isLiked = !!liked;
 
       const saved = await Save.findOne({ user: userId, post: post._id });
       post.isSaved = !!saved;
 
-      // Convert author profile photo to signed URL
-      if (post.author.profilePhoto && post.author.profilePhoto.startsWith('users/')) {
-        post.author.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, post.author.profilePhoto);
+      if (post.author && post.author.profilePhoto && post.author.profilePhoto.startsWith('users/')) {
+        try {
+          post.author.profilePhoto = await getSignedUrl(
+            process.env.SUPABASE_BUCKET_AVATAR,
+            post.author.profilePhoto
+          );
+        } catch (err) {
+          console.error('Failed to generate signed URL for profile photo:', err.message);
+          // Keep the original value if signed URL fails
+        }
       }
-      
-      // Generate signed URLs for media only if they are paths (not full URLs)
-      if (post.media && post.media.length) {
+
+      if (post.media && post.media.length > 0) {
         const signedMedia = [];
         for (const mediaItem of post.media) {
-          // If it's already a full URL (starts with http), keep it as is
           if (mediaItem.startsWith('http://') || mediaItem.startsWith('https://')) {
             signedMedia.push(mediaItem);
           } else {
-            // Otherwise, treat it as a path and generate a signed URL
             try {
               const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_COMMUNITY, mediaItem, 3600);
               signedMedia.push(signedUrl);
             } catch (err) {
               console.error('Failed to generate signed URL for media:', mediaItem, err.message);
-              // If signed URL fails, keep the original path
               signedMedia.push(mediaItem);
             }
           }
@@ -139,7 +164,7 @@ const getFeed = async (req, res) => {
     const total = await Post.countDocuments();
 
     res.json({
-      posts,
+      posts: validPosts,
       totalPages: Math.ceil(total / limit),
       currentPage: page,
       total,

@@ -6,16 +6,20 @@ const { createNotification } = require('../services/notification.service');
 const multer = require('multer');
 const path = require('path');
 
-// Configure multer for CV upload (memory storage)
 const cvUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /pdf|doc|docx/;
+    console.log(' CV File received:', file.originalname, file.mimetype);
+    const allowedTypes = /pdf|doc|docx|txt/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
+    
+    console.log('   Extname check:', extname);
+    console.log('   Mimetype check:', mimetype);
+    
     if (mimetype && extname) return cb(null, true);
-    cb(new Error('Only PDF, DOC, DOCX files are allowed'));
+    cb(new Error('Only PDF, DOC, DOCX, and TXT files are allowed'));
   },
 });
 
@@ -410,9 +414,6 @@ const deleteProject = async (req, res) => {
 // APPLICATIONS
 // ==============================
 
-// @desc    Apply to a project (with CV)
-// @route   POST /api/projects/:id/apply
-// @access  Private
 const applyToProject = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
@@ -451,9 +452,19 @@ const applyToProject = async (req, res) => {
       relatedApplication: application._id,
     });
 
+    // Convert to object and generate signed URL (like profile photo)
+    const appObj = application.toObject();
+    if (appObj.cvPath) {
+      appObj.cvUrl = await getSignedUrl(
+        process.env.SUPABASE_BUCKET_RESUMES,
+        appObj.cvPath,
+        3600 // 1 hour expiry (same as profile photos)
+      );
+    }
+
     res.status(201).json({
       message: `Application sent to ${project.title}`,
-      application,
+      application: appObj,
     });
   } catch (error) {
     console.error(error);
@@ -464,9 +475,6 @@ const applyToProject = async (req, res) => {
   }
 };
 
-// @desc    Get project applications (owner only)
-// @route   GET /api/projects/:id/applications
-// @access  Private
 const getProjectApplications = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
@@ -483,13 +491,23 @@ const getProjectApplications = async (req, res) => {
       .sort('-createdAt')
       .lean();
 
-    // Generate signed URLs for CVs and profile photos
+    // Generate signed URLs for CVs and profile photos (same pattern)
     for (let app of applications) {
+      // ✅ Generate CV URL (like profile photo)
       if (app.cvPath) {
-        app.cvUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_RESUMES, app.cvPath, 3600);
+        app.cvUrl = await getSignedUrl(
+          process.env.SUPABASE_BUCKET_RESUMES,
+          app.cvPath,
+          3600
+        );
       }
+      // Generate profile photo URL
       if (app.applicant?.profilePhoto && app.applicant.profilePhoto.startsWith('users/')) {
-        app.applicant.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, app.applicant.profilePhoto);
+        app.applicant.profilePhoto = await getSignedUrl(
+          process.env.SUPABASE_BUCKET_AVATAR,
+          app.applicant.profilePhoto,
+          3600
+        );
       }
     }
 
@@ -501,7 +519,11 @@ const getProjectApplications = async (req, res) => {
 
     for (let member of teamMembers) {
       if (member.profilePhoto && member.profilePhoto.startsWith('users/')) {
-        member.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, member.profilePhoto);
+        member.profilePhoto = await getSignedUrl(
+          process.env.SUPABASE_BUCKET_AVATAR,
+          member.profilePhoto,
+          3600
+        );
       }
     }
 
@@ -783,8 +805,22 @@ const getApplicationDetails = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
+    // Generate signed URL for CV (like profile photo)
     if (application.cvPath) {
-      application.cvUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_RESUMES, application.cvPath, 3600);
+      application.cvUrl = await getSignedUrl(
+        process.env.SUPABASE_BUCKET_RESUMES,
+        application.cvPath,
+        3600
+      );
+    }
+
+    // Generate signed URL for applicant profile photo
+    if (application.applicant?.profilePhoto && application.applicant.profilePhoto.startsWith('users/')) {
+      application.applicant.profilePhoto = await getSignedUrl(
+        process.env.SUPABASE_BUCKET_AVATAR,
+        application.applicant.profilePhoto,
+        3600
+      );
     }
 
     res.json(application);
