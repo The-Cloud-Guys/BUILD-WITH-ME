@@ -30,321 +30,368 @@
   ],
   "item": [
     {
-      "name": "Authentication",
-      "item": [
+  "name": "Authentication",
+  "item": [
+    {
+      "name": "1. Register User",
+      "event": [
         {
-          "name": "1. Register User",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
-                  "pm.test('Response contains message and email', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('message').that.includes('Registration successful');",
-                  "  pm.expect(jsonData).to.have.property('email', pm.variables.get('testEmail'));",
-                  "});",
-                  "console.log('✅ Registration successful. Set variable \"verificationOtp\" from email/terminal.');"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/register",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "register"]
-            }
-          }
-        },
-        {
-          "name": "2. Verify Email OTP",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains accessToken and refreshToken', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('accessToken');",
-                  "  pm.expect(jsonData).to.have.property('refreshToken');",
-                  "  pm.expect(jsonData.user).to.have.property('email', pm.variables.get('testEmail'));",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{verificationOtp}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/verify-email",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "verify-email"]
-            }
-          }
-        },
-        {
-          "name": "3. Login",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response contains user data and tokens', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('accessToken');",
-                  "  pm.expect(jsonData).to.have.property('refreshToken');",
-                  "  pm.expect(jsonData.user).to.have.property('email', pm.variables.get('testEmail'));",
-                  "});",
-                  "pm.test('Cookies are set or tokens in response body', () => {",
-                  "  const setCookieHeaders = pm.response.headers.all().filter(h => h.key === 'Set-Cookie');",
-                  "  if (setCookieHeaders.length > 0) {",
-                  "    const cookiesString = setCookieHeaders.map(h => h.value).join('; ');",
-                  "    pm.expect(cookiesString).to.include('accessToken');",
-                  "    pm.expect(cookiesString).to.include('refreshToken');",
-                  "    console.log('✅ Cookies are set');",
-                  "  } else {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.expect(jsonData).to.have.property('accessToken');",
-                  "    pm.expect(jsonData).to.have.property('refreshToken');",
-                  "    console.log('✅ No cookies, but tokens in body');",
-                  "  }",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "login"]
-            }
-          }
-        },
-        {
-          "name": "4. Get Current User",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Returns user profile without password', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('email', pm.variables.get('testEmail'));",
-                  "  pm.expect(jsonData).to.not.have.property('password');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "me"]
-            }
-          }
-        },
-        {
-          "name": "5. Refresh Token",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Returns new tokens', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('accessToken');",
-                  "  pm.expect(jsonData).to.have.property('refreshToken');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/refresh-token",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "refresh-token"]
-            }
-          }
-        },
-        {
-          "name": "6. Logout",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Logout success', () => {",
-                  "  pm.expect(pm.response.json()).to.have.property('message', 'Logged out');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/logout",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "logout"]
-            }
-          }
-        },
-        {
-          "name": "7. Forgot Password",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "console.log('✅ Set variable \"resetOtp\" from email/terminal.');"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/forgot-password",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "forgot-password"]
-            }
-          }
-        },
-        {
-          "name": "8. Verify Reset OTP",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Returns resetToken', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('resetToken');",
-                  "  pm.collectionVariables.set('resetToken', jsonData.resetToken);",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{resetOtp}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/verify-reset-otp",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "verify-reset-otp"]
-            }
-          }
-        },
-        {
-          "name": "9. Reset Password",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Password reset successful', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('accessToken');",
-                  "  pm.expect(jsonData).to.have.property('user');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"newPassword\": \"{{newPassword}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/reset-password",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "reset-password"]
-            }
-          }
-        },
-        {
-          "name": "10. Firebase Auth",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Returns tokens and user', () => {",
-                  "  const jsonData = pm.response.json();",
-                  "  pm.expect(jsonData).to.have.property('accessToken');",
-                  "  pm.expect(jsonData).to.have.property('isProfileCompleted');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"idToken\": \"{{firebaseIdToken}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/firebase",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "firebase"]
-            }
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
+              "pm.test('Response contains message and email', () => {",
+              "  const jsonData = pm.response.json();",
+              "  pm.expect(jsonData).to.have.property('message').that.includes('Registration successful');",
+              "  pm.expect(jsonData).to.have.property('email', pm.variables.get('testEmail'));",
+              "});",
+              "console.log('✅ Registration successful. Set variable \"verificationOtp\" from email/terminal.');"
+            ]
           }
         }
-      ]
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/register",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "register"]
+        }
+      }
     },
+    {
+      "name": "2. Verify Email OTP",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Response contains accessToken and refreshToken', () => {",
+              "  const jsonData = pm.response.json();",
+              "  pm.expect(jsonData).to.have.property('accessToken');",
+              "  pm.expect(jsonData).to.have.property('refreshToken');",
+              "  pm.expect(jsonData.user).to.have.property('email', pm.variables.get('testEmail'));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{verificationOtp}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/verify-email",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "verify-email"]
+        }
+      }
+    },
+    {
+      "name": "3. Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Response contains user data and tokens', () => {",
+              "  const jsonData = pm.response.json();",
+              "  pm.expect(jsonData).to.have.property('accessToken');",
+              "  pm.expect(jsonData).to.have.property('refreshToken');",
+              "  pm.expect(jsonData.user).to.have.property('email', pm.variables.get('testEmail'));",
+              "});",
+              "pm.test('Cookies are set or tokens in response body', () => {",
+              "  const setCookieHeaders = pm.response.headers.all().filter(h => h.key === 'Set-Cookie');",
+              "  if (setCookieHeaders.length > 0) {",
+              "    const cookiesString = setCookieHeaders.map(h => h.value).join('; ');",
+              "    pm.expect(cookiesString).to.include('accessToken');",
+              "    pm.expect(cookiesString).to.include('refreshToken');",
+              "  } else {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('accessToken');",
+              "    pm.expect(jsonData).to.have.property('refreshToken');",
+              "  }",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "4. Get Current User",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/me",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "me"]
+        }
+      }
+    },
+    {
+      "name": "5. Refresh Token",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Returns new tokens', () => {",
+              "  const jsonData = pm.response.json();",
+              "  pm.expect(jsonData).to.have.property('accessToken');",
+              "  pm.expect(jsonData).to.have.property('refreshToken');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/refresh-token",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "refresh-token"]
+        }
+      }
+    },
+    {
+      "name": "6. Logout",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Logout success', () => {",
+              "  pm.expect(pm.response.json()).to.have.property('message', 'Logged out');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/logout",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "logout"]
+        }
+      }
+    },
+    {
+      "name": "7. Forgot Password",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "console.log('✅ Set variable \"resetOtp\" from email/terminal.');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/forgot-password",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "forgot-password"]
+        }
+      }
+    },
+    {
+      "name": "7.5. Resend Verification OTP",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Response confirms OTP sent', () => {",
+              "  const jsonData = pm.response.json();",
+              "  pm.expect(jsonData).to.have.property('message', 'New OTP sent to your email.');",
+              "});",
+              "console.log('✅ New verification OTP sent. Check your email.');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/resend-verification",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "resend-verification"]
+        },
+        "description": "⚠️ Only works for unverified emails."
+      }
+    },
+    {
+      "name": "7.6. Resend Reset Password OTP",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Response confirms OTP sent', () => {",
+              "  const jsonData = pm.response.json();",
+              "  pm.expect(jsonData).to.have.property('message', 'If that email exists, we have sent a reset OTP.');",
+              "});",
+              "console.log('✅ Reset OTP sent. Check your email.');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/resend-reset-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "resend-reset-otp"]
+        },
+        "description": "⚠️ For security, always returns same message whether email exists or not."
+      }
+    },
+    {
+      "name": "8. Verify Reset OTP",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Returns resetToken', () => {",
+              "  const jsonData = pm.response.json();",
+              "  pm.expect(jsonData).to.have.property('resetToken');",
+              "  pm.collectionVariables.set('resetToken', jsonData.resetToken);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{resetOtp}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/verify-reset-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "verify-reset-otp"]
+        }
+      }
+    },
+    {
+      "name": "9. Reset Password",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Password reset successful', () => {",
+              "  const jsonData = pm.response.json();",
+              "  pm.expect(jsonData).to.have.property('accessToken');",
+              "  pm.expect(jsonData).to.have.property('user');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"newPassword\": \"{{newPassword}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/reset-password",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "reset-password"]
+        }
+      }
+    },
+    {
+      "name": "10. Firebase Auth",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Returns tokens and user', () => {",
+              "  const jsonData = pm.response.json();",
+              "  pm.expect(jsonData).to.have.property('accessToken');",
+              "  pm.expect(jsonData).to.have.property('isProfileCompleted');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"idToken\": \"{{firebaseIdToken}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/firebase",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "firebase"]
+        }
+      }
+    }
+  ]
+},
     {
       "name": "Onboarding",
       "item": [
