@@ -30,373 +30,386 @@
   ],
   "item": [
     {
-  "name": "Authentication",
-  "item": [
-    {
-      "name": "1. Register User",
-      "event": [
+      "name": "Authentication",
+      "item": [
         {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
-              "pm.test('Response contains message and email', () => {",
-              "  const jsonData = pm.response.json();",
-              "  pm.expect(jsonData).to.have.property('message').that.includes('Registration successful');",
-              "  pm.expect(jsonData).to.have.property('email', pm.variables.get('testEmail'));",
-              "});",
-              "console.log('✅ Registration successful. Set variable \"verificationOtp\" from email/terminal.');"
-            ]
+          "name": "1. Register User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Response contains message and email', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('message').that.includes('Registration successful');",
+                  "  pm.expect(jsonData).to.have.property('email', pm.variables.get('testEmail'));",
+                  "});",
+                  "console.log('✅ Registration successful. Set variable \"verificationOtp\" from email/terminal.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "2. Verify Email OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contains accessToken and refreshToken', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('accessToken');",
+                  "  pm.expect(jsonData).to.have.property('refreshToken');",
+                  "  pm.expect(jsonData.user).to.have.property('email', pm.variables.get('testEmail'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{verificationOtp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-email",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "verify-email"]
+            }
+          }
+        },
+        {
+          "name": "3. Resend Verification OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response confirms OTP sent', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('message', 'New OTP sent to your email.');",
+                  "});",
+                  "console.log('✅ New verification OTP sent. Check your email.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/resend-verification",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "resend-verification"]
+            }
+          }
+        },
+        {
+          "name": "4. Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contains user data and tokens', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('accessToken');",
+                  "  pm.expect(jsonData).to.have.property('refreshToken');",
+                  "  pm.expect(jsonData.user).to.have.property('email', pm.variables.get('testEmail'));",
+                  "});",
+                  "pm.test('Cookies are set or tokens in response body', () => {",
+                  "  const setCookieHeaders = pm.response.headers.all().filter(h => h.key === 'Set-Cookie');",
+                  "  if (setCookieHeaders.length > 0) {",
+                  "    const cookiesString = setCookieHeaders.map(h => h.value).join('; ');",
+                  "    pm.expect(cookiesString).to.include('accessToken');",
+                  "    pm.expect(cookiesString).to.include('refreshToken');",
+                  "  } else {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('accessToken');",
+                  "    pm.expect(jsonData).to.have.property('refreshToken');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "5. Get Current User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns user profile without password', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('email', pm.variables.get('testEmail'));",
+                  "  pm.expect(jsonData).to.not.have.property('password');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "6. Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns new tokens', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('accessToken');",
+                  "  pm.expect(jsonData).to.have.property('refreshToken');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/refresh-token",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "refresh-token"]
+            }
+          }
+        },
+        {
+          "name": "7. Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Logout success', () => {",
+                  "  pm.expect(pm.response.json()).to.have.property('message', 'Logged out');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "logout"]
+            }
+          }
+        },
+        {
+          "name": "8. Forgot Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "console.log('✅ Set variable \"resetOtp\" from email/terminal.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "forgot-password"]
+            }
+          }
+        },
+        {
+          "name": "9. Verify Reset OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns resetToken', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('resetToken');",
+                  "  pm.collectionVariables.set('resetToken', jsonData.resetToken);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{resetOtp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-reset-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "verify-reset-otp"]
+            }
+          }
+        },
+        {
+          "name": "10. Resend Reset Password OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response confirms OTP sent', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('message', 'If that email exists, we have sent a reset OTP.');",
+                  "});",
+                  "console.log('✅ Reset OTP sent. Check your email.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/resend-reset-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "resend-reset-otp"]
+            }
+          }
+        },
+        {
+          "name": "11. Reset Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Password reset successful', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('accessToken');",
+                  "  pm.expect(jsonData).to.have.property('user');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"newPassword\": \"{{newPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "reset-password"]
+            }
+          }
+        },
+        {
+          "name": "12. Firebase Auth",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns tokens and user', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('accessToken');",
+                  "  pm.expect(jsonData).to.have.property('isProfileCompleted');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idToken\": \"{{firebaseIdToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/firebase",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "firebase"]
+            }
           }
         }
-      ],
-      "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/auth/register",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "auth", "register"]
-        }
-      }
+      ]
     },
-    {
-      "name": "2. Verify Email OTP",
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-              "pm.test('Response contains accessToken and refreshToken', () => {",
-              "  const jsonData = pm.response.json();",
-              "  pm.expect(jsonData).to.have.property('accessToken');",
-              "  pm.expect(jsonData).to.have.property('refreshToken');",
-              "  pm.expect(jsonData.user).to.have.property('email', pm.variables.get('testEmail'));",
-              "});"
-            ]
-          }
-        }
-      ],
-      "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{verificationOtp}}\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/auth/verify-email",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "auth", "verify-email"]
-        }
-      }
-    },
-    {
-      "name": "3. Login",
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-              "pm.test('Response contains user data and tokens', () => {",
-              "  const jsonData = pm.response.json();",
-              "  pm.expect(jsonData).to.have.property('accessToken');",
-              "  pm.expect(jsonData).to.have.property('refreshToken');",
-              "  pm.expect(jsonData.user).to.have.property('email', pm.variables.get('testEmail'));",
-              "});",
-              "pm.test('Cookies are set or tokens in response body', () => {",
-              "  const setCookieHeaders = pm.response.headers.all().filter(h => h.key === 'Set-Cookie');",
-              "  if (setCookieHeaders.length > 0) {",
-              "    const cookiesString = setCookieHeaders.map(h => h.value).join('; ');",
-              "    pm.expect(cookiesString).to.include('accessToken');",
-              "    pm.expect(cookiesString).to.include('refreshToken');",
-              "  } else {",
-              "    const jsonData = pm.response.json();",
-              "    pm.expect(jsonData).to.have.property('accessToken');",
-              "    pm.expect(jsonData).to.have.property('refreshToken');",
-              "  }",
-              "});"
-            ]
-          }
-        }
-      ],
-      "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/auth/login",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "auth", "login"]
-        }
-      }
-    },
-    {
-      "name": "4. Get Current User",
-      "request": {
-        "method": "GET",
-        "url": {
-          "raw": "{{baseUrl}}/api/auth/me",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "auth", "me"]
-        }
-      }
-    },
-    {
-      "name": "5. Refresh Token",
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-              "pm.test('Returns new tokens', () => {",
-              "  const jsonData = pm.response.json();",
-              "  pm.expect(jsonData).to.have.property('accessToken');",
-              "  pm.expect(jsonData).to.have.property('refreshToken');",
-              "});"
-            ]
-          }
-        }
-      ],
-      "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/auth/refresh-token",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "auth", "refresh-token"]
-        }
-      }
-    },
-    {
-      "name": "6. Logout",
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-              "pm.test('Logout success', () => {",
-              "  pm.expect(pm.response.json()).to.have.property('message', 'Logged out');",
-              "});"
-            ]
-          }
-        }
-      ],
-      "request": {
-        "method": "POST",
-        "url": {
-          "raw": "{{baseUrl}}/api/auth/logout",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "auth", "logout"]
-        }
-      }
-    },
-    {
-      "name": "7. Forgot Password",
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-              "console.log('✅ Set variable \"resetOtp\" from email/terminal.');"
-            ]
-          }
-        }
-      ],
-      "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/auth/forgot-password",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "auth", "forgot-password"]
-        }
-      }
-    },
-    {
-      "name": "7.5. Resend Verification OTP",
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-              "pm.test('Response confirms OTP sent', () => {",
-              "  const jsonData = pm.response.json();",
-              "  pm.expect(jsonData).to.have.property('message', 'New OTP sent to your email.');",
-              "});",
-              "console.log('✅ New verification OTP sent. Check your email.');"
-            ]
-          }
-        }
-      ],
-      "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/auth/resend-verification",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "auth", "resend-verification"]
-        },
-        "description": "⚠️ Only works for unverified emails."
-      }
-    },
-    {
-      "name": "7.6. Resend Reset Password OTP",
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-              "pm.test('Response confirms OTP sent', () => {",
-              "  const jsonData = pm.response.json();",
-              "  pm.expect(jsonData).to.have.property('message', 'If that email exists, we have sent a reset OTP.');",
-              "});",
-              "console.log('✅ Reset OTP sent. Check your email.');"
-            ]
-          }
-        }
-      ],
-      "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/auth/resend-reset-otp",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "auth", "resend-reset-otp"]
-        },
-        "description": "⚠️ For security, always returns same message whether email exists or not."
-      }
-    },
-    {
-      "name": "8. Verify Reset OTP",
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-              "pm.test('Returns resetToken', () => {",
-              "  const jsonData = pm.response.json();",
-              "  pm.expect(jsonData).to.have.property('resetToken');",
-              "  pm.collectionVariables.set('resetToken', jsonData.resetToken);",
-              "});"
-            ]
-          }
-        }
-      ],
-      "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{resetOtp}}\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/auth/verify-reset-otp",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "auth", "verify-reset-otp"]
-        }
-      }
-    },
-    {
-      "name": "9. Reset Password",
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-              "pm.test('Password reset successful', () => {",
-              "  const jsonData = pm.response.json();",
-              "  pm.expect(jsonData).to.have.property('accessToken');",
-              "  pm.expect(jsonData).to.have.property('user');",
-              "});"
-            ]
-          }
-        }
-      ],
-      "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"newPassword\": \"{{newPassword}}\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/auth/reset-password",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "auth", "reset-password"]
-        }
-      }
-    },
-    {
-      "name": "10. Firebase Auth",
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-              "pm.test('Returns tokens and user', () => {",
-              "  const jsonData = pm.response.json();",
-              "  pm.expect(jsonData).to.have.property('accessToken');",
-              "  pm.expect(jsonData).to.have.property('isProfileCompleted');",
-              "});"
-            ]
-          }
-        }
-      ],
-      "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"idToken\": \"{{firebaseIdToken}}\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/api/auth/firebase",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "auth", "firebase"]
-        }
-      }
-    }
-  ]
-},
     {
       "name": "Onboarding",
       "item": [
         {
-          "name": "11. Get Onboarding Status",
+          "name": "13. Get Onboarding Status",
           "request": {
             "method": "GET",
             "url": {
@@ -407,7 +420,7 @@
           }
         },
         {
-          "name": "12. Set Role",
+          "name": "14. Set Role",
           "event": [
             {
               "listen": "test",
@@ -437,7 +450,7 @@
           }
         },
         {
-          "name": "13. Set Skills",
+          "name": "15. Set Skills",
           "event": [
             {
               "listen": "test",
@@ -472,7 +485,7 @@
       "name": "Profile",
       "item": [
         {
-          "name": "14a. Create Full Profile with Photo",
+          "name": "16. Create Full Profile with Photo",
           "event": [
             {
               "listen": "test",
@@ -513,7 +526,7 @@
           }
         },
         {
-          "name": "14b. Update Profile (Flexible - Optional Fields)",
+          "name": "17. Update Profile (Flexible - Optional Fields)",
           "event": [
             {
               "listen": "test",
@@ -551,12 +564,11 @@
               "raw": "{{baseUrl}}/api/profile/userProfile",
               "host": ["{{baseUrl}}"],
               "path": ["api", "profile", "userProfile"]
-            },
-            "description": "✅ FLEXIBLE UPDATE: Only include the fields you want to update. All fields are optional.\n   - firstName (text): Update first name\n   - lastName (text): Update last name\n   - bio (text): Update bio\n   - skills (text): Comma-separated skills\n   - externalLink (text): Update portfolio link\n   - photo (file): Upload new profile photo (replaces existing)"
+            }
           }
         },
         {
-          "name": "14c. Update Bio Only (Partial Update)",
+          "name": "18. Update Bio Only (Partial Update)",
           "event": [
             {
               "listen": "test",
@@ -585,8 +597,7 @@
               "raw": "{{baseUrl}}/api/profile/userProfile",
               "host": ["{{baseUrl}}"],
               "path": ["api", "profile", "userProfile"]
-            },
-            "description": "✅ PARTIAL UPDATE: Only bio is updated. Other fields remain unchanged."
+            }
           }
         }
       ]
@@ -595,7 +606,7 @@
       "name": "Projects",
       "item": [
         {
-          "name": "15. Create Project",
+          "name": "19. Create Project",
           "event": [
             {
               "listen": "test",
@@ -627,7 +638,7 @@
           }
         },
         {
-          "name": "16. Get My Projects",
+          "name": "20. Get My Projects",
           "event": [
             {
               "listen": "test",
@@ -660,7 +671,7 @@
           }
         },
         {
-          "name": "17. Get All Projects",
+          "name": "21. Get All Projects",
           "event": [
             {
               "listen": "test",
@@ -697,7 +708,7 @@
           }
         },
         {
-          "name": "18. Get Project by ID",
+          "name": "22. Get Project by ID",
           "event": [
             {
               "listen": "test",
@@ -724,7 +735,7 @@
           }
         },
         {
-          "name": "19. Update Project All Fields",
+          "name": "23. Update Project All Fields",
           "event": [
             {
               "listen": "test",
@@ -759,7 +770,7 @@
           }
         },
         {
-          "name": "20. Update Project Status Only",
+          "name": "24. Update Project Status Only",
           "event": [
             {
               "listen": "test",
@@ -789,7 +800,7 @@
           }
         },
         {
-          "name": "21. Apply to Project (with CV)",
+          "name": "25. Apply to Project (with CV)",
           "event": [
             {
               "listen": "test",
@@ -820,12 +831,11 @@
               "raw": "{{baseUrl}}/api/projects/{{projectId}}/apply",
               "host": ["{{baseUrl}}"],
               "path": ["api", "projects", "{{projectId}}", "apply"]
-            },
-            "description": "⚠️ Replace '/path/to/your/cv.pdf' with an actual PDF/DOC/DOCX/TXT file path."
+            }
           }
         },
         {
-          "name": "22. Get Project Applications",
+          "name": "26. Get Project Applications",
           "event": [
             {
               "listen": "test",
@@ -854,7 +864,7 @@
           }
         },
         {
-          "name": "23. Accept Application",
+          "name": "27. Accept Application",
           "event": [
             {
               "listen": "test",
@@ -880,7 +890,7 @@
           }
         },
         {
-          "name": "24. Get Project Team",
+          "name": "28. Get Project Team",
           "request": {
             "method": "GET",
             "url": {
@@ -891,7 +901,7 @@
           }
         },
         {
-          "name": "25. Get Featured Projects",
+          "name": "29. Get Featured Projects",
           "request": {
             "method": "GET",
             "url": {
@@ -903,7 +913,7 @@
           }
         },
         {
-          "name": "26. Get Recommended Projects",
+          "name": "30. Get Recommended Projects",
           "event": [
             {
               "listen": "test",
@@ -924,7 +934,7 @@
           }
         },
         {
-          "name": "27. Delete Project",
+          "name": "31. Delete Project",
           "request": {
             "method": "DELETE",
             "url": {
@@ -940,7 +950,7 @@
       "name": "Community",
       "item": [
         {
-          "name": "28. Create Post (form-data with optional media)",
+          "name": "32. Create Post (form-data with optional media)",
           "event": [
             {
               "listen": "test",
@@ -995,12 +1005,11 @@
               "raw": "{{baseUrl}}/api/community/posts",
               "host": ["{{baseUrl}}"],
               "path": ["api", "community", "posts"]
-            },
-            "description": "✅ ALWAYS use form-data for this endpoint:\n\n📝 REQUIRED FIELDS:\n   - content (text): Your post content\n\n📌 OPTIONAL FIELDS:\n   - tags (text): Comma-separated tags (e.g., 'AI,Node.js')\n   - media (file): Image/video files (max 10 files, 10MB each)\n\n🖼️ SUPPORTED FORMATS:\n   - Images: JPEG, PNG, GIF, WEBP, BMP, TIFF, SVG\n   - Videos: MP4, MOV, AVI, MKV, WEBM, FLV, WMV, M4V, 3GP, MPG, MPEG\n\n⚠️ Works with or without media attachments!"
+            }
           }
         },
         {
-          "name": "29. Get Feed",
+          "name": "33. Get Feed",
           "event": [
             {
               "listen": "test",
@@ -1034,7 +1043,7 @@
           }
         },
         {
-          "name": "30. Get Single Post",
+          "name": "34. Get Single Post",
           "request": {
             "method": "GET",
             "url": {
@@ -1045,7 +1054,7 @@
           }
         },
         {
-          "name": "31. Like Post",
+          "name": "35. Like Post",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -1061,7 +1070,7 @@
           }
         },
         {
-          "name": "32. Add Comment",
+          "name": "36. Add Comment",
           "event": [
             {
               "listen": "test",
@@ -1088,7 +1097,7 @@
           }
         },
         {
-          "name": "33. Get Comments",
+          "name": "37. Get Comments",
           "request": {
             "method": "GET",
             "url": {
@@ -1099,7 +1108,7 @@
           }
         },
         {
-          "name": "34. Save Post",
+          "name": "38. Save Post",
           "request": {
             "method": "POST",
             "url": {
@@ -1110,7 +1119,7 @@
           }
         },
         {
-          "name": "35. Get Saved Posts",
+          "name": "39. Get Saved Posts",
           "request": {
             "method": "GET",
             "url": {
@@ -1121,7 +1130,7 @@
           }
         },
         {
-          "name": "36. Follow User",
+          "name": "40. Follow User",
           "request": {
             "method": "POST",
             "url": {
@@ -1132,7 +1141,7 @@
           }
         },
         {
-          "name": "37. Get Followers",
+          "name": "41. Get Followers",
           "request": {
             "method": "GET",
             "url": {
@@ -1143,7 +1152,7 @@
           }
         },
         {
-          "name": "38. Get Following",
+          "name": "42. Get Following",
           "request": {
             "method": "GET",
             "url": {
@@ -1154,7 +1163,7 @@
           }
         },
         {
-          "name": "39. Mute Post",
+          "name": "43. Mute Post",
           "request": {
             "method": "POST",
             "url": {
@@ -1165,7 +1174,7 @@
           }
         },
         {
-          "name": "40. Report Post",
+          "name": "44. Report Post",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -1181,7 +1190,7 @@
           }
         },
         {
-          "name": "41. Get User Profile Stats",
+          "name": "45. Get User Profile Stats",
           "event": [
             {
               "listen": "test",
@@ -1218,7 +1227,7 @@
       "name": "Notifications",
       "item": [
         {
-          "name": "42. Get All Notifications",
+          "name": "46. Get All Notifications",
           "event": [
             {
               "listen": "test",
@@ -1254,7 +1263,7 @@
           }
         },
         {
-          "name": "43. Get Project Notifications",
+          "name": "47. Get Project Notifications",
           "request": {
             "method": "GET",
             "url": {
@@ -1266,7 +1275,7 @@
           }
         },
         {
-          "name": "44. Get Social Notifications",
+          "name": "48. Get Social Notifications",
           "request": {
             "method": "GET",
             "url": {
@@ -1278,7 +1287,7 @@
           }
         },
         {
-          "name": "45. Get System Notifications",
+          "name": "49. Get System Notifications",
           "request": {
             "method": "GET",
             "url": {
@@ -1290,7 +1299,7 @@
           }
         },
         {
-          "name": "46. Mark Notification as Read",
+          "name": "50. Mark Notification as Read",
           "event": [
             {
               "listen": "test",
@@ -1314,7 +1323,7 @@
           }
         },
         {
-          "name": "47. Dismiss Notification",
+          "name": "51. Dismiss Notification",
           "event": [
             {
               "listen": "test",
@@ -1343,7 +1352,7 @@
       "name": "Chat and Messaging",
       "item": [
         {
-          "name": "48. Get All User Rooms",
+          "name": "52. Get All User Rooms",
           "event": [
             {
               "listen": "test",
@@ -1373,7 +1382,7 @@
           }
         },
         {
-          "name": "49. Get or Create Direct Message Room",
+          "name": "53. Get or Create Direct Message Room",
           "event": [
             {
               "listen": "test",
@@ -1400,7 +1409,7 @@
           }
         },
         {
-          "name": "50. Create Group",
+          "name": "54. Create Group",
           "event": [
             {
               "listen": "test",
@@ -1431,7 +1440,7 @@
           }
         },
         {
-          "name": "51. Get Room Messages",
+          "name": "55. Get Room Messages",
           "event": [
             {
               "listen": "test",
@@ -1462,7 +1471,7 @@
           }
         },
         {
-          "name": "52. Send Message",
+          "name": "56. Send Message",
           "event": [
             {
               "listen": "test",
@@ -1493,7 +1502,7 @@
           }
         },
         {
-          "name": "53. Initiate Call",
+          "name": "57. Initiate Call",
           "event": [
             {
               "listen": "test",
@@ -1525,7 +1534,7 @@
       "name": "Admin Dashboard",
       "item": [
         {
-          "name": "54. Get Dashboard Stats",
+          "name": "58. Get Dashboard Stats",
           "event": [
             {
               "listen": "test",
@@ -1556,7 +1565,7 @@
           }
         },
         {
-          "name": "55. Get Activities",
+          "name": "59. Get Activities",
           "event": [
             {
               "listen": "test",
@@ -1587,7 +1596,7 @@
           }
         },
         {
-          "name": "56. Get Reports",
+          "name": "60. Get Reports",
           "event": [
             {
               "listen": "test",
@@ -1621,7 +1630,7 @@
           }
         },
         {
-          "name": "57. Resolve Report",
+          "name": "61. Resolve Report",
           "event": [
             {
               "listen": "test",
@@ -1650,7 +1659,7 @@
           }
         },
         {
-          "name": "58. Get Admin Users",
+          "name": "62. Get Admin Users",
           "event": [
             {
               "listen": "test",
@@ -1675,7 +1684,7 @@
           }
         },
         {
-          "name": "59. Add Admin User",
+          "name": "63. Add Admin User",
           "event": [
             {
               "listen": "test",
@@ -1704,7 +1713,7 @@
           }
         },
         {
-          "name": "60. Remove Admin User",
+          "name": "64. Remove Admin User",
           "event": [
             {
               "listen": "test",
@@ -1733,7 +1742,7 @@
       "name": "Negative Tests",
       "item": [
         {
-          "name": "61. Register with Existing Email",
+          "name": "65. Register with Existing Email",
           "event": [
             {
               "listen": "test",
@@ -1762,7 +1771,7 @@
           }
         },
         {
-          "name": "62. Login with Unverified Email",
+          "name": "66. Login with Unverified Email",
           "event": [
             {
               "listen": "test",
@@ -1791,7 +1800,7 @@
           }
         },
         {
-          "name": "63. Access Protected Route Without Login",
+          "name": "67. Access Protected Route Without Login",
           "event": [
             {
               "listen": "test",
