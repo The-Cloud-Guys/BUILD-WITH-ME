@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Build With Me - Full API v6.0 (Unified Project Update + Flexible Profile)",
-    "description": "Complete test suite with unified project update, flexible profile updates (optional fields), Socket.io real-time features, and comprehensive test coverage.",
+    "name": "Build With Me - Full API v6.0 (Unified Project Update + Flexible Profile + Admin Dashboard)",
+    "description": "Complete test suite with unified project update, flexible profile updates, Socket.io real-time features, admin dashboard, reports management, and comprehensive test coverage.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -128,7 +128,7 @@
           }
         },
         {
-          "name": "4. Login",
+          "name": "4. Login (Sets Cookies)",
           "event": [
             {
               "listen": "test",
@@ -147,10 +147,12 @@
                   "    const cookiesString = setCookieHeaders.map(h => h.value).join('; ');",
                   "    pm.expect(cookiesString).to.include('accessToken');",
                   "    pm.expect(cookiesString).to.include('refreshToken');",
+                  "    console.log('✅ Cookies set in response');",
                   "  } else {",
                   "    const jsonData = pm.response.json();",
                   "    pm.expect(jsonData).to.have.property('accessToken');",
                   "    pm.expect(jsonData).to.have.property('refreshToken');",
+                  "    console.log('✅ Tokens in JSON body');",
                   "  }",
                   "});"
                 ]
@@ -194,7 +196,8 @@
               "raw": "{{baseUrl}}/api/auth/me",
               "host": ["{{baseUrl}}"],
               "path": ["api", "auth", "me"]
-            }
+            },
+            "description": "✅ Response includes profilePhoto with signed URL"
           }
         },
         {
@@ -229,7 +232,7 @@
           }
         },
         {
-          "name": "7. Logout",
+          "name": "7. Logout (Clears Cookies)",
           "event": [
             {
               "listen": "test",
@@ -1175,6 +1178,22 @@
         },
         {
           "name": "44. Report Post",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Report created successfully', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('message', 'Post reported. Our team will review it.');",
+                  "  pm.expect(jsonData).to.have.property('report');",
+                  "  pm.collectionVariables.set('reportId', jsonData.report.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -1596,7 +1615,7 @@
           }
         },
         {
-          "name": "60. Get Reports",
+          "name": "60. Get All Reports",
           "event": [
             {
               "listen": "test",
@@ -1630,20 +1649,61 @@
           }
         },
         {
-          "name": "61. Resolve Report",
+          "name": "61. Get Pending Reports",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/reports?status=pending",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "reports"],
+              "query": [{ "key": "status", "value": "pending" }]
+            }
+          }
+        },
+        {
+          "name": "62. Get Resolved Reports",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/reports?status=resolved",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "reports"],
+              "query": [{ "key": "status", "value": "resolved" }]
+            }
+          }
+        },
+        {
+          "name": "63. Resolve Report (Warning)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Report resolved', () => {",
-                  "  pm.expect(pm.response.json()).to.have.property('message', 'Report resolved successfully');",
+                  "pm.test('Report resolved with warning', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('message').that.includes('resolved successfully');",
                   "});"
                 ]
               }
             }
           ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"warning\",\n  \"resolution\": \"Warning issued for inappropriate behavior\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/reports/{{reportId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "reports", "{{reportId}}"]
+            }
+          }
+        },
+        {
+          "name": "64. Resolve Report (Suspend User)",
           "request": {
             "method": "PUT",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -1659,7 +1719,55 @@
           }
         },
         {
-          "name": "62. Get Admin Users",
+          "name": "65. Resolve Report (No Violation)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"none\",\n  \"resolution\": \"No violation found\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/reports/{{reportId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "reports", "{{reportId}}"]
+            }
+          }
+        },
+        {
+          "name": "66. Resolve Report (Delete Content)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"delete_content\",\n  \"resolution\": \"Content removed for violation\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/reports/{{reportId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "reports", "{{reportId}}"]
+            }
+          }
+        },
+        {
+          "name": "67. Resolve Report (Terminate Account)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"terminate_account\",\n  \"resolution\": \"Account terminated for repeated violations\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/reports/{{reportId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "reports", "{{reportId}}"]
+            }
+          }
+        },
+        {
+          "name": "68. Get Admin Users",
           "event": [
             {
               "listen": "test",
@@ -1684,7 +1792,7 @@
           }
         },
         {
-          "name": "63. Add Admin User",
+          "name": "69. Add Admin User",
           "event": [
             {
               "listen": "test",
@@ -1713,7 +1821,7 @@
           }
         },
         {
-          "name": "64. Remove Admin User",
+          "name": "70. Remove Admin User (Hard Delete)",
           "event": [
             {
               "listen": "test",
@@ -1735,6 +1843,32 @@
               "path": ["api", "admin", "admins", "{{targetUserId}}"]
             }
           }
+        },
+        {
+          "name": "71. Get Admin Actions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Admin actions returned', () => {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.expect(jsonData).to.have.property('actions');",
+                  "  pm.expect(jsonData).to.have.property('descriptions');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/actions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "actions"]
+            }
+          }
         }
       ]
     },
@@ -1742,7 +1876,7 @@
       "name": "Negative Tests",
       "item": [
         {
-          "name": "65. Register with Existing Email",
+          "name": "72. Register with Existing Email",
           "event": [
             {
               "listen": "test",
@@ -1771,7 +1905,7 @@
           }
         },
         {
-          "name": "66. Login with Unverified Email",
+          "name": "73. Login with Unverified Email",
           "event": [
             {
               "listen": "test",
@@ -1800,7 +1934,7 @@
           }
         },
         {
-          "name": "67. Access Protected Route Without Login",
+          "name": "74. Access Protected Route Without Login",
           "event": [
             {
               "listen": "test",

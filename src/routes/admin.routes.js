@@ -8,28 +8,28 @@ const {
   resolveReport,
   getAdminUsers,
   addAdmin,
-  removeAdmin
+  removeAdmin,
+  getAdminActions,
+  performAdminAction,
+  getPermissionPresets
 } = require('../controllers/admin.controller');
 
 const router = express.Router();
 
-// All admin routes require authentication and admin privileges
 router.use(protect);
 router.use(isAdmin);
 
-// Dashboard
 router.get('/dashboard', getDashboardStats);
-
-// Activities
 router.get('/activities', getActivities);
-
-// Reports
 router.get('/reports', getReports);
 router.put('/reports/:reportId', resolveReport);
 
-// Admin management
 router.get('/admins', getAdminUsers);
 router.post('/admins', addAdmin);
+router.get('/permissions', getPermissionPresets);
 router.delete('/admins/:userId', removeAdmin);
+
+router.get('/actions', getAdminActions);
+router.post('/action', performAdminAction);
 
 module.exports = router;

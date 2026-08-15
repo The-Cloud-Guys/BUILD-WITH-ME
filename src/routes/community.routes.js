@@ -17,6 +17,7 @@ const {
   getFollowing,
   mutePost,
   reportPost,
+  reportComment,
   getUserProfile,
   mediaUpload,
 } = require('../controllers/community.controller');
@@ -53,6 +54,7 @@ router.get('/following/:userId', getFollowing);
 // Mute & Report
 router.post('/mute/:postId', mutePost);
 router.post('/report/:postId', reportPost);
+router.post('/report/comment/:commentId', reportComment); 
 
 // Profile
 router.get('/profile/:userId', getUserProfile);

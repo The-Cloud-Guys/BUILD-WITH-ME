@@ -539,24 +539,108 @@ const mutePost = async (req, res) => {
 // REPORT POST
 // ==============================
 
-// @desc    Report a post
-// @route   POST /api/community/report/:postId
-// @access  Private
+// src/controllers/community.controller.js - FIXED reportPost
+
+// @desc Report a post
+// @route POST /api/community/report/:postId
+// @access Private
 const reportPost = async (req, res) => {
   try {
     const postId = req.params.postId;
     const { reason } = req.body;
-    const { error } = require('../validation/community.validation').reportValidation({ reason });
-    if (error) return res.status(400).json({ message: error.details[0].message });
+    
+    if (!reason || reason.trim().length === 0) {
+      return res.status(400).json({ message: 'Reason is required' });
+    }
 
-    const existing = await Report.findOne({ reporter: req.user.id, post: postId });
-    if (existing) return res.status(400).json({ message: 'You have already reported this post' });
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
 
-    await Report.create({ reporter: req.user.id, post: postId, reason: reason || '' });
-    res.json({ message: 'Post reported. Our team will review it.' });
+    const existing = await Report.findOne({ 
+      reporter: req.user.id, 
+      targetId: postId,
+      targetType: 'post'
+    });
+    
+    if (existing) {
+      return res.status(400).json({ message: 'You have already reported this post' });
+    }
+
+    const report = await Report.create({
+      reporter: req.user.id,
+      reportedUser: post.author,
+      targetType: 'post',
+      targetId: postId,
+      reason: reason.trim(),
+      status: 'pending',
+      severity: 'medium'
+    });
+
+    res.json({ 
+      message: 'Post reported. Our team will review it.',
+      report: {
+        id: report._id,
+        reportId: report.reportId,
+        status: report.status
+      }
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error in reportPost:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+
+// @desc Report a comment
+// @route POST /api/community/report/comment/:commentId
+// @access Private
+const reportComment = async (req, res) => {
+  try {
+    const commentId = req.params.commentId;
+    const { reason } = req.body;
+    
+    if (!reason || reason.trim().length === 0) {
+      return res.status(400).json({ message: 'Reason is required' });
+    }
+
+    const comment = await Comment.findById(commentId);
+    if (!comment) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+
+    const existing = await Report.findOne({ 
+      reporter: req.user.id, 
+      targetId: commentId,
+      targetType: 'comment'
+    });
+    
+    if (existing) {
+      return res.status(400).json({ message: 'You have already reported this comment' });
+    }
+
+    const report = await Report.create({
+      reporter: req.user.id,
+      reportedUser: comment.author,
+      targetType: 'comment',
+      targetId: commentId,
+      reason: reason.trim(),
+      status: 'pending',
+      severity: 'medium'
+    });
+
+    res.json({ 
+      message: 'Comment reported. Our team will review it.',
+      report: {
+        id: report._id,
+        reportId: report.reportId,
+        status: report.status
+      }
+    });
+  } catch (error) {
+    console.error('Error in reportComment:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
@@ -648,6 +732,7 @@ module.exports = {
   getFollowing,
   mutePost,
   reportPost,
+  reportComment,
   getUserProfile,
-  mediaUpload, // export for routes
+  mediaUpload,
 };
