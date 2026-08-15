@@ -1,6 +1,4 @@
 const mongoose = require('mongoose');
-
-// Admin Schema
 const adminSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
@@ -43,7 +41,6 @@ const adminSchema = new mongoose.Schema({
   }]
 }, { timestamps: true });
 
-// Report Schema
 const reportSchema = new mongoose.Schema({
   reporter: {
     type: mongoose.Schema.Types.ObjectId,
@@ -105,7 +102,6 @@ const reportSchema = new mongoose.Schema({
   }]
 }, { timestamps: true });
 
-// Auto-generate report ID
 reportSchema.pre('save', async function(next) {
   if (!this.reportId) {
     const count = await this.constructor.countDocuments();
@@ -114,7 +110,10 @@ reportSchema.pre('save', async function(next) {
   next();
 });
 
-// Audit Log Schema
+reportSchema.index({ reporter: 1, targetId: 1 }, { unique: true });
+reportSchema.index({ status: 1 });
+reportSchema.index({ reportId: 1 });
+
 const auditLogSchema = new mongoose.Schema({
   admin: {
     type: mongoose.Schema.Types.ObjectId,

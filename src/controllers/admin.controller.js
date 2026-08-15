@@ -4,6 +4,10 @@ const Project = require('../models/project.model');
 const Post = require('../models/post.model');
 const Notification = require('../models/notification.model');
 
+// ==============================
+// DASHBOARD
+// ==============================
+
 // @desc Admin Dashboard stats
 const getDashboardStats = async (req, res) => {
   try {
@@ -49,6 +53,10 @@ const getDashboardStats = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+// ==============================
+// ACTIVITIES
+// ==============================
 
 // @desc Get activities with filters
 const getActivities = async (req, res) => {
@@ -97,6 +105,10 @@ const getActivities = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+// ==============================
+// REPORTS
+// ==============================
 
 // @desc Get reports with filters
 const getReports = async (req, res) => {
@@ -183,6 +195,10 @@ const resolveReport = async (req, res) => {
   }
 };
 
+// ==============================
+// ADMIN MANAGEMENT
+// ==============================
+
 // @desc Get admin users
 const getAdminUsers = async (req, res) => {
   try {
@@ -264,7 +280,10 @@ const removeAdmin = async (req, res) => {
   }
 };
 
-// Helper functions
+// ==============================
+// HELPER FUNCTIONS
+// ==============================
+
 const getGreeting = () => {
   const hour = new Date().getHours();
   if (hour < 12) return 'Good morning';
@@ -302,6 +321,10 @@ const getTimeAgo = (date) => {
   if (days < 7) return `${days}d`;
   return `${Math.floor(days / 7)}w`;
 };
+
+// ==============================
+// EXPORTS
+// ==============================
 
 module.exports = {
   getDashboardStats,

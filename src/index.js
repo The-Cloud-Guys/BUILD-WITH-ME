@@ -16,6 +16,7 @@ const notificationRoutes = require('./routes/notification.routes');
 const communityRoutes = require('./routes/community.routes');
 const applicationRoutes = require('./routes/application.routes');
 const chatRoutes = require('./routes/chat.routes');
+const adminRoutes = require('./routes/admin.routes');
 
 const SocketManager = require('./socket');
 
@@ -92,6 +93,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/community', communityRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/admin', adminRoutes);
 
 // =============================
 // 404 Route Handler
