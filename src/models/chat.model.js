@@ -18,10 +18,10 @@ const messageSchema = new mongoose.Schema({
     maxlength: 2000,
     default: ''
   },
-  media: [{
-    type: String,
+  media: {
+    type: [String],
     default: []
-  }],
+  },
   mediaType: {
     type: String,
     enum: ['image', 'video', 'audio', 'file', null],
@@ -125,6 +125,16 @@ messageSchema.index({ room: 1, createdAt: -1 });
 messageSchema.index({ sender: 1, createdAt: -1 });
 chatRoomSchema.index({ participants: 1 });
 chatRoomSchema.index({ projectId: 1 });
+chatRoomSchema.index(
+  { projectId: 1, type: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      type: 'team_room',
+      projectId: { $type: 'objectId' },
+    },
+  }
+);
 unreadMessageSchema.index({ room: 1, user: 1 }, { unique: true });
 
 module.exports = {

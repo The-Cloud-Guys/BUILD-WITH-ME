@@ -4,6 +4,9 @@ const Application = require('../models/application.model');
 const User = require('../models/user.model');
 const { getSignedUrl } = require('../services/supabase.service');
 
+const isParticipant = (room, userId) =>
+  room.participants.some((participant) => participant.toString() === userId.toString());
+
 // @desc Get all rooms for a user
 const getUserRooms = async (req, res) => {
   try {
@@ -40,15 +43,29 @@ const getOrCreateDirectRoom = async (req, res) => {
     const { userId } = req.params;
     const currentUserId = req.user.id;
 
+    if (userId === currentUserId) {
+      return res.status(400).json({ message: 'Cannot create a direct room with yourself' });
+    }
+
+    const targetUser = await User.findOne({
+      _id: userId,
+      isActive: { $ne: false },
+      isSuspended: { $ne: true },
+    }).select('firstName lastName');
+    if (!targetUser) return res.status(404).json({ message: 'Target user not found' });
+
     let room = await ChatRoom.findOne({
       type: 'direct',
       participants: { $all: [currentUserId, userId], $size: 2 }
     });
 
     if (!room) {
-      const users = await User.find({ _id: { $in: [currentUserId, userId] } });
+      const currentUser = await User.findById(currentUserId).select('firstName lastName');
+      const orderedNames = [currentUser, targetUser]
+        .sort((a, b) => a._id.toString().localeCompare(b._id.toString()))
+        .map((user) => user.firstName || user.lastName || 'User');
       room = await ChatRoom.create({
-        name: `${users[0].firstName} & ${users[1].firstName}`,
+        name: orderedNames.join(' & '),
         type: 'direct',
         participants: [currentUserId, userId],
         admins: [currentUserId, userId]
@@ -71,7 +88,7 @@ const getRoomMessages = async (req, res) => {
 
     const room = await ChatRoom.findById(roomId);
     if (!room) return res.status(404).json({ message: 'Room not found' });
-    if (!room.participants.includes(userId)) {
+    if (!isParticipant(room, userId)) {
       return res.status(403).json({ message: 'Not a member of this room' });
     }
 
@@ -136,7 +153,7 @@ const sendMessage = async (req, res) => {
 
     const room = await ChatRoom.findById(roomId);
     if (!room) return res.status(404).json({ message: 'Room not found' });
-    if (!room.participants.includes(userId)) {
+    if (!isParticipant(room, userId)) {
       return res.status(403).json({ message: 'Not a member of this room' });
     }
 
@@ -193,8 +210,8 @@ const createGroup = async (req, res) => {
     if (projectId) {
       const project = await Project.findById(projectId);
       if (!project) return res.status(404).json({ message: 'Project not found' });
-      const isMember = project.owner.toString() === userId || 
-                       project.teamMembers.includes(userId);
+      const isMember = project.owner.toString() === userId ||
+                       project.teamMembers.some((member) => member.toString() === userId);
       if (!isMember) {
         return res.status(403).json({ message: 'You must be a member of this project' });
       }
@@ -238,7 +255,7 @@ const getCallRoom = async (req, res) => {
 
     const room = await ChatRoom.findById(roomId);
     if (!room) return res.status(404).json({ message: 'Room not found' });
-    if (!room.participants.includes(userId)) {
+    if (!isParticipant(room, userId)) {
       return res.status(403).json({ message: 'Not a member of this room' });
     }
 

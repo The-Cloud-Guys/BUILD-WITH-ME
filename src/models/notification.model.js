@@ -8,15 +8,17 @@ const notificationSchema = new mongoose.Schema(
       required: true,
     },
     type: {
-      type: String,
-      enum: [
-        'PROJECT_MATCH',      // new project matches user's skills
-        'APPLICATION_STATUS', // application accepted/rejected
-        'NEW_APPLICATION',    // project owner gets notified
-        'ROLE_FILLED',        // role has reached required count
-      ],
-      required: true,
-    },
+  type: String,
+  enum: [
+    'PROJECT_MATCH',
+    'APPLICATION_STATUS',
+    'NEW_APPLICATION',
+    'ROLE_FILLED',
+    'TEAM_REMOVED',
+    'SYSTEM_ANNOUNCEMENT',
+  ],
+  required: true,
+},
     message: {
       type: String,
       required: true,
@@ -35,6 +37,10 @@ const notificationSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    dismissed: {
+    type: Boolean,
+    default: false,
+},
   },
   {
     timestamps: true,

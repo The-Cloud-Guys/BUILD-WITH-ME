@@ -1,46 +1,82 @@
 const express = require('express');
 const { protect } = require('../middleware/auth.middleware');
+
 const {
   createProject,
   getProjects,
   getProjectById,
-  getFeaturedProjects,
-  getRecommendedProjects,
+  getProjectStats,
+  getUserProjects,
   updateProject,
   deleteProject,
   applyToProject,
   getProjectApplications,
-  updateApplicationStatus,
+  cvUpload,
+  getFeaturedProjects,
+  getRecommendedProjects,
   getProjectTeam,
   removeTeamMember,
-  cvUpload,
-  getUserProjects,
-  getProjectApplicationsFiltered,
-  getApplicationDetails
 } = require('../controllers/project.controller');
 
 const router = express.Router();
 
+// ============================================
+// PUBLIC STATIC ROUTES (BEFORE /:id)
+// ============================================
+
 router.get('/', getProjects);
-router.get('/featured', getFeaturedProjects);
+router.get('/stats', getProjectStats);
+router.get('/featured', getFeaturedProjects); // Restore when available
+
+// ============================================
+// PROTECTED STATIC ROUTES (BEFORE /:id)
+// ============================================
+
+router.get('/my', protect, getUserProjects);
+router.get('/recommended', protect, getRecommendedProjects); // Restore when available
+
+// ============================================
+// CREATE PROJECT
+// ============================================
+
+router.post('/', protect, createProject);
+
+// ============================================
+// APPLICATIONS
+// ============================================
+
+router.post('/:id/apply', protect, cvUpload.single('cv'), applyToProject);
+
+// Canonical endpoint
+router.get('/:id/applications', protect, getProjectApplications);
+
+// Temporary compatibility alias
+router.get('/:id/applications/filtered', protect, getProjectApplications);
+
+// ============================================
+// TEAM 
+// ============================================
+
 router.get('/:id/team', getProjectTeam);
+router.delete('/:id/team/:userId', protect, removeTeamMember);
 
-router.use(protect);
+// ============================================
+// UPDATE PROJECT
+// ============================================
 
-router.get('/my', getUserProjects);
-router.get('/recommended', getRecommendedProjects);
+// Canonical update
+router.put('/:id', protect, updateProject);
 
-router.post('/', createProject);
-router.delete('/:id', deleteProject);
+// ============================================
+// DELETE
+// ============================================
 
-router.post('/:id/apply', cvUpload.single('cv'), applyToProject);
-router.get('/:id/applications', getProjectApplications);
-router.get('/:id/applications/filtered', getProjectApplicationsFiltered);
-router.delete('/:id/team/:userId', removeTeamMember);
-router.put('/applications/:id', updateApplicationStatus);
-router.get('/applications/:id', getApplicationDetails);
+router.delete('/:id', protect, deleteProject);
+
+// ============================================
+// PUBLIC DYNAMIC ROUTE (KEEP LAST)
+// ============================================
 
 router.get('/:id', getProjectById);
-router.put('/:id', updateProject);
 
 module.exports = router;

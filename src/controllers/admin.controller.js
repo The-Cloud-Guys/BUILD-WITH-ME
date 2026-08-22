@@ -2,99 +2,354 @@ const { Admin, Report, AuditLog } = require('../models/admin.model');
 const User = require('../models/user.model');
 const Project = require('../models/project.model');
 const Post = require('../models/post.model');
+const Application = require('../models/application.model');
 const Notification = require('../models/notification.model');
+const Comment = require('../models/comment.model'); 
 const { createNotification } = require('../services/notification.service');
+const { getSignedUrl } = require('../services/supabase.service');
 
 // ==============================
-// DASHBOARD
+// HELPER FUNCTIONS
 // ==============================
 
-// @desc Admin Dashboard stats
-const getDashboardStats = async (req, res) => {
-  try {
-    const now = new Date();
-    const oneMonthAgo = new Date(now);
-    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-    const twoMonthsAgo = new Date(now);
-    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+};
 
-    const [totalUsers, totalProjects, totalReports, newRegistrations] = await Promise.all([
-      User.countDocuments(),
-      Project.countDocuments(),
-      Report.countDocuments({ status: 'pending' }),
-      User.countDocuments({ createdAt: { $gte: oneMonthAgo } })
-    ]);
+const getTimeAgo = (date) => {
+  const diff = new Date() - new Date(date);
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  const weeks = Math.floor(days / 7);
+  const months = Math.floor(days / 30);
+  const years = Math.floor(days / 365);
 
-    const previousRegistrations = await User.countDocuments({
-      createdAt: { $gte: twoMonthsAgo, $lt: oneMonthAgo }
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m`;
+  if (hours < 24) return `${hours}h`;
+  if (days < 7) return `${days}d`;
+  if (weeks < 4) return `${weeks}w`;
+  if (months < 12) return `${months}mo`;
+  return `${years}y`;
+};
+
+const getActivityByTimeRange = async (range) => {
+  const startYear = 2020;
+  const currentYear = new Date().getFullYear();
+  const data = [];
+
+  if (range === 'year') {
+    for (let year = startYear; year <= currentYear; year++) {
+      const start = new Date(year, 0, 1);
+      const end = new Date(year, 11, 31);
+      const count = await User.countDocuments({
+        createdAt: { $gte: start, $lte: end }
+      });
+      data.push({ label: year.toString(), value: count });
+    }
+  } else if (range === 'month') {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    for (let month = 0; month < 12; month++) {
+      const start = new Date(currentYear, month, 1);
+      const end = new Date(currentYear, month + 1, 0);
+      const count = await User.countDocuments({
+        createdAt: { $gte: start, $lte: end }
+      });
+      data.push({ label: `${months[month]} ${currentYear}`, value: count });
+    }
+  } else if (range === 'week') {
+    for (let week = 1; week <= 52; week++) {
+      const start = new Date(currentYear, 0, (week - 1) * 7 + 1);
+      const end = new Date(currentYear, 0, week * 7);
+      const count = await User.countDocuments({
+        createdAt: { $gte: start, $lte: end }
+      });
+      data.push({ label: `Week ${week}`, value: count });
+    }
+  }
+
+  return data;
+};
+
+const getProjectStats = async () => {
+  const stats = {
+    launched: await Project.countDocuments({ status: 'OPEN' }),
+    inProgress: await Project.countDocuments({ status: 'ACTIVE' }),
+    completed: await Project.countDocuments({ status: 'COMPLETED' })
+  };
+  
+  const total = stats.launched + stats.inProgress + stats.completed || 1;
+  
+  return {
+    ...stats,
+    percentages: {
+      launched: Math.round((stats.launched / total) * 100),
+      inProgress: Math.round((stats.inProgress / total) * 100),
+      completed: Math.round((stats.completed / total) * 100)
+    }
+  };
+};
+
+const getRecentActivities = async (userId, limit = 10) => {
+  const activities = [];
+
+  // Get projects created
+  const projects = await Project.find({ owner: userId })
+    .sort('-createdAt')
+    .limit(3)
+    .select('title createdAt');
+
+  projects.forEach(p => {
+    activities.push({
+      type: 'project_created',
+      title: `Created project "${p.title}"`,
+      createdAt: p.createdAt,
+      details: { projectTitle: p.title }
     });
+  });
 
-    const registrationGrowth = previousRegistrations > 0
-      ? ((newRegistrations - previousRegistrations) / previousRegistrations) * 100
-      : 0;
+  // Get projects joined
+  const joinedProjects = await Project.find({ teamMembers: userId })
+    .sort('-updatedAt')
+    .limit(3)
+    .select('title updatedAt');
 
-    const recentActivities = await getRecentActivities(5);
-
-    res.json({
-      greeting: getGreeting(),
-      stats: {
-        totalUsers,
-        activeUsers: totalUsers,
-        activeProjects: totalProjects,
-        totalProjects,
-        reportsFiled: totalReports,
-        newRegistrations,
-        registrationGrowth: Math.round(registrationGrowth),
-        platformGrowth: totalUsers * 1000
-      },
-      recentActivities
+  joinedProjects.forEach(p => {
+    activities.push({
+      type: 'project_joined',
+      title: `Joined project "${p.title}"`,
+      createdAt: p.updatedAt,
+      details: { projectTitle: p.title }
     });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+  });
+
+  // Get applications
+  const applications = await Application.find({ applicant: userId })
+    .populate('project', 'title')
+    .sort('-createdAt')
+    .limit(3);
+
+  applications.forEach(a => {
+    activities.push({
+      type: 'application_submitted',
+      title: `Applied to "${a.project?.title || 'Unknown'}"`,
+      createdAt: a.createdAt,
+      details: { projectTitle: a.project?.title || 'Unknown' }
+    });
+  });
+
+  activities.sort((a, b) => b.createdAt - a.createdAt);
+  return activities.slice(0, limit);
+};
+
+const getTargetModel = (targetType) => {
+  switch (targetType) {
+    case 'project': return Project;
+    case 'post': return Post;
+    case 'comment': return Comment;
+    default: return null;
   }
 };
 
 // ==============================
-// ACTIVITIES
+// DASHBOARD STATS
 // ==============================
 
-// @desc Get activities with filters
-const getActivities = async (req, res) => {
+const getDashboardStats = async (req, res) => {
   try {
-    const { type = 'all', search = '', page = 1, limit = 20 } = req.query;
+    const now = new Date();
+    const twentyFourHoursAgo = new Date(now);
+    twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
     
-    let filter = {};
-    if (type === 'user') filter.targetType = 'user';
-    else if (type === 'project') filter.targetType = 'project';
-    else if (type === 'report') filter.targetType = 'report';
+    const oneMonthAgo = new Date(now);
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
 
+    // Get counts
+    const [totalUsers, totalProjects, totalReports, activeUsers, pendingUsers] = await Promise.all([
+      User.countDocuments(),
+      Project.countDocuments(),
+      Report.countDocuments(),
+      User.countDocuments({ isActive: true, isSuspended: false }),
+      User.countDocuments({ emailVerified: true, onboardingStep: { $lt: 3 } })
+    ]);
+
+    // 24-hour changes
+    const [usersLast24h, projectsLast24h, reportsLast24h, registrationsLast24h] = await Promise.all([
+      User.countDocuments({ createdAt: { $gte: twentyFourHoursAgo } }),
+      Project.countDocuments({ createdAt: { $gte: twentyFourHoursAgo } }),
+      Report.countDocuments({ createdAt: { $gte: twentyFourHoursAgo } }),
+      User.countDocuments({ createdAt: { $gte: twentyFourHoursAgo } })
+    ]);
+
+    // Previous 24-hour for comparison
+    const previousDay = new Date(twentyFourHoursAgo);
+    previousDay.setDate(previousDay.getDate() - 1);
+    
+    const usersPrev24h = await User.countDocuments({ 
+      createdAt: { $gte: previousDay, $lt: twentyFourHoursAgo } 
+    });
+
+    // Calculate percentage changes
+    const calcPercentage = (current, previous) => {
+      if (previous === 0) return current > 0 ? 100 : 0;
+      return Math.round(((current - previous) / previous) * 100);
+    };
+
+    // Get user activity by year (for chart)
+    const userActivityByYear = await getActivityByTimeRange('year');
+    const userActivityByMonth = await getActivityByTimeRange('month');
+    const userActivityByWeek = await getActivityByTimeRange('week');
+
+    // Get project stats for donut chart
+    const projectStats = await getProjectStats();
+
+    // Get recent reports
+    const recentReports = await Report.find()
+      .populate('reporter', 'firstName lastName profilePhoto')
+      .populate('reportedUser', 'firstName lastName profilePhoto')
+      .sort('-createdAt')
+      .limit(5)
+      .lean();
+
+    const response = {
+      greeting: getGreeting(),
+      admin: {
+        id: req.user.id,
+        firstName: req.user.firstName,
+        lastName: req.user.lastName,
+        profilePhoto: req.user.profilePhoto ? await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, req.user.profilePhoto) : null
+      },
+      stats: {
+        totalUsers,
+        activeUsers,
+        pendingUsers,
+        suspendedUsers: totalUsers - activeUsers - pendingUsers,
+        totalProjects,
+        totalReports,
+        newRegistrations24h: registrationsLast24h,
+        usersGrowth: calcPercentage(usersLast24h, usersPrev24h),
+        projectsGrowth: calcPercentage(projectsLast24h, 0),
+        reportsGrowth: calcPercentage(reportsLast24h, 0),
+        registrationsGrowth: calcPercentage(registrationsLast24h, 0)
+      },
+      charts: {
+        userActivity: {
+          byYear: userActivityByYear,
+          byMonth: userActivityByMonth,
+          byWeek: userActivityByWeek
+        },
+        projectStats: projectStats
+      },
+      recentReports
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error('Dashboard stats error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// ==============================
+// USER MANAGEMENT (ADMIN)
+// ==============================
+
+const getUsers = async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      search = '', 
+      status = 'all', 
+      role = 'all',
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    const filter = {};
+
+    // Search
     if (search) {
       filter.$or = [
-        { action: { $regex: search, $options: 'i' } },
-        { 'details.reason': { $regex: search, $options: 'i' } }
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
       ];
     }
 
-    const activities = await AuditLog.find(filter)
-      .populate('admin', 'firstName lastName profilePhoto')
-      .sort('-createdAt')
+    // Status filter - FIX B
+    if (status !== 'all') {
+      switch (status) {
+        case 'active':
+          filter.isActive = true;
+          filter.isSuspended = false;
+          break;
+        case 'suspended':
+          filter.isSuspended = true;
+          break;
+        case 'terminated':
+          filter.isActive = false;
+          break;
+        case 'pending':
+          filter.emailVerified = true;
+          filter.onboardingStep = { $lt: 3 };
+          break;
+        default:
+          return res.status(400).json({ message: 'Invalid user status filter' });
+      }
+    }
+
+    // Role filter
+    if (role !== 'all') filter.role = role;
+
+    const users = await User.find(filter)
+      .select('-password -refreshToken -emailVerificationOTP -resetPasswordToken -resetPasswordExpires')
+      .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
       .skip((page - 1) * limit)
-      .limit(limit)
+      .limit(parseInt(limit))
       .lean();
 
-    const total = await AuditLog.countDocuments(filter);
-    
-    const counts = {
-      all: await AuditLog.countDocuments(),
-      user: await AuditLog.countDocuments({ targetType: 'user' }),
-      project: await AuditLog.countDocuments({ targetType: 'project' }),
-      report: await AuditLog.countDocuments({ targetType: 'report' })
-    };
+    // Get project counts and reports for each user
+    const usersWithDetails = await Promise.all(users.map(async (user) => {
+      const projectCount = await Project.countDocuments({
+        $or: [{ owner: user._id }, { teamMembers: user._id }]
+      });
+      
+      const reportCount = await Report.countDocuments({ reportedUser: user._id });
+      
+      const lastLogin = user.lastLogin || user.createdAt;
+
+      return {
+        ...user,
+        projectCount,
+        reportCount,
+        lastLogin,
+        profilePhoto: user.profilePhoto ? 
+          await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, user.profilePhoto) : 
+          null
+      };
+    }));
+
+    // Counts - FIX B (updated conditions)
+    const [total, active, suspended, pending] = await Promise.all([
+      User.countDocuments(filter),
+      User.countDocuments({ isActive: true, isSuspended: false }),
+      User.countDocuments({ isSuspended: true }),
+      User.countDocuments({ emailVerified: true, onboardingStep: { $lt: 3 } }),
+    ]);
 
     res.json({
-      activities,
-      counts,
+      users: usersWithDetails,
+      counts: {
+        total,
+        active,
+        suspended,
+        pending
+      },
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -102,16 +357,176 @@ const getActivities = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Get users error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+const getUserDetails = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const user = await User.findById(userId)
+      .select('-password -refreshToken -emailVerificationOTP -resetPasswordToken -resetPasswordExpires')
+      .lean();
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Get projects
+    const projects = await Project.find({
+      $or: [{ owner: userId }, { teamMembers: userId }]
+    })
+    .select('title stage status createdAt updatedAt roles')
+    .lean();
+
+    const collaborationsCount = await Project.countDocuments({ teamMembers: userId });
+
+    // Get posts count
+    const postsCount = await Post.countDocuments({ author: userId });
+
+    // Get recent activities
+    const recentActivities = await getRecentActivities(userId, 10);
+
+    // Get reports against user
+    const reports = await Report.find({ reportedUser: userId })
+      .populate('reporter', 'firstName lastName profilePhoto email')
+      .sort('-createdAt')
+      .lean();
+
+    res.json({
+      user: {
+        ...user,
+        profilePhoto: user.profilePhoto ? 
+          await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, user.profilePhoto) : 
+          null
+      },
+      stats: {
+        projects: projects.length,
+        collaborations: collaborationsCount,
+        posts: postsCount,
+        reports: reports.length
+      },
+      projects,
+      recentActivities: recentActivities.map(a => ({
+        ...a,
+        timeAgo: getTimeAgo(a.createdAt)
+      })),
+      reports
+    });
+  } catch (error) {
+    console.error('Get user details error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
 // ==============================
-// REPORTS
+// PROJECT MANAGEMENT (ADMIN)
 // ==============================
 
-// @desc Get reports with filters
+const getAdminProjects = async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      search = '', 
+      status = 'all', 
+      role = 'all',
+      stage = 'all'
+    } = req.query;
+
+    const filter = {};
+
+    // Search
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { techStack: { $regex: search, $options: 'i' } },
+        { requiredSkills: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Status filter
+    if (status !== 'all') {
+      if (status === 'open') filter.status = 'OPEN';
+      if (status === 'active') filter.status = 'ACTIVE';
+      if (status === 'closed') filter.status = 'CLOSED';
+      if (status === 'completed') filter.status = 'COMPLETED';
+      if (status === 'flagged') filter.isFlagged = true;
+    }
+
+    // Stage filter
+    if (stage !== 'all') filter.stage = stage;
+
+    // Role filter (check if any role matches)
+    if (role !== 'all') {
+      filter['roles.roleName'] = { $regex: role, $options: 'i' };
+    }
+
+    const projects = await Project.find(filter)
+      .populate('owner', 'firstName lastName profilePhoto email')
+      .populate('teamMembers', 'firstName lastName profilePhoto email role')
+      .sort('-createdAt')
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .lean();
+
+    // Get additional stats for each project
+    const projectsWithStats = await Promise.all(projects.map(async (project) => {
+      const applications = await Application.find({ project: project._id });
+      const openRoles = project.roles.filter(r => r.currentCount < r.requiredCount).length;
+      
+      return {
+        ...project,
+        owner: {
+          ...project.owner,
+          profilePhoto: project.owner?.profilePhoto ? 
+            await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, project.owner.profilePhoto) : 
+            null
+        },
+        teamMembers: await Promise.all(project.teamMembers.map(async (member) => ({
+          ...member,
+          profilePhoto: member.profilePhoto ? 
+            await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, member.profilePhoto) : 
+            null
+        }))),
+        stats: {
+          applications: applications.length,
+          openRoles,
+          teamCount: project.teamMembers.length
+        }
+      };
+    }));
+
+    const total = await Project.countDocuments(filter);
+    const totalActive = await Project.countDocuments({ status: 'OPEN' });
+    const totalCompleted = await Project.countDocuments({ status: 'COMPLETED' });
+    const totalFlagged = await Project.countDocuments({ isFlagged: true });
+
+    res.json({
+      projects: projectsWithStats,
+      counts: {
+        total,
+        active: totalActive,
+        completed: totalCompleted,
+        flagged: totalFlagged
+      },
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total
+      }
+    });
+  } catch (error) {
+    console.error('Get admin projects error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// ==============================
+// REPORT MANAGEMENT (ADMIN)
+// ==============================
+
 const getReports = async (req, res) => {
   try {
     const { status = 'all', search = '', page = 1, limit = 20 } = req.query;
@@ -155,13 +570,99 @@ const getReports = async (req, res) => {
   }
 };
 
-// src/controllers/admin.controller.js - FIXED resolveReport
+const getAdminReports = async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      search = '', 
+      status = 'all', 
+      type = 'all',
+      role = 'all'
+    } = req.query;
+
+    const filter = {};
+
+    // Search by ID, reason, reporter, reported user
+    if (search) {
+      filter.$or = [
+        { reportId: { $regex: search, $options: 'i' } },
+        { reason: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Status filter
+    if (status !== 'all') filter.status = status;
+
+    // Type filter - FIX C: use targetType instead of type
+    if (type !== 'all') filter.targetType = type;
+
+    // Role filter on reported user
+    if (role !== 'all') {
+      const users = await User.find({ role }).select('_id');
+      filter.reportedUser = { $in: users.map(u => u._id) };
+    }
+
+    const reports = await Report.find(filter)
+      .populate('reporter', 'firstName lastName profilePhoto email role')
+      .populate('reportedUser', 'firstName lastName profilePhoto email role')
+      .sort('-createdAt')
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .lean();
+
+    // Process reports with async operations using Promise.all
+    const reportsWithSignedUrls = await Promise.all(
+      reports.map(async (r) => ({
+        ...r,
+        timeAgo: getTimeAgo(r.createdAt),
+        reporter: {
+          ...r.reporter,
+          profilePhoto: r.reporter?.profilePhoto ? 
+            await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, r.reporter.profilePhoto) : 
+            null
+        },
+        reportedUser: {
+          ...r.reportedUser,
+          profilePhoto: r.reportedUser?.profilePhoto ? 
+            await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, r.reportedUser.profilePhoto) : 
+            null
+        }
+      }))
+    );
+
+    // Get counts for dashboard
+    const totalReports = await Report.countDocuments();
+    const openReports = await Report.countDocuments({ status: 'pending' });
+    const underReview = await Report.countDocuments({ status: 'reviewed' });
+    const resolved = await Report.countDocuments({ status: 'resolved' });
+
+    res.json({
+      reports: reportsWithSignedUrls,
+      counts: {
+        total: totalReports,
+        open: openReports,
+        underReview,
+        resolved
+      },
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: await Report.countDocuments(filter)
+      }
+    });
+  } catch (error) {
+    console.error('Get admin reports error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 const resolveReport = async (req, res) => {
   try {
     const { reportId } = req.params;
     const { action, resolution } = req.body;
 
-    // ✅ Validate action
+    // Validate action
     const validActions = ['none', 'warning', 'suspend', 'delete_content', 'terminate_account'];
     if (!validActions.includes(action)) {
       return res.status(400).json({ 
@@ -172,7 +673,7 @@ const resolveReport = async (req, res) => {
     const report = await Report.findById(reportId);
     if (!report) return res.status(404).json({ message: 'Report not found' });
 
-    // ✅ Check if user has permission for this action
+    // Check if user has permission for this action
     const requiresUserAction = ['suspend', 'terminate_account'].includes(action);
     if (requiresUserAction && !req.admin.permissions.includes('manage_users')) {
       return res.status(403).json({ message: 'Insufficient permissions to take this action on users' });
@@ -186,7 +687,7 @@ const resolveReport = async (req, res) => {
 
     await report.save();
 
-    // ✅ Log the action
+    // Log the action
     await AuditLog.create({
       admin: req.user.id,
       action: `resolved_report_${action}`,
@@ -195,7 +696,7 @@ const resolveReport = async (req, res) => {
       details: { reportId: report.reportId, action, resolution }
     });
 
-    // ✅ Handle user actions with notification
+    // Handle user actions with notification
     if (action === 'suspend' || action === 'terminate_account') {
       const user = await User.findById(report.reportedUser);
       if (user) {
@@ -213,7 +714,7 @@ const resolveReport = async (req, res) => {
         }
         await user.save();
 
-        // ✅ Send notification
+        // Send notification
         try {
           await createNotification({
             user: user._id,
@@ -224,12 +725,11 @@ const resolveReport = async (req, res) => {
           });
         } catch (notifError) {
           console.error('Failed to send notification:', notifError.message);
-          // Continue even if notification fails
         }
       }
     }
 
-    // ✅ If action is delete_content, delete the target
+    // If action is delete_content, delete the target
     if (action === 'delete_content') {
       const targetModel = getTargetModel(report.targetType);
       if (targetModel) {
@@ -247,26 +747,12 @@ const resolveReport = async (req, res) => {
   }
 };
 
-
-function getTargetModel(targetType) {
-  switch (targetType) {
-    case 'project': return Project;
-    case 'post': return Post;
-    case 'comment': return Comment;
-    default: return null;
-  }
-}
-
 // ==============================
 // ADMIN MANAGEMENT
 // ==============================
 
-// @desc Get admin users (all admins)
-// @route GET /api/admin/admins
-// @access Private (Admin only)
 const getAdminUsers = async (req, res) => {
   try {
-    // Get ALL admins (not just active ones)
     const admins = await Admin.find()
       .populate('user', 'firstName lastName profilePhoto email role')
       .populate('addedBy', 'firstName lastName')
@@ -280,14 +766,11 @@ const getAdminUsers = async (req, res) => {
   }
 };
 
-// @desc Add admin user
-// @route POST /api/admin/admins
-// @access Private (Super Admin only)
 const addAdmin = async (req, res) => {
   try {
     const { userId, role = 'admin', permissions = [] } = req.body;
 
-    //  Check if current user is super admin
+    // Check if current user is super admin
     const currentAdmin = await Admin.findOne({ user: req.user.id });
     if (currentAdmin.role !== 'super_admin') {
       return res.status(403).json({ 
@@ -300,7 +783,7 @@ const addAdmin = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    //  Check if user is already an admin (including soft-deleted)
+    // Check if user is already an admin
     const existing = await Admin.findOne({ user: userId });
     if (existing) {
       return res.status(400).json({ 
@@ -308,7 +791,7 @@ const addAdmin = async (req, res) => {
       });
     }
 
-    //  Validate permissions
+    // Validate permissions
     const validPermissions = [
       'manage_users',
       'manage_projects',
@@ -364,47 +847,21 @@ const addAdmin = async (req, res) => {
   }
 };
 
-// Helper: Get default permissions based on role
-const getDefaultPermissions = (role) => {
-  const defaults = {
-    super_admin: [
-      'manage_users',
-      'manage_projects',
-      'manage_reports',
-      'manage_admins',
-      'view_analytics',
-      'manage_settings',
-      'delete_content'
-    ],
-    admin: [
-      'manage_users',
-      'manage_projects',
-      'manage_reports',
-      'view_analytics',
-      'delete_content'
-    ],
-    moderator: [
-      'manage_reports',
-      'delete_content'
-    ]
-  };
-  return defaults[role] || defaults.admin;
-};
-
-// @desc Remove admin user (HARD DELETE)
-// @route DELETE /api/admin/admins/:userId
-// @access Private (Super Admin only)
 const removeAdmin = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    //  Find the admin
+    if (req.admin.role !== 'super_admin') {
+      return res.status(403).json({ message: 'Super admin access required' });
+    }
+
+    // Find the admin
     const admin = await Admin.findOne({ user: userId });
     if (!admin) {
       return res.status(404).json({ message: 'Admin not found' });
     }
 
-    //  Prevent removing the last super admin
+    // Prevent removing the last super admin
     if (admin.role === 'super_admin') {
       const superAdmins = await Admin.countDocuments({ role: 'super_admin' });
       if (superAdmins <= 1) {
@@ -414,14 +871,14 @@ const removeAdmin = async (req, res) => {
       }
     }
 
-    //  Prevent self-removal
+    // Prevent self-removal
     if (admin.user.toString() === req.user.id) {
       return res.status(400).json({ 
         message: 'You cannot remove yourself as admin' 
       });
     }
 
-    //  HARD DELETE - Remove the document completely
+    // HARD DELETE - Remove the document completely
     await Admin.findByIdAndDelete(admin._id);
 
     // Log the action
@@ -452,7 +909,35 @@ const removeAdmin = async (req, res) => {
   }
 };
 
-// src/controllers/admin.controller.js - ADD PERMISSION PRESETS
+const getDefaultPermissions = (role) => {
+  const defaults = {
+    super_admin: [
+      'manage_users',
+      'manage_projects',
+      'manage_reports',
+      'manage_admins',
+      'view_analytics',
+      'manage_settings',
+      'delete_content'
+    ],
+    admin: [
+      'manage_users',
+      'manage_projects',
+      'manage_reports',
+      'view_analytics',
+      'delete_content'
+    ],
+    moderator: [
+      'manage_reports',
+      'delete_content'
+    ]
+  };
+  return defaults[role] || defaults.admin;
+};
+
+// ==============================
+// ADMIN PERMISSIONS & ACTIONS
+// ==============================
 
 const PERMISSION_PRESETS = {
   SUPER_ADMIN: [
@@ -487,9 +972,6 @@ const PERMISSION_PRESETS = {
   ]
 };
 
-// @desc Get available permission presets
-// @route GET /api/admin/permissions
-// @access Private (Admin only)
 const getPermissionPresets = async (req, res) => {
   try {
     res.json({
@@ -511,49 +993,7 @@ const getPermissionPresets = async (req, res) => {
 };
 
 // ==============================
-// HELPER FUNCTIONS
-// ==============================
-
-const getGreeting = () => {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 17) return 'Good afternoon';
-  return 'Good evening';
-};
-
-const getRecentActivities = async (limit = 5) => {
-  const activities = await AuditLog.find()
-    .populate('admin', 'firstName lastName')
-    .sort('-createdAt')
-    .limit(limit)
-    .lean();
-
-  return activities.map(a => ({
-    action: a.action,
-    admin: a.admin ? `${a.admin.firstName} ${a.admin.lastName}` : 'System',
-    targetType: a.targetType,
-    targetId: a.targetId,
-    details: a.details,
-    timestamp: a.createdAt,
-    timeAgo: getTimeAgo(a.createdAt)
-  }));
-};
-
-const getTimeAgo = (date) => {
-  const diff = new Date() - new Date(date);
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes}m`;
-  if (hours < 24) return `${hours}h`;
-  if (days < 7) return `${days}d`;
-  return `${Math.floor(days / 7)}w`;
-};
-
-// ==============================
-// PRESET ADMIN ACTIONS
+// ADMIN ACTIONS
 // ==============================
 
 const ADMIN_ACTIONS = {
@@ -579,17 +1019,28 @@ const ADMIN_ACTIONS = {
     DELETE_POST: 'delete_post',
     DELETE_COMMENT: 'delete_comment',
     HIDE_POST: 'hide_post'
-  },
-  ADMIN: {
-    ADD: 'add_admin',
-    REMOVE: 'remove_admin',
-    CHANGE_PERMISSIONS: 'change_admin_permissions'
   }
 };
 
-// @desc Get available admin actions
-// @route GET /api/admin/actions
-// @access Private (Admin only)
+// FIX E: Permission mapping for each action
+const ACTION_PERMISSION = {
+  suspend_user: 'manage_users',
+  unsuspend_user: 'manage_users',
+  terminate_user: 'manage_users',
+  warn_user: 'manage_users',
+  view_user_details: 'manage_users',
+  delete_project: 'manage_projects',
+  hide_project: 'manage_projects',
+  unhide_project: 'manage_projects',
+  review_project: 'manage_projects',
+  resolve_report: 'manage_reports',
+  dismiss_report: 'manage_reports',
+  escalate_report: 'manage_reports',
+  delete_post: 'delete_content',
+  delete_comment: 'delete_content',
+  hide_post: 'delete_content',
+};
+
 const getAdminActions = async (req, res) => {
   try {
     res.json({
@@ -609,10 +1060,7 @@ const getAdminActions = async (req, res) => {
         escalate_report: 'Escalate a report to super admin',
         delete_post: 'Delete a community post',
         delete_comment: 'Delete a comment',
-        hide_post: 'Hide a post from public view',
-        add_admin: 'Add a new admin user',
-        remove_admin: 'Remove an admin user',
-        change_admin_permissions: 'Change admin user permissions'
+        hide_post: 'Hide a post from public view'
       }
     });
   } catch (error) {
@@ -621,25 +1069,27 @@ const getAdminActions = async (req, res) => {
   }
 };
 
-// @desc Perform admin action
-// @route POST /api/admin/action
-// @access Private (Admin only)
 const performAdminAction = async (req, res) => {
   try {
-    const { action, targetId, targetType, data } = req.body;
+    const { action, targetId, data } = req.body;
     
     // Validate action
     const allActions = Object.values(ADMIN_ACTIONS).flatMap(obj => Object.values(obj));
     if (!allActions.includes(action)) {
       return res.status(400).json({ message: 'Invalid admin action' });
     }
-    
-    // Check if admin has permission for this action
-    const hasPermission = req.admin.permissions.includes('manage_users') || 
-                         req.admin.permissions.includes('manage_projects') ||
-                         req.admin.permissions.includes('manage_reports');
-    
-    if (!hasPermission && req.admin.role !== 'super_admin') {
+
+    // FIX E: Check permission using ACTION_PERMISSION mapping
+    const requiredPermission = ACTION_PERMISSION[action];
+    if (!requiredPermission) {
+      return res.status(400).json({ message: 'Unsupported admin action' });
+    }
+
+    const authorized =
+      req.admin.role === 'super_admin' ||
+      req.admin.permissions.includes(requiredPermission);
+
+    if (!authorized) {
       return res.status(403).json({ message: 'Insufficient permissions for this action' });
     }
     
@@ -704,11 +1154,21 @@ const performAdminAction = async (req, res) => {
         return res.status(400).json({ message: 'Action not implemented yet' });
     }
     
+    const auditTargetType = action.endsWith('_user') || action === 'warn_user'
+      ? 'user'
+      : action.includes('project')
+        ? 'project'
+        : action.includes('report')
+          ? 'report'
+          : action.includes('comment')
+            ? 'comment'
+            : 'post';
+
     // Log the action
     await AuditLog.create({
       admin: req.user.id,
       action: action,
-      targetType: targetType || 'unknown',
+      targetType: auditTargetType,
       targetId: targetId,
       details: { action, data, result }
     });
@@ -736,7 +1196,6 @@ async function suspendUser(userId, adminId, data) {
   user.suspendDuration = data?.duration || '30 days';
   await user.save();
   
-  // Notify user
   await createNotification({
     user: userId,
     type: 'SYSTEM_ANNOUNCEMENT',
@@ -815,21 +1274,24 @@ async function deleteProject(projectId, adminId) {
   return { success: true, message: `Project "${project.title}" deleted successfully` };
 }
 
+// FIX D: Use isHidden instead of changing status
 async function hideProject(projectId, adminId) {
   const project = await Project.findById(projectId);
   if (!project) return { success: false, message: 'Project not found' };
-  
-  project.status = 'HIDDEN';
+
+  project.isHidden = true;
   await project.save();
+
   return { success: true, message: `Project "${project.title}" hidden successfully` };
 }
 
 async function unhideProject(projectId, adminId) {
   const project = await Project.findById(projectId);
   if (!project) return { success: false, message: 'Project not found' };
-  
-  project.status = 'OPEN';
+
+  project.isHidden = false;
   await project.save();
+
   return { success: true, message: `Project "${project.title}" unhidden successfully` };
 }
 
@@ -912,18 +1374,162 @@ async function hidePost(postId, adminId) {
 }
 
 // ==============================
+// ACTIVITY LOGS
+// ==============================
+
+const getActivities = async (req, res) => {
+  try {
+    const { type = 'all', search = '', page = 1, limit = 20 } = req.query;
+    
+    let filter = {};
+    if (type === 'user') filter.targetType = 'user';
+    else if (type === 'project') filter.targetType = 'project';
+    else if (type === 'report') filter.targetType = 'report';
+
+    if (search) {
+      filter.$or = [
+        { action: { $regex: search, $options: 'i' } },
+        { 'details.reason': { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const activities = await AuditLog.find(filter)
+      .populate('admin', 'firstName lastName profilePhoto')
+      .sort('-createdAt')
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+
+    const total = await AuditLog.countDocuments(filter);
+    
+    const counts = {
+      all: await AuditLog.countDocuments(),
+      user: await AuditLog.countDocuments({ targetType: 'user' }),
+      project: await AuditLog.countDocuments({ targetType: 'project' }),
+      report: await AuditLog.countDocuments({ targetType: 'report' })
+    };
+
+    res.json({
+      activities,
+      counts,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+const getAdminActivities = async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      search = '', 
+      type = 'all',
+      status = 'all',
+      role = 'all'
+    } = req.query;
+
+    const filter = {};
+
+    // Search
+    if (search) {
+      filter.$or = [
+        { action: { $regex: search, $options: 'i' } },
+        { 'details.reportId': { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Type filter
+    if (type !== 'all') filter.targetType = type;
+
+    const activities = await AuditLog.find(filter)
+      .populate('admin', 'firstName lastName profilePhoto email role')
+      .sort('-createdAt')
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .lean();
+
+    const activitiesWithDetails = await Promise.all(
+      activities.map(async (a) => ({
+        ...a,
+        logId: `ACT-${String(a._id).substring(0, 8).toUpperCase()}`,
+        timeAgo: getTimeAgo(a.createdAt),
+        admin: {
+          ...a.admin,
+          profilePhoto: a.admin?.profilePhoto ? 
+            await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, a.admin.profilePhoto) : 
+            null
+        }
+      }))
+    );
+
+    // Get counts
+    const totalActivities = await AuditLog.countDocuments();
+    const adminActions = await AuditLog.countDocuments({ 
+      action: { $in: ['add_admin', 'remove_admin', 'change_admin_permissions'] }
+    });
+    const reportReviewed = await AuditLog.countDocuments({ 
+      action: { $regex: 'resolved_report', $options: 'i' }
+    });
+    const suspendedUsers = await AuditLog.countDocuments({ 
+      action: { $in: ['suspend_user', 'terminate_user'] }
+    });
+
+    res.json({
+      activities: activitiesWithDetails,
+      counts: {
+        total: totalActivities,
+        adminActions,
+        reportReviewed,
+        suspendedUsers
+      },
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: await AuditLog.countDocuments(filter)
+      }
+    });
+  } catch (error) {
+    console.error('Get activities error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// ==============================
 // EXPORTS
 // ==============================
 
 module.exports = {
+  // Dashboard
   getDashboardStats,
-  getActivities,
+  
+  // User Management
+  getUsers,
+  getUserDetails,
+  
+  // Project Management (Admin)
+  getAdminProjects,
+  
+  // Report Management
   getReports,
+  getAdminReports,
   resolveReport,
+  
+  // Admin Management
   getAdminUsers,
   addAdmin,
   removeAdmin,
+  getPermissionPresets,
   getAdminActions,
   performAdminAction,
-  getPermissionPresets 
+  
+  // Activity Logs
+  getActivities,
+  getAdminActivities
 };

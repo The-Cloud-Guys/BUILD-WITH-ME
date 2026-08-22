@@ -14,7 +14,7 @@ const applicationSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      required: true, // the specific role name the applicant applies for
+      required: true,
     },
     message: {
       type: String,

@@ -27,6 +27,11 @@ const postSchema = new mongoose.Schema(
     commentCount: {
       type: Number,
       default: 0,
+      min: 0,
+    },
+    isHidden: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }

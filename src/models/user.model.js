@@ -50,11 +50,11 @@ const userSchema = new mongoose.Schema(
 
     // External link (GitHub / Portfolio / LinkedIn etc.)
     externalLink: {
-  type: String,
-  trim: true,
-  default: '',
-  // No validation – any string is allowed
-},
+      type: String,
+      trim: true,
+      default: '',
+      // No validation – any string is allowed
+    },
 
     // =========================
     // Role & Skills
@@ -68,6 +68,56 @@ const userSchema = new mongoose.Schema(
     skills: {
       type: [String],
       default: [],
+    },
+
+    // =========================
+    // Account Status
+    // =========================
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+
+    isSuspended: {
+      type: Boolean,
+      default: false,
+    },
+
+    suspendReason: {
+      type: String,
+      default: null,
+    },
+
+    suspendedAt: {
+      type: Date,
+      default: null,
+    },
+
+    suspendedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+
+    suspendDuration: {
+      type: String,
+      default: null,
+    },
+
+    terminatedAt: {
+      type: Date,
+      default: null,
+    },
+
+    terminatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+
+    terminationReason: {
+      type: String,
+      default: null,
     },
 
     // =========================
@@ -136,12 +186,20 @@ const userSchema = new mongoose.Schema(
       type: String,
       select: false,
     },
+
+    // =========================
+    // Last Login
+    // =========================
+    lastLogin: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 
 // Virtual: full name
@@ -149,20 +207,27 @@ userSchema.virtual('fullName').get(function () {
   return `${this.firstName} ${this.lastName}`.trim();
 });
 
-// NEW VIRTUAL: onboardingCompleted
+// Virtual: onboardingCompleted
 userSchema.virtual('onboardingCompleted').get(function () {
   return this.onboardingStep === 3;
 });
 
-// Hash password before saving
+// =========================
+// PASSWORD PRE-SAVE HOOK
+// =========================
 userSchema.pre('save', async function (next) {
+  // Only hash if password is modified
   if (!this.isModified('password')) return next();
+
+  if (this.$locals.passwordAlreadyHashed === true) {
+    return next();
+  }
+
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
   next();
 });
 
-// Compare password
 userSchema.methods.matchPassword = async function (enteredPassword) {
   return bcrypt.compare(enteredPassword, this.password);
 };

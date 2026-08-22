@@ -102,17 +102,24 @@ const reportSchema = new mongoose.Schema({
   }]
 }, { timestamps: true });
 
-reportSchema.pre('save', async function(next) {
+reportSchema.pre('save', async function (next) {
   if (!this.reportId) {
-    const count = await this.constructor.countDocuments();
-    this.reportId = `RPT-${String(count + 1).padStart(3, '0')}`;
+    this.reportId = `RPT-${this._id.toString().slice(-8).toUpperCase()}`;
   }
   next();
 });
 
-reportSchema.index({ reporter: 1, targetId: 1 }, { unique: true });
-reportSchema.index({ status: 1 });
-reportSchema.index({ reportId: 1 });
+reportSchema.index(
+  {
+    reporter: 1,
+    targetType: 1,
+    targetId: 1,
+  },
+  {
+    unique: true,
+  }
+);
+
 
 const auditLogSchema = new mongoose.Schema({
   admin: {

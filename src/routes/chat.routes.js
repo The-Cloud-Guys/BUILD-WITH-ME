@@ -1,6 +1,5 @@
 const express = require('express');
 const { protect } = require('../middleware/auth.middleware');
-const { upload } = require('../middleware/upload.middleware');
 const {
   getUserRooms,
   getRoomMessages,
@@ -26,7 +25,7 @@ router.post('/groups', createGroup);
 
 // Room routes
 router.get('/rooms/:roomId/messages', getRoomMessages);
-router.post('/rooms/:roomId/messages', upload.array('media', 5), sendMessage);
+router.post('/rooms/:roomId/messages', sendMessage);
 
 // Call routes
 router.get('/rooms/:roomId/call', getCallRoom);

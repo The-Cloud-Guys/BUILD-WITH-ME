@@ -73,19 +73,12 @@ const getMyProfile = async (req, res) => {
 // @access  Private
 const createUserProfile = async (req, res) => {
   try {
-    console.log('📝 Request body:', req.body);
-    console.log('📸 File:', req.file ? {
-      fieldname: req.file.fieldname,
-      originalname: req.file.originalname,
-      mimetype: req.file.mimetype,
-      size: req.file.size
-    } : 'No file');
-
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const { firstName, lastName, bio, externalLink } = req.body;
+    const { firstName, lastName, bio, skills, externalLink } = req.body;
     const updateData = {};
+    let oldPhotoToDelete = null;
 
     // Validate required fields
     if (!firstName || !lastName) {
@@ -96,32 +89,39 @@ const createUserProfile = async (req, res) => {
     if (lastName) updateData.lastName = lastName.trim();
     if (bio) updateData.bio = bio.slice(0, 500);
     if (externalLink) updateData.externalLink = externalLink.trim();
+    if (skills !== undefined) {
+      updateData.skills = Array.isArray(skills)
+        ? skills.map((skill) => skill.trim()).filter(Boolean)
+        : skills.split(',').map((skill) => skill.trim()).filter(Boolean);
+    }
 
     // Handle profile photo if provided
     if (req.file) {
-      console.log('📸 Processing photo:', req.file.originalname);
-      
       const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
       if (!allowedMimeTypes.includes(req.file.mimetype)) {
         return res.status(400).json({ message: 'Only JPG, PNG, and WEBP images are allowed' });
-      }
-
-      // Delete old photo if exists
-      if (user.profilePhoto && user.profilePhoto.startsWith('users/')) {
-        try {
-          await deleteFile(process.env.SUPABASE_BUCKET_AVATAR, user.profilePhoto);
-        } catch (err) { /* ignore */ }
       }
 
       const processedBuffer = await processImage(req.file.buffer);
       const filePath = generateProfilePhotoPath(user._id);
       await uploadFile(process.env.SUPABASE_BUCKET_AVATAR, filePath, processedBuffer, 'image/jpeg');
       updateData.profilePhoto = filePath;
+
+      if (user.profilePhoto && user.profilePhoto.startsWith('users/')) {
+        oldPhotoToDelete = user.profilePhoto;
+      }
     }
 
     // Update user
-    const updatedUser = await User.findByIdAndUpdate(req.user.id, updateData, { new: true })
+    const updatedUser = await User.findByIdAndUpdate(req.user.id, updateData, {
+      new: true,
+      runValidators: true,
+    })
       .select('-password -refreshToken -emailVerificationOTP -resetPasswordToken -resetPasswordExpires');
+
+    if (oldPhotoToDelete) {
+      await deleteFile(process.env.SUPABASE_BUCKET_AVATAR, oldPhotoToDelete);
+    }
 
     // Always set onboardingStep to 3 if not already
     if (updatedUser.onboardingStep < 3) {
@@ -156,11 +156,9 @@ const updateUserProfile = async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    console.log('📝 Update Request body:', req.body);
-    console.log('📸 Update File:', req.file ? req.file.originalname : 'No file');
-
     const { firstName, lastName, bio, skills, externalLink } = req.body;
     const updateData = {};
+    let oldPhotoToDelete = null;
 
     if (firstName !== undefined) updateData.firstName = firstName.trim();
     if (lastName !== undefined) updateData.lastName = lastName.trim();
@@ -168,30 +166,37 @@ const updateUserProfile = async (req, res) => {
     if (externalLink !== undefined) updateData.externalLink = externalLink.trim();
 
     if (skills !== undefined) {
-      let normalized = Array.isArray(skills) ? skills : skills.split(',').map(s => s.trim());
+      const normalized = Array.isArray(skills)
+        ? skills.map((skill) => skill.trim()).filter(Boolean)
+        : skills.split(',').map((skill) => skill.trim()).filter(Boolean);
       updateData.skills = normalized;
     }
 
     if (req.file) {
-      console.log('📸 Processing update photo:', req.file.originalname);
-      
       const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
       if (!allowedMimeTypes.includes(req.file.mimetype)) {
         return res.status(400).json({ message: 'Only JPG, PNG, and WEBP images are allowed' });
-      }
-
-      if (user.profilePhoto && user.profilePhoto.startsWith('users/')) {
-        await deleteFile(process.env.SUPABASE_BUCKET_AVATAR, user.profilePhoto);
       }
 
       const processedBuffer = await processImage(req.file.buffer);
       const filePath = generateProfilePhotoPath(user._id);
       await uploadFile(process.env.SUPABASE_BUCKET_AVATAR, filePath, processedBuffer, 'image/jpeg');
       updateData.profilePhoto = filePath;
+
+      if (user.profilePhoto && user.profilePhoto.startsWith('users/')) {
+        oldPhotoToDelete = user.profilePhoto;
+      }
     }
 
-    const updatedUser = await User.findByIdAndUpdate(req.user.id, updateData, { new: true })
+    const updatedUser = await User.findByIdAndUpdate(req.user.id, updateData, {
+      new: true,
+      runValidators: true,
+    })
       .select('-password -refreshToken -emailVerificationOTP -resetPasswordToken -resetPasswordExpires');
+
+    if (oldPhotoToDelete) {
+      await deleteFile(process.env.SUPABASE_BUCKET_AVATAR, oldPhotoToDelete);
+    }
 
     const userObj = updatedUser.toObject();
     if (userObj.profilePhoto && userObj.profilePhoto.startsWith('users/')) {
@@ -281,14 +286,6 @@ const uploadProfilePhoto = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    if (user.profilePhoto && typeof user.profilePhoto === 'string' && user.profilePhoto.startsWith('users/')) {
-      try {
-        await deleteFile(process.env.SUPABASE_BUCKET_AVATAR, user.profilePhoto);
-      } catch (err) {
-        console.warn('Could not delete old photo:', err.message);
-      }
-    }
-
     let processedBuffer;
     try {
       processedBuffer = await processImage(req.file.buffer);
@@ -302,8 +299,14 @@ const uploadProfilePhoto = async (req, res) => {
     const filePath = generateProfilePhotoPath(user._id);
     await uploadFile(process.env.SUPABASE_BUCKET_AVATAR, filePath, processedBuffer, 'image/jpeg');
 
+    const oldPhoto = user.profilePhoto;
+
     user.profilePhoto = filePath;
     await user.save();
+
+    if (oldPhoto && typeof oldPhoto === 'string' && oldPhoto.startsWith('users/')) {
+      await deleteFile(process.env.SUPABASE_BUCKET_AVATAR, oldPhoto);
+    }
 
     const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, filePath);
     res.json({ message: 'Profile photo uploaded successfully', profilePhoto: signedUrl });

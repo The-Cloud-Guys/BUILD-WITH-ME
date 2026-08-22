@@ -1,7 +1,9 @@
 const User = require('../models/user.model');
+const PendingRegistration = require('../models/pendingRegistration.model');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const axios = require('axios');
+const bcrypt = require('bcryptjs');
 
 const {
   registerValidation,
@@ -18,41 +20,44 @@ const { generateNumericOTP, hashOTP } = require('../utils/otp.util');
 const { getOnboardingStatus } = require('../utils/onboardingStatus');
 const { getSignedUrl } = require('../services/supabase.service');
 
+const {
+  issueTokenPair,
+  rotateRefreshToken,
+  revokeRefreshToken,
+  revokeAllUserSessions,
+} = require('../services/authSession.service');
+
 // ==============================
-// TOKEN HELPERS
+// COOKIE HELPER
 // ==============================
 
-const generateTokens = (user) => {
-  const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '5h',
+const setAuthCookies = (res, accessToken, refreshToken) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  const sharedOptions = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+    path: '/',
+  };
+
+  res.cookie('accessToken', accessToken, {
+    ...sharedOptions,
+    maxAge: 5 * 60 * 60 * 1000, // 5 hours
   });
 
-  const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_REFRESH_SECRET, {
-    expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+  res.cookie('refreshToken', refreshToken, {
+    ...sharedOptions,
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   });
-
-  return { accessToken, refreshToken };
-};
-
-const storeRefreshToken = async (userId, refreshToken) => {
-  const hashed = crypto.createHash('sha256').update(refreshToken).digest('hex');
-  await User.findByIdAndUpdate(userId, { refreshToken: hashed });
-};
-
-const verifyRefreshTokenFromDB = async (userId, refreshToken) => {
-  const user = await User.findById(userId).select('+refreshToken');
-  if (!user || !user.refreshToken) return false;
-
-  const hashed = crypto.createHash('sha256').update(refreshToken).digest('hex');
-  return hashed === user.refreshToken;
-};
-
-const clearRefreshToken = async (userId) => {
-  await User.findByIdAndUpdate(userId, { refreshToken: null });
 };
 
 // ==============================
-// EMAIL SETUP
+// TOKEN HELPERS (KEPT)
+// ==============================
+
+// ==============================
+// EMAIL SETUP (KEPT)
 // ==============================
 
 const sendEmail = async ({ email, subject, html }) => {
@@ -81,119 +86,175 @@ const sendEmail = async ({ email, subject, html }) => {
     throw new Error('Email sending failed');
   }
 };
+
 // ==============================
-// REGISTER
+// OTP HELPERS (KEPT - for password reset)
+// ==============================
+
+const OTP = require('../models/otp.model');
+
+const generateAndStoreOTP = async (email, type) => {
+  // Delete any existing OTP for this email and type
+  await OTP.deleteMany({ email, type });
+
+  const otp = generateNumericOTP(6);
+  const hashedOTP = hashOTP(otp);
+  
+  const otpDoc = await OTP.create({
+    email,
+    otp: hashedOTP,
+    type,
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+  });
+
+  return { otp, otpDoc };
+};
+
+const verifyOTP = async (email, otp, type) => {
+  const otpDoc = await OTP.findOne({ 
+    email, 
+    type,
+    expiresAt: { $gt: new Date() }
+  });
+
+  if (!otpDoc) {
+    return { valid: false, message: 'OTP not found or expired' };
+  }
+
+  if (hashOTP(otp) !== otpDoc.otp) {
+    return { valid: false, message: 'Invalid OTP' };
+  }
+
+  // Delete OTP after successful verification
+  await OTP.deleteOne({ _id: otpDoc._id });
+  return { valid: true, otpDoc };
+};
+
+const cleanupExpiredOTPs = async () => {
+  await OTP.deleteMany({ expiresAt: { $lt: new Date() } });
+};
+
+// ==============================
+// REGISTER (UPDATED)
 // ==============================
 
 const register = async (req, res) => {
   try {
     if (req.body.email) req.body.email = req.body.email.toLowerCase().trim();
+
     const { error } = registerValidation(req.body);
-    if (error) return res.status(400).json({ message: error.details[0].message });
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
 
     const { email, password } = req.body;
-    
-    const userExists = await User.findOne({ email });
-    if (userExists) {
-    if (!userExists.emailVerified) {
-        const otp = generateNumericOTP(6);
-        const hashedOTP = hashOTP(otp);
-        userExists.emailVerificationOTP = hashedOTP;
-        userExists.emailVerificationExpires = Date.now() + 10 * 60 * 1000;
-        await userExists.save();
 
-        await sendEmail({
-          email: userExists.email,
-          subject: 'Verify Your Email',
-          html: `<p>Your OTP is <b>${otp}</b>. Expires in 10 minutes.</p>`,
-        });
-
-        return res.status(200).json({
-          message: 'A new OTP has been sent to your email.',
-          email: userExists.email,
-        });
-      }
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
       return res.status(400).json({ message: 'Email already exists' });
     }
 
+    const passwordHash = await bcrypt.hash(password, 10);
     const otp = generateNumericOTP(6);
-    const hashedOTP = hashOTP(otp);
-    const tempUser = {
-      email,
-      password,
-      emailVerified: false,
-      onboardingStep: 0,
-      emailVerificationOTP: hashedOTP,
-      emailVerificationExpires: Date.now() + 10 * 60 * 1000,
-    };
+    const otpHash = hashOTP(otp);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    const user = await User.create(tempUser);
+    // Re-registering replaces pending credentials + OTP, invalidating the old OTP.
+    await PendingRegistration.findOneAndUpdate(
+      { email },
+      {
+        $set: {
+          passwordHash,
+          otpHash,
+          attempts: 0,
+          lastSentAt: new Date(),
+          expiresAt,
+        },
+      },
+      {
+        upsert: true,
+        new: true,
+        runValidators: true,
+        setDefaultsOnInsert: true,
+      }
+    );
 
     await sendEmail({
-      email: user.email,
+      email,
       subject: 'Verify Your Email',
-      html: `<p>Your OTP is <b>${otp}</b>. Expires in 10 minutes.</p>`,
+      html: `<p>Your OTP is <b>${otp}</b>. It expires in 10 minutes.</p>`,
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       message: 'Registration successful. Verify OTP sent.',
-      email: user.email,
+      email,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Register error:', error);
+    return res.status(500).json({ message: 'Server error' });
   }
 };
 
 // ==============================
-// VERIFY EMAIL
+// VERIFY EMAIL (UPDATED)
 // ==============================
 
 const verifyEmail = async (req, res) => {
   try {
     if (req.body.email) req.body.email = req.body.email.toLowerCase().trim();
+
     const { error } = verifyEmailValidation(req.body);
-    if (error) return res.status(400).json({ message: error.details[0].message });
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
 
     const { email, otp } = req.body;
-    const user = await User.findOne({ email }).select('+emailVerificationOTP');
 
-    if (!user || user.emailVerified) {
-      return res.status(400).json({ message: 'Invalid request' });
+    const pending = await PendingRegistration.findOne({ email })
+      .select('+passwordHash +otpHash');
+
+    if (!pending) {
+      return res.status(400).json({
+        message: 'Registration expired or not found. Please register again.',
+      });
     }
 
-    if (!user.emailVerificationOTP || user.emailVerificationExpires < Date.now()) {
-      return res.status(400).json({ message: 'Invalid or expired OTP' });
+    if (pending.expiresAt <= new Date()) {
+      await PendingRegistration.deleteOne({ _id: pending._id });
+      return res.status(400).json({
+        message: 'OTP expired. Please register again.',
+      });
     }
 
-    if (hashOTP(otp) !== user.emailVerificationOTP) {
+    if (hashOTP(otp) !== pending.otpHash) {
+      pending.attempts += 1;
+      await pending.save();
       return res.status(400).json({ message: 'Invalid OTP' });
     }
 
-    user.emailVerified = true;
-    user.emailVerificationOTP = undefined;
-    user.emailVerificationExpires = undefined;
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      user = new User({
+        email,
+        password: pending.passwordHash,
+        emailVerified: true,
+        onboardingStep: 0,
+        providers: ['local'],
+      });
+
+      user.$locals.passwordAlreadyHashed = true;
+      await user.save();
+    }
+
+    await PendingRegistration.deleteOne({ _id: pending._id });
+
+    const { accessToken, refreshToken } = await issueTokenPair(user, req);
+    user.lastLogin = new Date();
     await user.save();
+    setAuthCookies(res, accessToken, refreshToken);
 
-    const { accessToken, refreshToken } = generateTokens(user);
-    await storeRefreshToken(user._id, refreshToken);
-
-    res.cookie('accessToken', accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 5 * 60 * 60 * 1000,
-      path: '/',
-    });
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/',
-    });
-
-    res.json({
+    return res.json({
       message: 'Email verified successfully',
       accessToken,
       refreshToken,
@@ -201,54 +262,72 @@ const verifyEmail = async (req, res) => {
         _id: user._id,
         email: user.email,
         onboardingStep: user.onboardingStep,
-        onboardingCompleted: user.onboardingCompleted
+        onboardingCompleted: user.onboardingCompleted,
       },
       onboardingCompleted: user.onboardingCompleted,
-      onboardingStatus: getOnboardingStatus(user.onboardingStep)
+      onboardingStatus: getOnboardingStatus(user.onboardingStep),
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Verify email error:', error);
+    return res.status(500).json({ message: 'Server error' });
   }
 };
 
 // ==============================
-// RESEND OTP
+// RESEND VERIFICATION OTP (UPDATED)
 // ==============================
 
 const resendVerificationOTP = async (req, res) => {
   try {
     if (req.body.email) req.body.email = req.body.email.toLowerCase().trim();
+
     const { error } = resendOTPValidation(req.body);
-    if (error) return res.status(400).json({ message: error.details[0].message });
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
 
     const { email } = req.body;
-    const user = await User.findOne({ email });
 
-    if (!user || user.emailVerified) {
-      return res.status(400).json({ message: 'Invalid request' });
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        message: 'Email is already registered. Please login.',
+      });
+    }
+
+    const pending = await PendingRegistration.findOne({ email })
+      .select('+passwordHash +otpHash');
+
+    if (!pending || pending.expiresAt <= new Date()) {
+      if (pending) await PendingRegistration.deleteOne({ _id: pending._id });
+      return res.status(400).json({
+        message: 'Registration expired. Please register again.',
+      });
     }
 
     const otp = generateNumericOTP(6);
-    const hashedOTP = hashOTP(otp);
-    user.emailVerificationOTP = hashedOTP;
-    user.emailVerificationExpires = Date.now() + 10 * 60 * 1000;
-    await user.save();
+
+    pending.otpHash = hashOTP(otp);
+    pending.attempts = 0;
+    pending.lastSentAt = new Date();
+    pending.expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    await pending.save();
+
     await sendEmail({
-      email: user.email,
+      email,
       subject: 'Resend OTP',
-      html: `<p>Your new OTP is <b>${otp}</b>. Expires in 10 minutes.</p>`,
+      html: `<p>Your new OTP is <b>${otp}</b>. It expires in 10 minutes.</p>`,
     });
 
-    res.json({ message: 'New OTP sent to your email.' });
+    return res.json({ message: 'New OTP sent to your email.' });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Resend verification error:', error);
+    return res.status(500).json({ message: 'Server error' });
   }
 };
 
 // ==============================
-// RESEND RESET PASSWORD OTP
+// RESEND RESET PASSWORD OTP (KEPT)
 // ==============================
 
 const resendResetPasswordOTP = async (req, res) => {
@@ -260,15 +339,12 @@ const resendResetPasswordOTP = async (req, res) => {
     const { email } = req.body;
     const user = await User.findOne({ email });
 
-    if (!user) {
-      return res.status(200).json({ message: 'If that email exists, we have sent a reset OTP.' });
+    if (!user || !user.emailVerified) {
+      return res.status(200).json({ message: 'If that email exists and is verified, we have sent a reset OTP.' });
     }
 
-    const otp = generateNumericOTP(6);
-    const hashedOTP = hashOTP(otp);
-    user.resetPasswordOTP = hashedOTP;
-    user.resetPasswordExpires = Date.now() + 10 * 60 * 1000;
-    await user.save();
+    // Generate new OTP (invalidates old one)
+    const { otp } = await generateAndStoreOTP(email, 'password_reset');
 
     await sendEmail({
       email: user.email,
@@ -276,7 +352,7 @@ const resendResetPasswordOTP = async (req, res) => {
       html: `<p>Your password reset OTP is <b>${otp}</b>. Expires in 10 minutes.</p>`,
     });
 
-    res.status(200).json({ message: 'If that email exists, we have sent a reset OTP.' });
+    res.status(200).json({ message: 'If that email exists and is verified, we have sent a reset OTP.' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -284,141 +360,115 @@ const resendResetPasswordOTP = async (req, res) => {
 };
 
 // ==============================
-// LOGIN
+// LOGIN (UPDATED)
 // ==============================
 
 const login = async (req, res) => {
   try {
     if (req.body.email) req.body.email = req.body.email.toLowerCase().trim();
+
     const { error } = loginValidation(req.body);
-    if (error) return res.status(400).json({ message: error.details[0].message });
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
 
     const { email, password } = req.body;
     const user = await User.findOne({ email }).select('+password');
+
     if (!user || !(await user.matchPassword(password))) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
-    if (!user.emailVerified) {
-      return res.status(401).json({ message: 'Please verify your email before logging in.' });
+
+    if (user.isActive === false || user.isSuspended === true) {
+      await revokeAllUserSessions(user._id);
+      return res.status(401).json({ message: 'Account unavailable' });
     }
 
-    const { accessToken, refreshToken } = generateTokens(user);
-    await storeRefreshToken(user._id, refreshToken);
+    if (!user.emailVerified) {
+      return res.status(401).json({
+        message: 'Please verify your email before logging in.',
+      });
+    }
 
-    res.cookie('accessToken', accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 5 * 60 * 60 * 1000, // 5 hours
-      path: '/',
-    });
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/',
-    });
+    const { accessToken, refreshToken } = await issueTokenPair(user, req);
+    user.lastLogin = new Date();
+    await user.save();
+    setAuthCookies(res, accessToken, refreshToken);
 
-  res.json({
-    message: 'Login successful',
-    accessToken,
-    refreshToken,
-    user: { _id: user._id, email: user.email, onboardingStep: user.onboardingStep, onboardingCompleted: user.onboardingCompleted },
-    onboardingCompleted: user.onboardingCompleted,
-    onboardingStatus: getOnboardingStatus(user.onboardingStep)
-  });
+    return res.json({
+      message: 'Login successful',
+      accessToken,
+      refreshToken,
+      user: {
+        _id: user._id,
+        email: user.email,
+        onboardingStep: user.onboardingStep,
+        onboardingCompleted: user.onboardingCompleted,
+      },
+      onboardingCompleted: user.onboardingCompleted,
+      onboardingStatus: getOnboardingStatus(user.onboardingStep),
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Login error:', error);
+    return res.status(500).json({ message: 'Server error' });
   }
 };
 
 // ==============================
-// REFRESH TOKEN
+// REFRESH TOKEN (UPDATED)
 // ==============================
+
 const refreshToken = async (req, res) => {
   try {
-    // Accept refresh token from cookie OR JSON body (for mobile apps)
-    let refreshTokenCookie = req.cookies.refreshToken;
-    let refreshTokenBody = req.body?.refreshToken;
+    const suppliedRefreshToken =
+      req.cookies?.refreshToken || req.body?.refreshToken;
 
-    // Use cookie if available, otherwise use body
-    const refreshToken = refreshTokenCookie || refreshTokenBody;
-
-    if (!refreshToken) {
+    if (!suppliedRefreshToken) {
       return res.status(401).json({ message: 'No refresh token provided' });
     }
 
-    let decoded;
-    try {
-      decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-    } catch (err) {
-      return res.status(401).json({ message: 'Invalid refresh token' });
-    }
+    const rotated = await rotateRefreshToken(suppliedRefreshToken, req);
 
-    const isValid = await verifyRefreshTokenFromDB(decoded.id, refreshToken);
-    if (!isValid) return res.status(401).json({ message: 'Refresh token revoked' });
+    setAuthCookies(res, rotated.accessToken, rotated.refreshToken);
 
-    const user = await User.findById(decoded.id);
-    if (!user) return res.status(401).json({ message: 'User not found' });
-
-    const { accessToken: newAccessToken, refreshToken: newRefreshToken } = generateTokens(user);
-    await storeRefreshToken(user._id, newRefreshToken);
-
-    // Set cookies
-    res.cookie('accessToken', newAccessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 5 * 60 * 60 * 1000,
-      path: '/',
-    });
-    res.cookie('refreshToken', newRefreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/',
-    });
-
-    res.json({
+    return res.json({
       message: 'Token refreshed',
-      accessToken: newAccessToken,
-      refreshToken: newRefreshToken,
+      accessToken: rotated.accessToken,
+      refreshToken: rotated.refreshToken,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Refresh error:', error.message);
+    return res
+      .status(error.statusCode || 401)
+      .json({ message: error.message || 'Invalid refresh token' });
   }
 };
 
 // ==============================
-// LOGOUT
+// LOGOUT (UPDATED)
 // ==============================
 
 const logout = async (req, res) => {
   try {
-    const refreshTokenCookie = req.cookies.refreshToken;
-    if (refreshTokenCookie) {
-      try {
-        const decoded = jwt.verify(refreshTokenCookie, process.env.JWT_REFRESH_SECRET);
-        await clearRefreshToken(decoded.id);
-      } catch (err) {}
-    }
-    res.clearCookie('accessToken');
-    res.clearCookie('refreshToken');
-    res.json({ message: 'Logged out' });
+    const suppliedRefreshToken =
+      req.cookies?.refreshToken || req.body?.refreshToken;
+
+    await revokeRefreshToken(suppliedRefreshToken);
+
+    res.clearCookie('accessToken', { path: '/' });
+    res.clearCookie('refreshToken', { path: '/' });
+
+    return res.json({ message: 'Logged out' });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Logout error:', error);
+    return res.status(500).json({ message: 'Server error' });
   }
 };
 
+// ==============================
+// GET CURRENT USER (KEPT)
+// ==============================
 
-// ==============================
-// GET CURRENT USER (PROTECTED)
-// ==============================
 const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select(
@@ -431,7 +481,6 @@ const getMe = async (req, res) => {
 
     const userObj = user.toObject();
 
-    // Generate signed URL for profile photo if it's a stored path (private bucket)
     if (userObj.profilePhoto && typeof userObj.profilePhoto === 'string' && userObj.profilePhoto.startsWith('users/')) {
       try {
         const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, userObj.profilePhoto);
@@ -449,12 +498,9 @@ const getMe = async (req, res) => {
 };
 
 // ==============================
-// FORGOT PASSWORD (step 1: request OTP)
+// FORGOT PASSWORD (KEPT)
 // ==============================
 
-// ==============================
-// FORGOT PASSWORD step 1: Request reset OTP (requires verified email)
-// ==============================
 const forgotPassword = async (req, res) => {
   try {
     if (req.body.email) req.body.email = req.body.email.toLowerCase().trim();
@@ -464,26 +510,19 @@ const forgotPassword = async (req, res) => {
     const { email } = req.body;
     const user = await User.findOne({ email });
 
-    // Check if email exists AND is verified
-    if (!user) {
-      return res.status(404).json({ message: 'Email not found' });
-    }
-    if (!user.emailVerified) {
-      return res.status(400).json({ message: 'Email not verified. Please verify your email first.' });
+    const genericMessage =
+      'If that email exists and is verified, we have sent a reset OTP.';
+
+    if (!user || !user.emailVerified) {
+      return res.status(200).json({ message: genericMessage });
     }
 
-    // Generate 6-digit numeric OTP
-    const otp = generateNumericOTP(6);
-    const hashedOTP = hashOTP(otp);
-    user.resetPasswordOTP = hashedOTP;
-    user.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
-    await user.save();
+    const { otp } = await generateAndStoreOTP(email, 'password_reset');
 
-    // Send OTP via email (using Brevo)
     const html = `<p>Your password reset OTP is: <strong>${otp}</strong>. It expires in 10 minutes.</p>`;
     try {
       await sendEmail({ email: user.email, subject: 'Password Reset OTP', html });
-      res.status(200).json({ message: 'Email exists and OTP has been sent to email.' });
+      res.status(200).json({ message: genericMessage });
     } catch (emailError) {
       console.error('Email failed:', emailError);
       res.status(500).json({ message: 'Failed to send OTP. Try again later.' });
@@ -495,8 +534,9 @@ const forgotPassword = async (req, res) => {
 };
 
 // ==============================
-// VERIFY RESET OTP (step 2)
+// VERIFY RESET OTP (KEPT)
 // ==============================
+
 const verifyResetOtp = async (req, res) => {
   try {
     if (req.body.email) req.body.email = req.body.email.toLowerCase().trim();
@@ -504,24 +544,20 @@ const verifyResetOtp = async (req, res) => {
     if (error) return res.status(400).json({ message: error.details[0].message });
 
     const { email, otp } = req.body;
-    const user = await User.findOne({ email }).select('+resetPasswordOTP');
-    if (!user || !user.resetPasswordOTP || user.resetPasswordExpires < Date.now()) {
-      return res.status(400).json({ message: 'Invalid or expired OTP' });
+
+    const result = await verifyOTP(email, otp, 'password_reset');
+    if (!result.valid) {
+      return res.status(400).json({ message: result.message });
     }
 
-    if (hashOTP(otp) !== user.resetPasswordOTP) {
-      return res.status(400).json({ message: 'Invalid OTP' });
-    }
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json({ message: 'User not found' });
 
     const resetToken = jwt.sign(
       { id: user._id, purpose: 'reset' },
       process.env.JWT_RESET_SECRET,
       { expiresIn: '5m' }
     );
-
-    user.resetPasswordOTP = undefined;
-    user.resetPasswordExpires = undefined;
-    await user.save();
 
     res.json({
       message: 'OTP verified. You may now reset your password.',
@@ -534,8 +570,9 @@ const verifyResetOtp = async (req, res) => {
 };
 
 // ==============================
-// RESET PASSWORD (step 3)
+// RESET PASSWORD (UPDATED)
 // ==============================
+
 const resetPassword = async (req, res) => {
   try {
     const { error } = resetPasswordValidation(req.body);
@@ -560,27 +597,17 @@ const resetPassword = async (req, res) => {
     user.password = newPassword;
     await user.save();
 
-    const { accessToken, refreshToken } = generateTokens(user);
-    await storeRefreshToken(user._id, refreshToken);
+    // Revoke all existing sessions
+    await revokeAllUserSessions(user._id);
 
-    res.cookie('accessToken', accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 5 * 60 * 60 * 1000, // 5 hours
-      path: '/',
-    });
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/',
-    });
+    // Issue new token pair
+    const { accessToken, refreshToken } = await issueTokenPair(user, req);
+    setAuthCookies(res, accessToken, refreshToken);
 
     res.json({
       message: 'Password reset successful',
       accessToken,
+      refreshToken,
       user: { _id: user._id, email: user.email },
     });
   } catch (error) {
@@ -590,8 +617,9 @@ const resetPassword = async (req, res) => {
 };
 
 // ==============================
-// FIREBASE AUTH (no profile photo sync, includes token and onboarding status)
+// FIREBASE AUTH (UPDATED)
 // ==============================
+
 const firebaseAuth = async (req, res) => {
   try {
     const { idToken } = req.body;
@@ -599,6 +627,9 @@ const firebaseAuth = async (req, res) => {
 
     const decoded = await verifyFirebaseToken(idToken);
     let { uid, email } = decoded;
+    if (!uid || !email || typeof email !== 'string') {
+      return res.status(400).json({ message: 'Firebase account must provide an email' });
+    }
     email = email.toLowerCase().trim();
 
     let user = await User.findOne({ firebaseUid: uid });
@@ -606,6 +637,10 @@ const firebaseAuth = async (req, res) => {
     if (!user) {
       user = await User.findOne({ email });
       if (user) {
+        // Check account status before linking
+        if (user.isActive === false || user.isSuspended === true) {
+          return res.status(401).json({ message: 'Account unavailable' });
+        }
         user.firebaseUid = uid;
         if (!user.providers.includes('google')) user.providers.push('google');
         await user.save();
@@ -621,46 +656,50 @@ const firebaseAuth = async (req, res) => {
       }
     }
 
-    const { accessToken, refreshToken } = generateTokens(user);
-    await storeRefreshToken(user._id, refreshToken);
+    // Check account status before issuing tokens
+    if (user.isActive === false || user.isSuspended === true) {
+      await revokeAllUserSessions(user._id);
+      return res.status(401).json({ message: 'Account unavailable' });
+    }
 
-    res.cookie('accessToken', accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 5 * 60 * 60 * 1000, // 5 hours
-      path: '/',
-    });
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/',
-    });
+    const { accessToken, refreshToken } = await issueTokenPair(user, req);
+    user.lastLogin = new Date();
+    await user.save();
+    setAuthCookies(res, accessToken, refreshToken);
 
     const isProfileCompleted = user.onboardingStep === 3;
 
-  res.json({
-    message: 'Firebase login successful',
-    accessToken,
-    refreshToken,
-    isProfileCompleted,
-    user: {
-      id: user._id,
-      email: user.email,
-      onboardingStep: user.onboardingStep,
-      onboardingCompleted: user.onboardingCompleted
-    },
-    onboardingCompleted: user.onboardingCompleted,
-    onboardingStatus: getOnboardingStatus(user.onboardingStep)
-  });
-
+    res.json({
+      message: 'Firebase login successful',
+      accessToken,
+      refreshToken,
+      isProfileCompleted,
+      user: {
+        id: user._id,
+        email: user.email,
+        onboardingStep: user.onboardingStep,
+        onboardingCompleted: user.onboardingCompleted
+      },
+      onboardingCompleted: user.onboardingCompleted,
+      onboardingStatus: getOnboardingStatus(user.onboardingStep)
+    });
   } catch (error) {
     console.error(error);
     res.status(401).json({ message: 'Firebase auth failed' });
   }
 };
+
+// ==============================
+// CLEANUP JOB (KEPT)
+// ==============================
+
+setInterval(async () => {
+  try {
+    await cleanupExpiredOTPs();
+  } catch (error) {
+    console.error('OTP cleanup error:', error);
+  }
+}, 60000);
 
 // ==============================
 // EXPORTS
@@ -679,4 +718,5 @@ module.exports = {
   verifyResetOtp,
   resetPassword,
   firebaseAuth,
+  cleanupExpiredOTPs
 };

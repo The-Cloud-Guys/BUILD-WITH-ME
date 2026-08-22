@@ -3,8 +3,6 @@ const { protect } = require('../middleware/auth.middleware');
 const { upload } = require('../middleware/upload.middleware');
 const {
   getMyProfile,
-  updateProfile,
-  uploadProfilePhoto,
   deleteProfilePhoto,
   createUserProfile,
   updateUserProfile,
@@ -13,10 +11,9 @@ const {
 const router = express.Router();
 
 router.get('/me', protect, getMyProfile);
-router.patch('/me', protect, updateProfile);
-router.post('/me/photo', protect, upload.single('photo'), uploadProfilePhoto);
 router.delete('/me/photo', protect, deleteProfilePhoto);
 
+// Canonical multipart profile routes: text fields and optional photo travel together.
 router.post('/userProfile', protect, upload.single('photo'), createUserProfile);
 router.patch('/userProfile', protect, upload.single('photo'), updateUserProfile);
 

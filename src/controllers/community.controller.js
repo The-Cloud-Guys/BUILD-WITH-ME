@@ -26,7 +26,7 @@ const mediaUpload = multer({
 });
 
 const uploadMedia = async (files, userId, postId) => {
-  const urls = [];
+  const paths = [];
   const bucket = process.env.SUPABASE_BUCKET_COMMUNITY;
   
   for (const file of files) {
@@ -36,18 +36,14 @@ const uploadMedia = async (files, userId, postId) => {
       const randomString = Math.random().toString(36).substring(7);
       const filePath = `posts/${userId}/${postId}/${timestamp}_${randomString}${ext}`;
       
-      console.log(`Uploading: ${file.originalname} (${file.size} bytes) to ${filePath}`);
       await uploadFile(bucket, filePath, file.buffer, file.mimetype);
-      const signedUrl = await getSignedUrl(bucket, filePath, 3600);
-      urls.push(signedUrl);
-      
-      console.log(`Uploaded: ${file.originalname}`);
+      paths.push(filePath);
     } catch (error) {
       console.error(`Failed to upload ${file.originalname}:`, error.message);
     }
   }
   
-  return urls;
+  return paths;
 };
 
 // ==============================
@@ -75,7 +71,6 @@ const createPost = async (req, res) => {
 
     let mediaUrls = [];
     if (req.files && req.files.length > 0) {
-      console.log(` Uploading ${req.files.length} media files...`);
       mediaUrls = await uploadMedia(req.files, req.user.id, post._id);
       post.media = mediaUrls;
       await post.save();
@@ -91,6 +86,11 @@ const createPost = async (req, res) => {
         populatedPost.author.profilePhoto
       );
     }
+    populatedPost.media = await Promise.all(
+      (populatedPost.media || []).map((mediaPath) =>
+        getSignedUrl(process.env.SUPABASE_BUCKET_COMMUNITY, mediaPath, 3600)
+      )
+    );
 
     res.status(201).json({ 
       message: 'Post created successfully', 
@@ -112,7 +112,7 @@ const getFeed = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const posts = await Post.find()
+    const posts = await Post.find({ isHidden: { $ne: true } })
       .populate('author', 'firstName lastName profilePhoto email role')
       .sort('-createdAt')
       .skip(skip)
@@ -161,7 +161,7 @@ const getFeed = async (req, res) => {
       }
     }
 
-    const total = await Post.countDocuments();
+    const total = await Post.countDocuments({ isHidden: { $ne: true } });
 
     res.json({
       posts: validPosts,
@@ -180,8 +180,11 @@ const getFeed = async (req, res) => {
 // @access  Private
 const getPostById = async (req, res) => {
   try {
-    const post = await Post.findById(req.params.id)
-      .populate('author', 'firstName lastName profilePhoto email')
+    const post = await Post.findOne({
+      _id: req.params.id,
+      isHidden: { $ne: true },
+    })
+      .populate('author', 'firstName lastName profilePhoto email role')
       .lean();
     if (!post) return res.status(404).json({ message: 'Post not found' });
 
@@ -192,6 +195,14 @@ const getPostById = async (req, res) => {
     if (post.author.profilePhoto && post.author.profilePhoto.startsWith('users/')) {
       post.author.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, post.author.profilePhoto);
     }
+
+    post.media = await Promise.all(
+      (post.media || []).map((mediaPath) =>
+        mediaPath.startsWith('http://') || mediaPath.startsWith('https://')
+          ? mediaPath
+          : getSignedUrl(process.env.SUPABASE_BUCKET_COMMUNITY, mediaPath, 3600)
+      )
+    );
 
     res.json(post);
   } catch (error) {
@@ -235,11 +246,17 @@ const deletePost = async (req, res) => {
     }
 
     // Delete all associated comments, likes, saves, mutes, reports
+    const commentIds = await Comment.find({ post: post._id }).distinct('_id');
     await Comment.deleteMany({ post: post._id });
-    await Like.deleteMany({ targetType: 'Post', targetId: post._id });
+    await Like.deleteMany({
+      $or: [
+        { targetType: 'Post', targetId: post._id },
+        { targetType: 'Comment', targetId: { $in: commentIds } },
+      ],
+    });
     await Save.deleteMany({ post: post._id });
     await Mute.deleteMany({ post: post._id });
-    await Report.deleteMany({ post: post._id });
+    await Report.deleteMany({ targetType: 'post', targetId: post._id });
 
     await post.deleteOne();
     res.json({ message: 'Post deleted successfully' });
@@ -269,9 +286,13 @@ const toggleLike = async (req, res) => {
       await existing.deleteOne();
       // Decrement count on target
       if (targetType === 'Post') {
-        await Post.findByIdAndUpdate(targetId, { $inc: { likeCount: -1 } });
+        await Post.findByIdAndUpdate(targetId, [
+          { $set: { likeCount: { $max: [0, { $subtract: ['$likeCount', 1] }] } } },
+        ]);
       } else {
-        await Comment.findByIdAndUpdate(targetId, { $inc: { likeCount: -1 } });
+        await Comment.findByIdAndUpdate(targetId, [
+          { $set: { likeCount: { $max: [0, { $subtract: ['$likeCount', 1] }] } } },
+        ]);
       }
       return res.json({ message: 'Unliked', liked: false });
     } else {
@@ -303,13 +324,18 @@ const createComment = async (req, res) => {
     const { error } = require('../validation/community.validation').commentValidation({ content });
     if (error) return res.status(400).json({ message: error.details[0].message });
 
-    const post = await Post.findById(postId);
+    const post = await Post.findOne({ _id: postId, isHidden: { $ne: true } });
     if (!post) return res.status(404).json({ message: 'Post not found' });
 
     let parent = null;
     if (parentCommentId) {
       parent = await Comment.findById(parentCommentId);
       if (!parent) return res.status(404).json({ message: 'Parent comment not found' });
+      if (parent.post.toString() !== post._id.toString()) {
+        return res.status(400).json({
+          message: 'Parent comment does not belong to this post',
+        });
+      }
     }
 
     const comment = await Comment.create({
@@ -406,11 +432,20 @@ const deleteComment = async (req, res) => {
     if (comment.author.toString() !== req.user.id && post.author.toString() !== req.user.id) {
       return res.status(403).json({ message: 'Not authorized' });
     }
-    // Delete all replies recursively (optional: cascade)
-    await Comment.deleteMany({ parentComment: comment._id });
-    await Like.deleteMany({ targetType: 'Comment', targetId: comment._id });
+    const replies = await Comment.find({ parentComment: comment._id }).select('_id');
+    const deletedIds = [comment._id, ...replies.map((reply) => reply._id)];
+    await Comment.deleteMany({ _id: { $in: replies.map((reply) => reply._id) } });
+    await Like.deleteMany({ targetType: 'Comment', targetId: { $in: deletedIds } });
     await comment.deleteOne();
-    await Post.findByIdAndUpdate(comment.post, { $inc: { commentCount: -1 } });
+    await Post.findByIdAndUpdate(comment.post, [
+      {
+        $set: {
+          commentCount: {
+            $max: [0, { $subtract: ['$commentCount', deletedIds.length] }],
+          },
+        },
+      },
+    ]);
     res.json({ message: 'Comment deleted' });
   } catch (error) {
     console.error(error);
@@ -450,7 +485,7 @@ const getSavedPosts = async (req, res) => {
       path: 'post',
       populate: { path: 'author', select: 'firstName lastName profilePhoto email' }
     }).sort('-createdAt');
-    const posts = saves.map(s => s.post).filter(p => p);
+    const posts = saves.map(s => s.post).filter(p => p && p.isHidden !== true);
     res.json(posts);
   } catch (error) {
     console.error(error);
@@ -683,7 +718,7 @@ const getUserProfile = async (req, res) => {
     }
 
     // Get user's posts
-    const posts = await Post.find({ author: userId })
+    const posts = await Post.find({ author: userId, isHidden: { $ne: true } })
   .select('content tags media likeCount commentCount createdAt')
   .populate('author', 'firstName lastName profilePhoto email')
   .sort('-createdAt')

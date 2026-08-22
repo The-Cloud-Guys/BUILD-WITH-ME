@@ -6,7 +6,12 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "gen-token-page": "node generate-token-page.js"
+    "test": "node --test tests/*.test.js",
+    "test:syntax": "node scripts/check-syntax.js",
+    "gen-token-page": "node generate-token-page.js",
+    "migrate:project-status": "node scripts/backfill-project-status.js",
+    "migrate:community-media": "node scripts/migrate-community-media-paths.js",
+    "verify:transactions": "node scripts/verify-mongodb-transactions.js"
   },
   "keywords": [
     "authentication",

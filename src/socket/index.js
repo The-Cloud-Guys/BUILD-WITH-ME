@@ -31,7 +31,7 @@ class SocketManager {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const user = await User.findById(decoded.id);
         
-        if (!user) {
+        if (!user || user.isActive === false || user.isSuspended === true) {
           return next(new Error('User not found'));
         }
 
@@ -50,15 +50,20 @@ class SocketManager {
       
       this.joinUserRooms(socket);
 
-      socket.on('join-room', (roomId) => {
+      socket.on('join-room', async (roomId) => {
+        if (!(await this.isRoomMember(socket.userId, roomId))) {
+          return socket.emit('room-error', { error: 'Not a member of this room' });
+        }
         socket.join(`room:${roomId}`);
-        console.log(`User ${socket.userId} joined room: ${roomId}`);
       });
 
       socket.on('send-message', async (data) => {
         try {
-          const { roomId, content, media } = data;
-          const message = await this.handleSendMessage(socket.userId, roomId, content, media);
+          const { roomId, content } = data;
+          if (!(await this.isRoomMember(socket.userId, roomId))) {
+            throw new Error('Not a member of this room');
+          }
+          const message = await this.handleSendMessage(socket.userId, roomId, content);
           
           this.io.to(`room:${roomId}`).emit('new-message', message);
           const room = await ChatRoom.findById(roomId);
@@ -80,8 +85,9 @@ class SocketManager {
         }
       });
 
-      socket.on('typing', (data) => {
+      socket.on('typing', async (data) => {
         const { roomId, isTyping } = data;
+        if (!(await this.isRoomMember(socket.userId, roomId))) return;
         socket.to(`room:${roomId}`).emit('typing-indicator', {
           userId: socket.userId,
           userName: `${socket.user.firstName} ${socket.user.lastName}`,
@@ -93,8 +99,11 @@ class SocketManager {
       // CALL MANAGEMENT HANDLERS
       // ==============================
 
-      socket.on('call-initiate', (data) => {
+      socket.on('call-initiate', async (data) => {
         const { roomId, callType } = data;
+        if (!(await this.isRoomMember(socket.userId, roomId))) {
+          return socket.emit('call-error', { error: 'Not a member of this room' });
+        }
         
         console.log(` Call initiated by ${socket.userId} in room ${roomId} (${callType})`);
         
@@ -122,8 +131,9 @@ class SocketManager {
         });
       });
 
-      socket.on('call-response', (data) => {
+      socket.on('call-response', async (data) => {
         const { roomId, accepted } = data;
+        if (!(await this.isRoomMember(socket.userId, roomId))) return;
         
         console.log(` Call response from ${socket.userId}: ${accepted ? 'ACCEPTED' : 'REJECTED'}`);
         
@@ -148,14 +158,15 @@ class SocketManager {
         }
       });
 
-      socket.on('leave-call', (data) => {
+      socket.on('leave-call', async (data) => {
         const { roomId } = data;
-        console.log(`📞 User ${socket.userId} leaving call in room ${roomId}`);
+        if (!(await this.isRoomMember(socket.userId, roomId))) return;
         this.handleLeaveCall(socket.userId, roomId);
       });
 
-      socket.on('signal', (data) => {
+      socket.on('signal', async (data) => {
         const { roomId, signal } = data;
+        if (!(await this.isRoomMember(socket.userId, roomId))) return;
         socket.to(`room:${roomId}`).emit('signal', {
           userId: socket.userId,
           signal
@@ -193,13 +204,14 @@ class SocketManager {
     console.log(`User ${socket.userId} joined ${rooms.length} rooms`);
   }
 
-  async handleSendMessage(userId, roomId, content, media) {
+  async handleSendMessage(userId, roomId, content) {
+    const participants = await this.getRoomParticipants(roomId);
     const message = await Message.create({
       room: roomId,
       sender: userId,
       content: content || '',
-      media: media || [],
-      deliveredTo: await this.getRoomParticipants(roomId)
+      media: [],
+      deliveredTo: participants
     });
 
     const populatedMessage = await Message.findById(message._id)
@@ -211,12 +223,29 @@ class SocketManager {
       lastMessageAt: new Date()
     });
 
+    await Promise.all(
+      participants
+        .filter((participant) => participant.toString() !== userId)
+        .map((participant) =>
+          UnreadMessage.findOneAndUpdate(
+            { room: roomId, user: participant },
+            { $inc: { count: 1 } },
+            { upsert: true }
+          )
+        )
+    );
+
     return populatedMessage;
   }
 
   async getRoomParticipants(roomId) {
     const room = await ChatRoom.findById(roomId);
-    return room.participants;
+    return room ? room.participants : [];
+  }
+
+  async isRoomMember(userId, roomId) {
+    if (!roomId) return false;
+    return Boolean(await ChatRoom.exists({ _id: roomId, participants: userId }));
   }
 
   // ==============================

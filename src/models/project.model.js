@@ -1,22 +1,32 @@
 const mongoose = require('mongoose');
 
-const roleSchema = new mongoose.Schema({
-  roleName: {
-    type: String,
-    required: true,
-    trim: true,
+const roleSchema = new mongoose.Schema(
+  {
+    roleName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    requiredCount: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+    currentCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    description: {
+      type: String,
+      default: '',
+      trim: true,
+    },
   },
-  requiredCount: {
-    type: Number,
-    required: true,
-    min: 1,
-  },
-  currentCount: {
-    type: Number,
-    default: 0,
-    min: 0,
-  },
-}, { _id: false });
+  {
+    _id: false,
+  }
+);
 
 const projectSchema = new mongoose.Schema(
   {
@@ -34,26 +44,21 @@ const projectSchema = new mongoose.Schema(
     },
     requiredSkills: {
       type: [String],
-      required: true,
+      default: [],
     },
     techStack: {
       type: [String],
-      required: true,
+      default: [],
     },
     stage: {
       type: String,
-      enum: ['IDEA', 'PROTOTYPE', 'MVP'],
-      required: true,
+      enum: ['IDEA', 'IDEATION', 'PROTOTYPE', 'MVP', 'BETA', 'PRODUCTION'],
       default: 'IDEA',
     },
     status: {
       type: String,
       enum: ['OPEN', 'ACTIVE', 'CLOSED', 'COMPLETED'],
       default: 'OPEN',
-    },
-    views: {
-      type: Number,
-      default: 0,
     },
     owner: {
       type: mongoose.Schema.Types.ObjectId,
@@ -66,7 +71,45 @@ const projectSchema = new mongoose.Schema(
         ref: 'User',
       },
     ],
-    roles: [roleSchema],
+    roles: {
+      type: [roleSchema],
+      default: [],
+    },
+    views: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    isHidden: {
+      type: Boolean,
+      default: false,
+    },
+    isFlagged: {
+      type: Boolean,
+      default: false,
+    },
+    reviewed: {
+      type: Boolean,
+      default: false,
+    },
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    reviewedAt: {
+      type: Date,
+      default: null,
+    },
+    reviewNotes: {
+      type: String,
+      default: '',
+    },
+    reviewStatus: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending',
+    },
   },
   {
     timestamps: true,
@@ -75,7 +118,6 @@ const projectSchema = new mongoose.Schema(
   }
 );
 
-// Virtual to compute total developers needed (sum of requiredCount)
 projectSchema.virtual('totalDevelopersNeeded').get(function () {
   return this.roles.reduce((sum, role) => sum + role.requiredCount, 0);
 });

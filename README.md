@@ -1,7 +1,9 @@
 ﻿# Build With Me – Authentication & Project Management System
 
-Version 5.1 – May 2026
+Version 6.0 – August 2026
 Complete backend for the Build With Me platform: auth, onboarding, profile management, role-based project collaboration, and notifications.
+
+The complete route-by-route request/response contract is in [API_REFERENCE.md](API_REFERENCE.md). A route-complete executable Postman suite is provided in [build_with_me_auth.postman_collection.json](build_with_me_auth.postman_collection.json).
 
 ---
 
@@ -54,7 +56,7 @@ All endpoints return JSON. Errors follow `{ "message": "..." }` with appropriate
 - Step 3 – Profile completion via `POST /api/profile/userProfile` (firstName, lastName, bio, externalLink, optional photo)
 - Responses include `onboardingStatus` (email_verified | role_pending | skills_pending | completed) and `onboardingCompleted` boolean
 
-Note: `POST /api/onboarding/profile` was removed in v5.1. Use `POST /api/profile/userProfile` for step 3.
+`POST /api/onboarding/profile` remains available for JSON onboarding details. The canonical full profile route is multipart `POST /api/profile/userProfile`, which accepts profile text and an optional photo together.
 
 ### Profile Management
 
@@ -62,7 +64,7 @@ Note: `POST /api/onboarding/profile` was removed in v5.1. Use `POST /api/profile
 - Photo upload – Resized to max 500px, JPEG 80% quality (Sharp); stored in private Supabase `avatars` bucket; signed URL returned (1 hour)
 - Photo replacement – Send a new `photo` via `PATCH /userProfile` to replace the existing one
 
-Note: `PATCH /me`, `POST /me/photo`, and `DELETE /me/photo` were removed in v5.1.
+Profile creation and update use the combined multipart `/userProfile` routes. There is no separate upload-only photo endpoint; photo deletion remains `DELETE /me/photo`.
 
 ### Project Management
 
@@ -122,47 +124,14 @@ The server runs on `http://localhost:5050` or the `PORT` defined in your `.env`.
 
 ## Environment Variables
 
-Create a `.env` file in `build_with_me_auth/` with the following:
-
-```ini
-# Server
-PORT=5050
-NODE_ENV=development
-
-# MongoDB
-MONGODB_URI=mongodb://localhost:27017/build_with_me
-
-# JWT
-JWT_SECRET=your_super_secret_access_key
-JWT_ACCESS_EXPIRES_IN=15m
-JWT_REFRESH_SECRET=your_super_secret_refresh_key
-JWT_REFRESH_EXPIRES_IN=7d
-
-# Frontend URL
-FRONTEND_URL=http://localhost:3000
-
-# Brevo Email API
-BREVO_API_KEY=your_brevo_api_key
-EMAIL_FROM=verified_sender@yourdomain.com
-
-# Firebase Admin SDK
-FIREBASE_PROJECT_ID=your_firebase_project_id
-FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project.iam.gserviceaccount.com
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvg...\n-----END PRIVATE KEY-----\n"
-
-# Supabase Storage
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-SUPABASE_BUCKET_AVATAR=avatars
-SUPABASE_BUCKET_RESUMES=resumes
-```
+Copy `.env.example` to `.env` and supply values for the names listed there. `.env.example` is the canonical configuration-name reference; never commit the populated `.env` file.
 
 Important:
 - `JWT_SECRET` and `JWT_REFRESH_SECRET` must be different values
 - Copy `FIREBASE_PRIVATE_KEY` exactly from your service account JSON, including the `\n` characters
 - Both Supabase buckets (avatars, resumes) must be set to private
 - `EMAIL_FROM` must be a verified sender in Brevo under Settings → Senders
-- Set `NODE_ENV=development` to print OTPs to the console and enable the `/firebase-token` helper route
+- Do not log OTPs, cookies, JWTs, reset tokens, signed storage URLs, or Firebase credentials.
 
 ---
 
@@ -196,6 +165,7 @@ All endpoints require a valid `accessToken` cookie. Steps must be completed in o
 | GET    | /status   | Get current onboarding step and onboardingStatus   |
 | POST   | /role     | Set role (step 0 to 1)                             |
 | POST   | /skills   | Set skills array (step 1 to 2)                     |
+| POST   | /profile  | Complete onboarding profile                         |
 
 Step 3 (profile completion) is handled by `POST /api/profile/userProfile`.
 
@@ -206,6 +176,7 @@ All routes require a valid `accessToken` cookie.
 | Method | Endpoint       | Description                                                          |
 |--------|----------------|----------------------------------------------------------------------|
 | GET    | /me            | Get full profile; profilePhoto returned as a signed URL (1 hour)     |
+| DELETE | /me/photo      | Delete the profile photo                            |
 | POST   | /userProfile   | Combined: create profile and optional photo (multipart). Completes onboarding |
 | PATCH  | /userProfile   | Combined: update profile fields and optional photo replacement (multipart) |
 
@@ -230,7 +201,7 @@ GET /, GET /:id, and GET /:id/team are public. All other routes require authenti
 
 Query parameters for GET / (all optional): page, limit, search (title/description), skill, tech, stage (IDEA|PROTOTYPE|MVP), tag.
 
-Apply fields (multipart): message (required), role (required – must match a project roleName), portfolioLink (optional), cv (optional – PDF/DOC/DOCX, max 10 MB).
+Apply fields (multipart): message (required), role (required – must match a project roleName), portfolioLink (optional), cv (optional – PDF/DOC/DOCX/TXT, max 10 MB).
 
 Apply errors: 400 role not found, 400 role is full, 409 already applied.
 
