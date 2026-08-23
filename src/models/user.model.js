@@ -212,6 +212,10 @@ userSchema.virtual('onboardingCompleted').get(function () {
   return this.onboardingStep === 3;
 });
 
+userSchema.index({ createdAt: 1 });
+userSchema.index({ isActive: 1, isSuspended: 1 });
+userSchema.index({ emailVerified: 1, onboardingStep: 1 });
+
 // =========================
 // PASSWORD PRE-SAVE HOOK
 // =========================

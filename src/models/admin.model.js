@@ -119,6 +119,8 @@ reportSchema.index(
     unique: true,
   }
 );
+reportSchema.index({ createdAt: -1 });
+reportSchema.index({ status: 1 });
 
 
 const auditLogSchema = new mongoose.Schema({

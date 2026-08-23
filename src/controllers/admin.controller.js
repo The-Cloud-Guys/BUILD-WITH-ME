@@ -37,49 +37,96 @@ const getTimeAgo = (date) => {
   return `${years}y`;
 };
 
-const getActivityByTimeRange = async (range) => {
+const getActivityStats = async () => {
   const startYear = 2020;
-  const currentYear = new Date().getFullYear();
-  const data = [];
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentYearStart = new Date(currentYear, 0, 1);
+  const nextYearStart = new Date(currentYear + 1, 0, 1);
+  const timezone = 'Africa/Lagos';
 
-  if (range === 'year') {
-    for (let year = startYear; year <= currentYear; year++) {
-      const start = new Date(year, 0, 1);
-      const end = new Date(year, 11, 31);
-      const count = await User.countDocuments({
-        createdAt: { $gte: start, $lte: end }
-      });
-      data.push({ label: year.toString(), value: count });
+  const [activity = {}] = await User.aggregate([
+    {
+      $facet: {
+        year: [
+          { $match: { createdAt: { $gte: new Date(startYear, 0, 1) } } },
+          {
+            $group: {
+              _id: { $year: { date: '$createdAt', timezone } },
+              value: { $sum: 1 }
+            }
+          }
+        ],
+        month: [
+          { $match: { createdAt: { $gte: currentYearStart, $lt: nextYearStart } } },
+          {
+            $group: {
+              _id: { $month: { date: '$createdAt', timezone } },
+              value: { $sum: 1 }
+            }
+          }
+        ],
+        week: [
+          { $match: { createdAt: { $gte: currentYearStart, $lt: nextYearStart } } },
+          {
+            $project: {
+              week: {
+                $min: [
+                  52,
+                  {
+                    $ceil: {
+                      $divide: [
+                        { $dayOfYear: { date: '$createdAt', timezone } },
+                        7
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          { $group: { _id: '$week', value: { $sum: 1 } } }
+        ]
+      }
     }
-  } else if (range === 'month') {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    for (let month = 0; month < 12; month++) {
-      const start = new Date(currentYear, month, 1);
-      const end = new Date(currentYear, month + 1, 0);
-      const count = await User.countDocuments({
-        createdAt: { $gte: start, $lte: end }
-      });
-      data.push({ label: `${months[month]} ${currentYear}`, value: count });
-    }
-  } else if (range === 'week') {
-    for (let week = 1; week <= 52; week++) {
-      const start = new Date(currentYear, 0, (week - 1) * 7 + 1);
-      const end = new Date(currentYear, 0, week * 7);
-      const count = await User.countDocuments({
-        createdAt: { $gte: start, $lte: end }
-      });
-      data.push({ label: `Week ${week}`, value: count });
-    }
-  }
+  ]);
 
-  return data;
+  const toCountMap = (rows = []) => new Map(
+    rows.map(({ _id, value }) => [Number(_id), value])
+  );
+  const yearCounts = toCountMap(activity.year);
+  const monthCounts = toCountMap(activity.month);
+  const weekCounts = toCountMap(activity.week);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  return {
+    year: Array.from({ length: currentYear - startYear + 1 }, (_, index) => {
+      const year = startYear + index;
+      return { label: year.toString(), value: yearCounts.get(year) || 0 };
+    }),
+    month: months.map((month, index) => ({
+      label: `${month} ${currentYear}`,
+      value: monthCounts.get(index + 1) || 0
+    })),
+    week: Array.from({ length: 52 }, (_, index) => ({
+      label: `Week ${index + 1}`,
+      value: weekCounts.get(index + 1) || 0
+    }))
+  };
 };
 
 const getProjectStats = async () => {
+  const counts = await Project.aggregate([
+    { $match: { status: { $in: ['OPEN', 'ACTIVE', 'COMPLETED'] } } },
+    { $group: { _id: '$status', value: { $sum: 1 } } }
+  ]);
+  const countByStatus = new Map(
+    counts.map(({ _id, value }) => [_id, value])
+  );
   const stats = {
-    launched: await Project.countDocuments({ status: 'OPEN' }),
-    inProgress: await Project.countDocuments({ status: 'ACTIVE' }),
-    completed: await Project.countDocuments({ status: 'COMPLETED' })
+    launched: countByStatus.get('OPEN') || 0,
+    inProgress: countByStatus.get('ACTIVE') || 0,
+    completed: countByStatus.get('COMPLETED') || 0
   };
   
   const total = stats.launched + stats.inProgress + stats.completed || 1;
@@ -200,9 +247,10 @@ const getDashboardStats = async (req, res) => {
     };
 
     // Get user activity by year (for chart)
-    const userActivityByYear = await getActivityByTimeRange('year');
-    const userActivityByMonth = await getActivityByTimeRange('month');
-    const userActivityByWeek = await getActivityByTimeRange('week');
+    const activityStats = await getActivityStats();
+    const userActivityByYear = activityStats.year;
+    const userActivityByMonth = activityStats.month;
+    const userActivityByWeek = activityStats.week;
 
     // Get project stats for donut chart
     const projectStats = await getProjectStats();

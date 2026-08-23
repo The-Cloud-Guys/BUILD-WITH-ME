@@ -122,4 +122,7 @@ projectSchema.virtual('totalDevelopersNeeded').get(function () {
   return this.roles.reduce((sum, role) => sum + role.requiredCount, 0);
 });
 
+projectSchema.index({ createdAt: 1 });
+projectSchema.index({ status: 1 });
+
 module.exports = mongoose.model('Project', projectSchema);
