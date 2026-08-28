@@ -9,6 +9,11 @@ const { Report } = require('../models/admin.model');
 const User = require('../models/user.model');
 const Project = require('../models/project.model');
 const { uploadFile, deleteFile, getSignedUrl } = require('../services/supabase.service');
+const {
+  buildPostShare,
+  buildCommentShare,
+  buildProfileShare,
+} = require('../services/shareLink.service');
 const multer = require('multer');
 const path = require('path');
 
@@ -91,6 +96,7 @@ const createPost = async (req, res) => {
         getSignedUrl(process.env.SUPABASE_BUCKET_COMMUNITY, mediaPath, 3600)
       )
     );
+    populatedPost.share = buildPostShare(populatedPost);
 
     res.status(201).json({ 
       message: 'Post created successfully', 
@@ -159,6 +165,7 @@ const getFeed = async (req, res) => {
         }
         post.media = signedMedia;
       }
+      post.share = buildPostShare(post);
     }
 
     const total = await Post.countDocuments({ isHidden: { $ne: true } });
@@ -203,6 +210,7 @@ const getPostById = async (req, res) => {
           : getSignedUrl(process.env.SUPABASE_BUCKET_COMMUNITY, mediaPath, 3600)
       )
     );
+    post.share = buildPostShare(post);
 
     res.json(post);
   } catch (error) {
@@ -226,6 +234,7 @@ const updatePost = async (req, res) => {
     if (content) post.content = content;
     if (tags) post.tags = tags;
     await post.save();
+    post._doc.share = buildPostShare(post);
 
     res.json({ message: 'Post updated successfully', post });
   } catch (error) {
@@ -355,6 +364,7 @@ const createComment = async (req, res) => {
     // Mark if author is also post author
     const isPostAuthor = post.author.toString() === req.user.id;
     populatedComment._doc.isAuthor = isPostAuthor;
+    populatedComment._doc.share = buildCommentShare(populatedComment);
 
     res.status(201).json({ message: 'Comment added', comment: populatedComment });
   } catch (error) {
@@ -401,11 +411,13 @@ const getComments = async (req, res) => {
         if (reply.author.profilePhoto && reply.author.profilePhoto.startsWith('users/')) {
           reply.author.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, reply.author.profilePhoto);
         }
+        reply.share = buildCommentShare(reply);
       }
       comment.replies = replies;
       if (comment.author.profilePhoto && comment.author.profilePhoto.startsWith('users/')) {
         comment.author.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, comment.author.profilePhoto);
       }
+      comment.share = buildCommentShare(comment);
     }
 
     const total = await Comment.countDocuments({ post: postId, parentComment: null });
@@ -486,6 +498,9 @@ const getSavedPosts = async (req, res) => {
       populate: { path: 'author', select: 'firstName lastName profilePhoto email' }
     }).sort('-createdAt');
     const posts = saves.map(s => s.post).filter(p => p && p.isHidden !== true);
+    for (const post of posts) {
+      post._doc.share = buildPostShare(post);
+    }
     res.json(posts);
   } catch (error) {
     console.error(error);
@@ -728,6 +743,10 @@ const getUserProfile = async (req, res) => {
     if (profileObj.profilePhoto && profileObj.profilePhoto.startsWith('users/')) {
       profileObj.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, profileObj.profilePhoto);
     }
+    profileObj.share = buildProfileShare(profileObj);
+    for (const post of posts) {
+      post.share = buildPostShare(post);
+    }
 
     res.json({
       user: profileObj,
@@ -744,11 +763,6 @@ const getUserProfile = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
-
-// ==============================
-// COPY LINK (returns post URL)
-// ==============================
-// No backend endpoint needed – frontend constructs URL from post ID.
 
 module.exports = {
   createPost,

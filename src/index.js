@@ -21,6 +21,7 @@ const communityRoutes = require('./routes/community.routes');
 const applicationRoutes = require('./routes/application.routes');
 const chatRoutes = require('./routes/chat.routes');
 const adminRoutes = require('./routes/admin.routes');
+const shareRoutes = require('./routes/share.routes');
 
 const SocketManager = require('./socket');
 
@@ -99,6 +100,10 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/community', communityRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/admin', adminRoutes);
+
+// Public HTTPS share fallback. Verified mobile app/universal links can intercept
+// these paths before the browser reaches this route.
+app.use('/share', shareRoutes);
 
 // ============================================
 // 404 HANDLER

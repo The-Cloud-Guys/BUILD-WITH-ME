@@ -118,6 +118,37 @@ Accepting an application atomically updates the application, project role capaci
 
 Persisted community media is a stable storage path, not an expiring signed URL. Read responses generate fresh signed URLs.
 
+### Share links
+
+Post, comment, and community-profile responses include a `share` object. No separate copy-link API call is required.
+
+```json
+{
+  "share": {
+    "type": "post | comment | profile | project",
+    "resourceId": "string",
+    "path": "/share/post/:postId",
+    "url": "https://frontend.example/share/post/:postId",
+    "title": "string",
+    "text": "string",
+    "configured": true
+  }
+}
+```
+
+- Post: `/share/post/:postId`
+- Comment: `/share/post/:postId?comment=:commentId`
+- Profile: `/share/profile/:userId`
+- Project: `/share/project/:projectId`
+- Compatibility resolver: `/share/comment/:commentId` normalizes to the parent post representation.
+- `url` is `null` and `configured` is `false` when `FRONTEND_URL` is absent or invalid; `path` remains available.
+- The frontend must register the corresponding `/share/...` routes. After authentication, preserve the complete requested path and query string, fetch the existing API resource, and scroll to or highlight the requested comment when `comment` is present.
+- Use `navigator.share({ title, text, url })` where supported and `navigator.clipboard.writeText(url)` for copy-link behavior and as the fallback.
+
+The backend publicly resolves `GET /share/:resourceType/:resourceId` before the final API 404 handler. It returns a privacy-safe HTML fallback for browsers and social crawlers, never the protected API payload. Supported resource types are `post`, `comment`, `profile`, and `project`. Invalid identifiers return an HTML `400`; missing, hidden, suspended, or unavailable resources return an HTML `404`. Verified Android App Links or iOS Universal Links may intercept the same HTTPS path before the browser reaches this fallback.
+
+For `GET /api/projects/:id/applications`, `projectDetails.teamMembers[].profilePhoto` follows the established avatar response convention: a signed HTTPS URL when signing succeeds, an existing HTTPS URL unchanged, or `null` when no photo exists or signing fails. The stored Supabase path is not returned.
+
 ## Notifications
 
 | Method | Endpoint | Auth | Input | Success response |

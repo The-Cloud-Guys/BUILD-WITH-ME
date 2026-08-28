@@ -7,6 +7,7 @@ const User = require('../models/user.model');
 const Notification = require('../models/notification.model');
 const { createNotification } = require('../services/notification.service');
 const { uploadFile, deleteFile, getSignedUrl } = require('../services/supabase.service');
+const { createAvatarResolver, attachResolvedAvatar } = require('../services/avatar.service');
 const { syncProjectTeamRoom } = require('../services/projectTeamRoom.service');
 
 // ==============================
@@ -795,6 +796,7 @@ const getProjectApplications = async (req, res) => {
     ]);
 
     // Signed URLs
+    const resolveAvatar = createAvatarResolver();
     const applicationsWithUrls = await Promise.all(
       applications.map(async (app) => ({
         ...app,
@@ -816,6 +818,12 @@ const getProjectApplications = async (req, res) => {
       }))
     );
 
+    const teamMembersWithUrls = await Promise.all(
+      (project.teamMembers || []).map((member) =>
+        attachResolvedAvatar(member, resolveAvatar)
+      )
+    );
+
     res.json({
       applications: applicationsWithUrls,
       counts: { all, pending, accepted, rejected },
@@ -823,7 +831,7 @@ const getProjectApplications = async (req, res) => {
         _id: project._id,
         title: project.title,
         status: project.status || 'OPEN',
-        teamMembers: project.teamMembers || [],
+        teamMembers: teamMembersWithUrls,
         roles: project.roles || [],
       },
       pagination: {

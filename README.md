@@ -140,6 +140,19 @@ Important:
 All endpoints return JSON. Authentication uses HTTP-only cookies (`accessToken`, `refreshToken`).
 Protected routes require a valid `accessToken` cookie. The `accessToken` is also returned in the JSON body for client-side use.
 
+### Shareable content links
+
+Post, comment, and community-profile responses provide canonical `share` metadata generated from `FRONTEND_URL`. The frontend should pass `share.url`, `share.title`, and `share.text` to the Web Share API or copy `share.url` with the Clipboard API.
+
+Supported frontend deep-link routes are:
+
+- `/share/post/:postId`
+- `/share/post/:postId?comment=:commentId`
+- `/share/profile/:userId`
+- `/share/project/:projectId`
+
+The backend also serves a privacy-safe browser fallback at these paths, so links no longer fall through to the API's `Route not found` response. If authentication is required, retain the complete requested deep link through login and redirect back to it afterward. Native handoff still requires verified Android App Links and iOS Universal Links in the Flutter/mobile repositories. See the Share links section in [API_REFERENCE.md](./API_REFERENCE.md) for the response contract and frontend behavior.
+
 ### Authentication (/api/auth)
 
 | Method | Endpoint               | Auth | Description                                                      |
