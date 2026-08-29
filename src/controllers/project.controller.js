@@ -149,7 +149,7 @@ const createProject = async (req, res) => {
       })),
     });
 
-    await project.populate('owner', 'firstName lastName profilePhoto email');
+    await project.populate('owner', PROJECT_PARTICIPANT_FIELDS);
 
     res.status(201).json({
       message: 'Project created successfully',
@@ -198,7 +198,7 @@ const getProjects = async (req, res) => {
     }
 
     const projects = await Project.find(filter)
-      .populate('owner', 'firstName lastName profilePhoto email')
+      .populate('owner', PROJECT_PARTICIPANT_FIELDS)
       .populate('teamMembers', 'firstName lastName profilePhoto email')
       .sort('-createdAt')
       .skip((page - 1) * limit)
@@ -252,7 +252,7 @@ const getProjectById = async (req, res) => {
       { $inc: { views: 1 } },
       { new: true }
     )
-      .populate('owner', 'firstName lastName profilePhoto email')
+      .populate('owner', PROJECT_PARTICIPANT_FIELDS)
       .populate('teamMembers', 'firstName lastName profilePhoto email')
       .lean();
 
@@ -411,7 +411,7 @@ const updateProject = async (req, res) => {
     }
 
     await project.save();
-    await project.populate('owner', 'firstName lastName profilePhoto email');
+    await project.populate('owner', PROJECT_PARTICIPANT_FIELDS);
 
     res.json({
       message: 'Project updated successfully',
@@ -881,7 +881,7 @@ const getProjectTeam = async (req, res) => {
       _id: req.params.id,
       isHidden: { $ne: true },
     })
-      .populate('owner', 'firstName lastName profilePhoto email role skills')
+      .populate('owner', PROJECT_PARTICIPANT_FIELDS)
       .populate('teamMembers', 'firstName lastName profilePhoto email role skills')
       .lean();
 

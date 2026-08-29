@@ -512,7 +512,7 @@ const getAdminProjects = async (req, res) => {
     }
 
     const projects = await Project.find(filter)
-      .populate('owner', 'firstName lastName profilePhoto email')
+      .populate('owner', 'firstName lastName profilePhoto email role skills')
       .populate('teamMembers', 'firstName lastName profilePhoto email role')
       .sort('-createdAt')
       .skip((page - 1) * limit)

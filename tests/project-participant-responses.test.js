@@ -51,7 +51,7 @@ test('missing populated project participants remain null', async () => {
   assert.equal(await attachResolvedAvatar(null, resolveAvatar), null);
 });
 
-test('my, featured, and recommended projects share the same participant fields', () => {
+test('every populated project owner uses the same public participant fields', () => {
   const source = fs.readFileSync('src/controllers/project.controller.js', 'utf8');
   assert.match(
     source,
@@ -61,9 +61,19 @@ test('my, featured, and recommended projects share the same participant fields',
   const ownerPopulates = source.match(
     /populate\('owner', PROJECT_PARTICIPANT_FIELDS\)/g
   ) || [];
+  const allOwnerPopulates = source.match(/populate\('owner',/g) || [];
   const memberPopulates = source.match(
     /populate\('teamMembers', PROJECT_PARTICIPANT_FIELDS\)/g
   ) || [];
-  assert.equal(ownerPopulates.length, 3);
+  assert.ok(ownerPopulates.length > 0);
+  assert.equal(ownerPopulates.length, allOwnerPopulates.length);
   assert.equal(memberPopulates.length, 3);
+});
+
+test('admin project owner responses include the onboarding role', () => {
+  const source = fs.readFileSync('src/controllers/admin.controller.js', 'utf8');
+  assert.match(
+    source,
+    /populate\('owner', 'firstName lastName profilePhoto email role skills'\)/
+  );
 });
