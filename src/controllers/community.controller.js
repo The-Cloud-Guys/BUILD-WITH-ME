@@ -724,7 +724,7 @@ const getUserProfile = async (req, res) => {
     for (const p of projects) {
       let role = '';
       if (p.owner.toString() === userId) {
-        role = 'Creator';
+        role = user.role || '';
       } else {
         const application = await Application.findOne({ project: p._id, applicant: userId, status: 'ACCEPTED' });
         if (application) role = application.role;
