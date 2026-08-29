@@ -7,6 +7,10 @@ const Notification = require('../models/notification.model');
 const Comment = require('../models/comment.model'); 
 const { createNotification } = require('../services/notification.service');
 const { getSignedUrl } = require('../services/supabase.service');
+const {
+  buildProjectMemberRoleMap,
+  attachAppliedProjectRoles,
+} = require('../services/projectMemberRole.service');
 
 // ==============================
 // HELPER FUNCTIONS
@@ -522,6 +526,9 @@ const getAdminProjects = async (req, res) => {
     // Get additional stats for each project
     const projectsWithStats = await Promise.all(projects.map(async (project) => {
       const applications = await Application.find({ project: project._id });
+      const memberRoleMap = buildProjectMemberRoleMap(
+        applications.filter((application) => application.status === 'ACCEPTED')
+      );
       const openRoles = project.roles.filter(r => r.currentCount < r.requiredCount).length;
       
       return {
@@ -532,12 +539,16 @@ const getAdminProjects = async (req, res) => {
             await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, project.owner.profilePhoto) : 
             null
         },
-        teamMembers: await Promise.all(project.teamMembers.map(async (member) => ({
-          ...member,
-          profilePhoto: member.profilePhoto ? 
-            await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, member.profilePhoto) : 
-            null
-        }))),
+        teamMembers: attachAppliedProjectRoles(
+          project._id,
+          await Promise.all(project.teamMembers.map(async (member) => ({
+            ...member,
+            profilePhoto: member.profilePhoto
+              ? await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, member.profilePhoto)
+              : null
+          }))),
+          memberRoleMap
+        ),
         stats: {
           applications: applications.length,
           openRoles,

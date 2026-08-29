@@ -9,6 +9,10 @@ const { createNotification } = require('../services/notification.service');
 const { uploadFile, deleteFile, getSignedUrl } = require('../services/supabase.service');
 const { createAvatarResolver, attachResolvedAvatar } = require('../services/avatar.service');
 const { syncProjectTeamRoom } = require('../services/projectTeamRoom.service');
+const {
+  loadAcceptedProjectRoleMap,
+  attachAppliedProjectRoles,
+} = require('../services/projectMemberRole.service');
 
 const PROJECT_PARTICIPANT_FIELDS =
   'firstName lastName profilePhoto email role skills';
@@ -204,6 +208,9 @@ const getProjects = async (req, res) => {
       .skip((page - 1) * limit)
       .limit(parseInt(limit))
       .lean();
+    const memberRoleMap = await loadAcceptedProjectRoleMap(
+      projects.map((project) => project._id)
+    );
 
     // Get signed URLs for profile photos
     const projectsWithUrls = await Promise.all(
@@ -215,13 +222,15 @@ const getProjects = async (req, res) => {
             await getSignedUrlForFile(process.env.SUPABASE_BUCKET_AVATAR, project.owner.profilePhoto) : 
             null
         },
-        teamMembers: await Promise.all(
-          project.teamMembers.map(async (member) => ({
+        teamMembers: attachAppliedProjectRoles(
+          project._id,
+          await Promise.all(project.teamMembers.map(async (member) => ({
             ...member,
             profilePhoto: member?.profilePhoto ? 
               await getSignedUrlForFile(process.env.SUPABASE_BUCKET_AVATAR, member.profilePhoto) : 
               null
-          }))
+          }))),
+          memberRoleMap
         )
       }))
     );
@@ -259,6 +268,7 @@ const getProjectById = async (req, res) => {
     if (!project) {
       return res.status(404).json({ message: 'Project not found' });
     }
+    const memberRoleMap = await loadAcceptedProjectRoleMap([project._id]);
 
     // Get signed URLs
     const projectWithUrls = {
@@ -269,13 +279,15 @@ const getProjectById = async (req, res) => {
           await getSignedUrlForFile(process.env.SUPABASE_BUCKET_AVATAR, project.owner.profilePhoto) : 
           null
       },
-      teamMembers: await Promise.all(
-        project.teamMembers.map(async (member) => ({
+      teamMembers: attachAppliedProjectRoles(
+        project._id,
+        await Promise.all(project.teamMembers.map(async (member) => ({
           ...member,
           profilePhoto: member?.profilePhoto ? 
             await getSignedUrlForFile(process.env.SUPABASE_BUCKET_AVATAR, member.profilePhoto) : 
             null
-        }))
+        }))),
+        memberRoleMap
       )
     };
 
@@ -826,6 +838,7 @@ const getProjectApplications = async (req, res) => {
         attachResolvedAvatar(member, resolveAvatar)
       )
     );
+    const memberRoleMap = await loadAcceptedProjectRoleMap([project._id]);
 
     res.json({
       applications: applicationsWithUrls,
@@ -834,7 +847,11 @@ const getProjectApplications = async (req, res) => {
         _id: project._id,
         title: project.title,
         status: project.status || 'OPEN',
-        teamMembers: teamMembersWithUrls,
+        teamMembers: attachAppliedProjectRoles(
+          project._id,
+          teamMembersWithUrls,
+          memberRoleMap
+        ),
         roles: project.roles || [],
       },
       pagination: {
@@ -888,6 +905,7 @@ const getProjectTeam = async (req, res) => {
     if (!project) {
       return res.status(404).json({ message: 'Project not found' });
     }
+    const memberRoleMap = await loadAcceptedProjectRoleMap([project._id]);
 
     // Get signed URLs for owner and team member photos
     const ownerWithPhoto = {
@@ -897,13 +915,17 @@ const getProjectTeam = async (req, res) => {
         null
     };
 
-    const membersWithPhotos = await Promise.all(
+    const membersWithPhotos = attachAppliedProjectRoles(
+      project._id,
+      await Promise.all(
       project.teamMembers.map(async (member) => ({
         ...member,
         profilePhoto: member?.profilePhoto ? 
           await getSignedUrlForFile(process.env.SUPABASE_BUCKET_AVATAR, member.profilePhoto) : 
           null
       }))
+      ),
+      memberRoleMap
     );
 
     res.json({
@@ -1004,6 +1026,9 @@ const getUserProjects = async (req, res) => {
       .lean();
 
     const resolveAvatar = createAvatarResolver();
+    const memberRoleMap = await loadAcceptedProjectRoleMap(
+      projects.map((project) => project._id)
+    );
     const projectsWithDetails = await Promise.all(
       projects.map(async (project) => {
         const [applicants, pending, accepted] = await Promise.all([
@@ -1016,10 +1041,12 @@ const getUserProjects = async (req, res) => {
           ...project,
           status: project.status || 'OPEN', // ✅ Critical fallback
           owner: await attachResolvedAvatar(project.owner, resolveAvatar),
-          teamMembers: await Promise.all(
-            (project.teamMembers || []).map((member) =>
+          teamMembers: attachAppliedProjectRoles(
+            project._id,
+            await Promise.all((project.teamMembers || []).map((member) =>
               attachResolvedAvatar(member, resolveAvatar)
-            )
+            )),
+            memberRoleMap
           ),
           stats: {
             members: project.teamMembers?.length || 0,
@@ -1096,6 +1123,7 @@ const getFeaturedProjects = async (req, res) => {
 
     // Merge aggregated data with populated data
     const resolveAvatar = createAvatarResolver();
+    const memberRoleMap = await loadAcceptedProjectRoleMap(projectIds);
     const result = await Promise.all(
       populatedProjects.map(async (project) => {
         const aggData = featuredProjects.find(p => p._id.toString() === project._id.toString());
@@ -1104,10 +1132,12 @@ const getFeaturedProjects = async (req, res) => {
           ...project,
           applicationCount: aggData?.applicationCount || 0,
           owner: await attachResolvedAvatar(project.owner, resolveAvatar),
-          teamMembers: await Promise.all(
-            (project.teamMembers || []).map((member) =>
+          teamMembers: attachAppliedProjectRoles(
+            project._id,
+            await Promise.all((project.teamMembers || []).map((member) =>
               attachResolvedAvatar(member, resolveAvatar)
-            )
+            )),
+            memberRoleMap
           )
         };
       })
@@ -1178,14 +1208,19 @@ const getRecommendedProjects = async (req, res) => {
       .lean();
 
     const resolveAvatar = createAvatarResolver();
+    const memberRoleMap = await loadAcceptedProjectRoleMap(
+      projects.map((project) => project._id)
+    );
     const projectsWithUrls = await Promise.all(
       projects.map(async (project) => ({
         ...project,
         owner: await attachResolvedAvatar(project.owner, resolveAvatar),
-        teamMembers: await Promise.all(
-          (project.teamMembers || []).map((member) =>
+        teamMembers: attachAppliedProjectRoles(
+          project._id,
+          await Promise.all((project.teamMembers || []).map((member) =>
             attachResolvedAvatar(member, resolveAvatar)
-          )
+          )),
+          memberRoleMap
         ),
         relevanceScore: calculateRelevanceScore(project, user)
       }))
