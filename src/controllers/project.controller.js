@@ -10,6 +10,9 @@ const { uploadFile, deleteFile, getSignedUrl } = require('../services/supabase.s
 const { createAvatarResolver, attachResolvedAvatar } = require('../services/avatar.service');
 const { syncProjectTeamRoom } = require('../services/projectTeamRoom.service');
 
+const PROJECT_PARTICIPANT_FIELDS =
+  'firstName lastName profilePhoto email role skills';
+
 // ==============================
 // CV MULTER CONFIGURATION (UPDATED)
 // ==============================
@@ -995,11 +998,12 @@ const removeTeamMember = async (req, res) => {
 const getUserProjects = async (req, res) => {
   try {
     const projects = await Project.find({ owner: req.user.id })
-      .populate('owner', 'firstName lastName profilePhoto email')
-      .populate('teamMembers', 'firstName lastName profilePhoto email role')
+      .populate('owner', PROJECT_PARTICIPANT_FIELDS)
+      .populate('teamMembers', PROJECT_PARTICIPANT_FIELDS)
       .sort('-createdAt')
       .lean();
 
+    const resolveAvatar = createAvatarResolver();
     const projectsWithDetails = await Promise.all(
       projects.map(async (project) => {
         const [applicants, pending, accepted] = await Promise.all([
@@ -1011,27 +1015,11 @@ const getUserProjects = async (req, res) => {
         return {
           ...project,
           status: project.status || 'OPEN', // ✅ Critical fallback
-          owner: project.owner
-            ? {
-                ...project.owner,
-                profilePhoto: project.owner.profilePhoto
-                  ? await getSignedUrlForFile(
-                      process.env.SUPABASE_BUCKET_AVATAR,
-                      project.owner.profilePhoto
-                    )
-                  : null,
-              }
-            : null,
+          owner: await attachResolvedAvatar(project.owner, resolveAvatar),
           teamMembers: await Promise.all(
-            (project.teamMembers || []).map(async (member) => ({
-              ...member,
-              profilePhoto: member.profilePhoto
-                ? await getSignedUrlForFile(
-                    process.env.SUPABASE_BUCKET_AVATAR,
-                    member.profilePhoto
-                  )
-                : null,
-            }))
+            (project.teamMembers || []).map((member) =>
+              attachResolvedAvatar(member, resolveAvatar)
+            )
           ),
           stats: {
             members: project.teamMembers?.length || 0,
@@ -1102,11 +1090,12 @@ const getFeaturedProjects = async (req, res) => {
     // Populate owner and team members
     const projectIds = featuredProjects.map(p => p._id);
     const populatedProjects = await Project.find({ _id: { $in: projectIds } })
-      .populate('owner', 'firstName lastName profilePhoto email')
-      .populate('teamMembers', 'firstName lastName profilePhoto email')
+      .populate('owner', PROJECT_PARTICIPANT_FIELDS)
+      .populate('teamMembers', PROJECT_PARTICIPANT_FIELDS)
       .lean();
 
     // Merge aggregated data with populated data
+    const resolveAvatar = createAvatarResolver();
     const result = await Promise.all(
       populatedProjects.map(async (project) => {
         const aggData = featuredProjects.find(p => p._id.toString() === project._id.toString());
@@ -1114,19 +1103,11 @@ const getFeaturedProjects = async (req, res) => {
         return {
           ...project,
           applicationCount: aggData?.applicationCount || 0,
-          owner: {
-            ...project.owner,
-            profilePhoto: project.owner?.profilePhoto ? 
-              await getSignedUrlForFile(process.env.SUPABASE_BUCKET_AVATAR, project.owner.profilePhoto) : 
-              null
-          },
+          owner: await attachResolvedAvatar(project.owner, resolveAvatar),
           teamMembers: await Promise.all(
-            project.teamMembers.map(async (member) => ({
-              ...member,
-              profilePhoto: member?.profilePhoto ? 
-                await getSignedUrlForFile(process.env.SUPABASE_BUCKET_AVATAR, member.profilePhoto) : 
-                null
-            }))
+            (project.teamMembers || []).map((member) =>
+              attachResolvedAvatar(member, resolveAvatar)
+            )
           )
         };
       })
@@ -1190,28 +1171,21 @@ const getRecommendedProjects = async (req, res) => {
     if (relevanceConditions.length > 0) matchCriteria.$or = relevanceConditions;
 
     const projects = await Project.find(matchCriteria)
-      .populate('owner', 'firstName lastName profilePhoto email')
-      .populate('teamMembers', 'firstName lastName profilePhoto email')
+      .populate('owner', PROJECT_PARTICIPANT_FIELDS)
+      .populate('teamMembers', PROJECT_PARTICIPANT_FIELDS)
       .sort('-createdAt')
       .limit(10)
       .lean();
 
+    const resolveAvatar = createAvatarResolver();
     const projectsWithUrls = await Promise.all(
       projects.map(async (project) => ({
         ...project,
-        owner: {
-          ...project.owner,
-          profilePhoto: project.owner?.profilePhoto ? 
-            await getSignedUrlForFile(process.env.SUPABASE_BUCKET_AVATAR, project.owner.profilePhoto) : 
-            null
-        },
+        owner: await attachResolvedAvatar(project.owner, resolveAvatar),
         teamMembers: await Promise.all(
-          project.teamMembers.map(async (member) => ({
-            ...member,
-            profilePhoto: member?.profilePhoto ? 
-              await getSignedUrlForFile(process.env.SUPABASE_BUCKET_AVATAR, member.profilePhoto) : 
-              null
-          }))
+          (project.teamMembers || []).map((member) =>
+            attachResolvedAvatar(member, resolveAvatar)
+          )
         ),
         relevanceScore: calculateRelevanceScore(project, user)
       }))
