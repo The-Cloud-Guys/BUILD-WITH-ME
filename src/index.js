@@ -77,6 +77,26 @@ app.use(
 app.use(cookieParser());
 
 // ============================================
+// ANDROID DIGITAL ASSET LINKS
+// ============================================
+
+const assetLinksPath = path.join(
+  __dirname,
+  '..',
+  'public',
+  '.well-known',
+  'assetlinks.json'
+);
+
+app.get('/.well-known/assetlinks.json', (req, res, next) => {
+  res.type('application/json');
+  res.set('Cache-Control', 'public, max-age=3600');
+  res.sendFile(assetLinksPath, (error) => {
+    if (error) next(error);
+  });
+});
+
+// ============================================
 // HEALTH CHECK
 // ============================================
 

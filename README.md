@@ -153,6 +153,8 @@ Supported frontend deep-link routes are:
 
 The backend also serves a privacy-safe browser fallback at these paths, so links no longer fall through to the API's `Route not found` response. If authentication is required, retain the complete requested deep link through login and redirect back to it afterward. Native handoff still requires verified Android App Links and iOS Universal Links in the Flutter/mobile repositories. See the Share links section in [API_REFERENCE.md](./API_REFERENCE.md) for the response contract and frontend behavior.
 
+Android domain verification is served publicly from `GET /.well-known/assetlinks.json` using `public/.well-known/assetlinks.json`. It authorizes the configured Android package and release signing certificate to handle HTTPS links for the exact hostname serving this backend. No iOS Universal Link association is configured.
+
 ### Authentication (/api/auth)
 
 | Method | Endpoint               | Auth | Description                                                      |
