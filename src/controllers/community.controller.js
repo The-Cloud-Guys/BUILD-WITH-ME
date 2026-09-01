@@ -357,7 +357,7 @@ const createComment = async (req, res) => {
     // Increment post's comment count
     await Post.findByIdAndUpdate(postId, { $inc: { commentCount: 1 } });
 
-    const populatedComment = await Comment.findById(comment._id).populate('author', 'firstName lastName profilePhoto email');
+    const populatedComment = await Comment.findById(comment._id).populate('author', 'firstName lastName profilePhoto email role');
     if (populatedComment.author.profilePhoto && populatedComment.author.profilePhoto.startsWith('users/')) {
       populatedComment.author.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, populatedComment.author.profilePhoto);
     }
@@ -384,7 +384,7 @@ const getComments = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const comments = await Comment.find({ post: postId, parentComment: null })
-      .populate('author', 'firstName lastName profilePhoto email')
+      .populate('author', 'firstName lastName profilePhoto email role')
       .sort('-likeCount') // most liked first? Or use '-createdAt'? We'll use '-createdAt'
       .skip(skip)
       .limit(limit)
@@ -401,7 +401,7 @@ const getComments = async (req, res) => {
       comment.isAuthor = post.author.toString() === comment.author._id.toString();
       // Get replies
       const replies = await Comment.find({ parentComment: comment._id })
-        .populate('author', 'firstName lastName profilePhoto email')
+        .populate('author', 'firstName lastName profilePhoto email role')
         .sort('createdAt')
         .lean();
       for (let reply of replies) {
@@ -495,7 +495,7 @@ const getSavedPosts = async (req, res) => {
   try {
     const saves = await Save.find({ user: req.user.id }).populate({
       path: 'post',
-      populate: { path: 'author', select: 'firstName lastName profilePhoto email' }
+      populate: { path: 'author', select: 'firstName lastName profilePhoto email role' }
     }).sort('-createdAt');
     const posts = saves.map(s => s.post).filter(p => p && p.isHidden !== true);
     for (const post of posts) {
@@ -540,7 +540,7 @@ const followUser = async (req, res) => {
 const getFollowers = async (req, res) => {
   try {
     const userId = req.params.userId;
-    const followers = await Follow.find({ following: userId }).populate('follower', 'firstName lastName profilePhoto email');
+    const followers = await Follow.find({ following: userId }).populate('follower', 'firstName lastName profilePhoto email role');
     res.json(followers.map(f => f.follower));
   } catch (error) {
     console.error(error);
@@ -554,7 +554,7 @@ const getFollowers = async (req, res) => {
 const getFollowing = async (req, res) => {
   try {
     const userId = req.params.userId;
-    const following = await Follow.find({ follower: userId }).populate('following', 'firstName lastName profilePhoto email');
+    const following = await Follow.find({ follower: userId }).populate('following', 'firstName lastName profilePhoto email role');
     res.json(following.map(f => f.following));
   } catch (error) {
     console.error(error);
@@ -735,7 +735,7 @@ const getUserProfile = async (req, res) => {
     // Get user's posts
     const posts = await Post.find({ author: userId, isHidden: { $ne: true } })
   .select('content tags media likeCount commentCount createdAt')
-  .populate('author', 'firstName lastName profilePhoto email')
+  .populate('author', 'firstName lastName profilePhoto email role')
   .sort('-createdAt')
   .lean();
 

@@ -261,8 +261,8 @@ const getDashboardStats = async (req, res) => {
 
     // Get recent reports
     const recentReports = await Report.find()
-      .populate('reporter', 'firstName lastName profilePhoto')
-      .populate('reportedUser', 'firstName lastName profilePhoto')
+      .populate('reporter', 'firstName lastName profilePhoto role')
+      .populate('reportedUser', 'firstName lastName profilePhoto role')
       .sort('-createdAt')
       .limit(5)
       .lean();
@@ -441,7 +441,7 @@ const getUserDetails = async (req, res) => {
 
     // Get reports against user
     const reports = await Report.find({ reportedUser: userId })
-      .populate('reporter', 'firstName lastName profilePhoto email')
+      .populate('reporter', 'firstName lastName profilePhoto email role')
       .sort('-createdAt')
       .lean();
 
@@ -601,8 +601,8 @@ const getReports = async (req, res) => {
     }
 
     const reports = await Report.find(filter)
-      .populate('reporter', 'firstName lastName profilePhoto')
-      .populate('reportedUser', 'firstName lastName profilePhoto')
+      .populate('reporter', 'firstName lastName profilePhoto role')
+      .populate('reportedUser', 'firstName lastName profilePhoto role')
       .sort('-createdAt')
       .skip((page - 1) * limit)
       .limit(limit)
@@ -814,7 +814,7 @@ const getAdminUsers = async (req, res) => {
   try {
     const admins = await Admin.find()
       .populate('user', 'firstName lastName profilePhoto email role')
-      .populate('addedBy', 'firstName lastName')
+      .populate('addedBy', 'firstName lastName role')
       .sort('-createdAt')
       .lean();
 
@@ -893,7 +893,7 @@ const addAdmin = async (req, res) => {
     });
 
     const populatedAdmin = await Admin.findById(admin._id)
-      .populate('user', 'firstName lastName email profilePhoto')
+      .populate('user', 'firstName lastName email profilePhoto role')
       .lean();
 
     res.json({ 
@@ -1453,7 +1453,7 @@ const getActivities = async (req, res) => {
     }
 
     const activities = await AuditLog.find(filter)
-      .populate('admin', 'firstName lastName profilePhoto')
+      .populate('admin', 'firstName lastName profilePhoto role')
       .sort('-createdAt')
       .skip((page - 1) * limit)
       .limit(limit)

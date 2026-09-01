@@ -873,12 +873,76 @@ const getProjectApplications = async (req, res) => {
 const getMyApplications = async (req, res) => {
   try {
     const applications = await Application.find({ applicant: req.user.id })
-      .populate('project', 'title description stage status owner')
-      .populate('applicant', 'firstName lastName profilePhoto')
+      .populate({
+        path: 'project',
+        select: 'title description stage status owner teamMembers roles techStack requiredSkills createdAt',
+        populate: [
+          { path: 'owner', select: PROJECT_PARTICIPANT_FIELDS },
+          { path: 'teamMembers', select: PROJECT_PARTICIPANT_FIELDS },
+        ],
+      })
+      .populate('applicant', PROJECT_PARTICIPANT_FIELDS)
       .sort('-createdAt')
       .lean();
 
-    res.json(applications);
+    const projectIds = applications
+      .map((application) => application.project?._id)
+      .filter(Boolean);
+    const memberRoleMap = await loadAcceptedProjectRoleMap(projectIds);
+    const resolveAvatar = createAvatarResolver();
+
+    const applicationsWithDetails = await Promise.all(
+      applications.map(async (application) => {
+        const applicant = await attachResolvedAvatar(
+          application.applicant,
+          resolveAvatar
+        );
+
+        if (!application.project) {
+          return {
+            ...application,
+            applicant,
+            project: null,
+            acceptedTeamMembers: [],
+          };
+        }
+
+        const { teamMembers = [], ...projectDetails } = application.project;
+        const owner = await attachResolvedAvatar(
+          projectDetails.owner,
+          resolveAvatar
+        );
+
+        let acceptedTeamMembers = [];
+        if (application.status === 'ACCEPTED') {
+          const membersWithAvatars = await Promise.all(
+            teamMembers.map((member) =>
+              attachResolvedAvatar(member, resolveAvatar)
+            )
+          );
+          acceptedTeamMembers = attachAppliedProjectRoles(
+            application.project._id,
+            membersWithAvatars,
+            memberRoleMap
+          ).filter(
+            (member) =>
+              member.role && member._id.toString() !== req.user.id
+          );
+        }
+
+        return {
+          ...application,
+          applicant,
+          project: {
+            ...projectDetails,
+            owner,
+          },
+          acceptedTeamMembers,
+        };
+      })
+    );
+
+    res.json(applicationsWithDetails);
   } catch (error) {
     console.error('Get my applications error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -1269,7 +1333,7 @@ const getApplicationDetails = async (req, res) => {
   try {
     const application = await Application.findById(req.params.id)
       .populate('project', 'title description stage status owner roles')
-      .populate('applicant', 'firstName lastName profilePhoto email skills')
+      .populate('applicant', 'firstName lastName profilePhoto email skills role')
       .lean();
 
     if (!application) {

@@ -261,6 +261,7 @@ const verifyEmail = async (req, res) => {
       user: {
         _id: user._id,
         email: user.email,
+        role: user.role,
         onboardingStep: user.onboardingStep,
         onboardingCompleted: user.onboardingCompleted,
       },
@@ -402,6 +403,7 @@ const login = async (req, res) => {
       user: {
         _id: user._id,
         email: user.email,
+        role: user.role,
         onboardingStep: user.onboardingStep,
         onboardingCompleted: user.onboardingCompleted,
       },
@@ -608,7 +610,7 @@ const resetPassword = async (req, res) => {
       message: 'Password reset successful',
       accessToken,
       refreshToken,
-      user: { _id: user._id, email: user.email },
+      user: { _id: user._id, email: user.email, role: user.role },
     });
   } catch (error) {
     console.error(error);
@@ -677,6 +679,7 @@ const firebaseAuth = async (req, res) => {
       user: {
         id: user._id,
         email: user.email,
+        role: user.role,
         onboardingStep: user.onboardingStep,
         onboardingCompleted: user.onboardingCompleted
       },

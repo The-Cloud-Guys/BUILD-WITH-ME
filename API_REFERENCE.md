@@ -76,11 +76,13 @@ The Postman journey orders authentication as registration → resend verificatio
 | PUT | `/api/projects/:id` | owner | `ProjectPatch` | object: project |
 | DELETE | `/api/projects/:id` | owner | none | object: message |
 | GET | `/api/projects/:id` | public | none | object: project |
-| GET | `/api/applications/me` | user | optional query filters | array: `Application[]` |
+| GET | `/api/applications/me` | user | none | array: applications with status, applied `role`, project/owner details, and `acceptedTeamMembers:User[]` when accepted |
 | GET | `/api/applications/:id` | user/participant | none | object: application |
 | PUT | `/api/applications/:id` | project owner | `{ status:"accepted"|"rejected" }` | object: application, project/team state |
 
 Accepting an application atomically updates the application, project role capacity and team membership, then synchronizes one private `team_room` chat for the project. Its deterministic name is `<project title> Team`; the owner is an admin member and accepted applicants receive their project role. Rejecting an accepted application or removing a member synchronizes the room membership again.
+
+`GET /api/applications/me` is the current-user application-history endpoint. Every entry retains its top-level `status` (`PENDING`, `ACCEPTED`, or `REJECTED`) and applied project `role`. `project.owner.role` is the owner's onboarding role. `acceptedTeamMembers` is empty until the application is accepted; once accepted, it contains the other accepted members, and each member's `role` is taken from that member's accepted project application rather than their onboarding role.
 
 ## Chat
 
