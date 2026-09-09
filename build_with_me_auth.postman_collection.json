@@ -216,6 +216,21 @@
     {
       "key": "testExternalLink",
       "value": "https://github.com/example"
+    },
+    {
+      "key": "webAdminEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "webAdminPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminBootstrapSecret",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -3223,10 +3238,172 @@
       ]
     },
     {
-      "name": "10 - Administration",
+      "name": "10 - Admin Authentication",
       "item": [
         {
-          "name": "070. Get Admin Dashboard",
+          "name": "070. Bootstrap Initial Super Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Expected status', () => { pm.expect([201, 409]).to.include(pm.response.code) });",
+                  "pm.test('Response is JSON', () => {",
+                  "  const ct = pm.response.headers.get('Content-Type') || '';",
+                  "  pm.expect(ct.toLowerCase()).to.include('application/json');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/admin/auth/bootstrap",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-admin-bootstrap-secret",
+                "value": "{{adminBootstrapSecret}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{webAdminEmail}}\",\n  \"password\": \"{{webAdminPassword}}\",\n  \"firstName\": \"System\",\n  \"lastName\": \"Administrator\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "071. Login Dedicated Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Expected status', () => { pm.response.to.have.status(200) });",
+                  "pm.test('Response is JSON', () => {",
+                  "  const ct = pm.response.headers.get('Content-Type') || '';",
+                  "  pm.expect(ct.toLowerCase()).to.include('application/json');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/admin/auth/login",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{webAdminEmail}}\",\n  \"password\": \"{{webAdminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "072. Get Current Dedicated Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Expected status', () => { pm.response.to.have.status(200) });",
+                  "pm.test('Response is JSON', () => {",
+                  "  const ct = pm.response.headers.get('Content-Type') || '';",
+                  "  pm.expect(ct.toLowerCase()).to.include('application/json');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/admin/auth/me",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "073. Refresh Dedicated Admin Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Expected status', () => { pm.response.to.have.status(200) });",
+                  "pm.test('Response is JSON', () => {",
+                  "  const ct = pm.response.headers.get('Content-Type') || '';",
+                  "  pm.expect(ct.toLowerCase()).to.include('application/json');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/admin/auth/refresh-token",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "11 - Administration",
+      "item": [
+        {
+          "name": "074. Get Admin Dashboard",
           "event": [
             {
               "listen": "test",
@@ -3262,7 +3439,7 @@
           "response": []
         },
         {
-          "name": "071. Get Users",
+          "name": "075. Get Users",
           "event": [
             {
               "listen": "test",
@@ -3298,7 +3475,7 @@
           "response": []
         },
         {
-          "name": "072. Get Applicant User Details",
+          "name": "076. Get Applicant User Details",
           "event": [
             {
               "listen": "test",
@@ -3334,7 +3511,7 @@
           "response": []
         },
         {
-          "name": "073. Get Admin Project List",
+          "name": "077. Get Admin Project List",
           "event": [
             {
               "listen": "test",
@@ -3370,7 +3547,7 @@
           "response": []
         },
         {
-          "name": "074. Get Reports",
+          "name": "078. Get Reports",
           "event": [
             {
               "listen": "test",
@@ -3406,7 +3583,7 @@
           "response": []
         },
         {
-          "name": "075. Resolve Report - No Violation",
+          "name": "079. Resolve Report - No Violation",
           "event": [
             {
               "listen": "test",
@@ -3457,7 +3634,7 @@
           "response": []
         },
         {
-          "name": "076. Get Admin Activities",
+          "name": "080. Get Admin Activities",
           "event": [
             {
               "listen": "test",
@@ -3493,7 +3670,7 @@
           "response": []
         },
         {
-          "name": "077. Get Admin Users",
+          "name": "081. Get Admin Users",
           "event": [
             {
               "listen": "test",
@@ -3529,7 +3706,7 @@
           "response": []
         },
         {
-          "name": "078. Add Applicant as Admin",
+          "name": "082. Add Applicant as Admin",
           "event": [
             {
               "listen": "test",
@@ -3580,7 +3757,7 @@
           "response": []
         },
         {
-          "name": "079. Get Admin Actions",
+          "name": "083. Get Admin Actions",
           "event": [
             {
               "listen": "test",
@@ -3616,7 +3793,7 @@
           "response": []
         },
         {
-          "name": "080. Execute Admin Action",
+          "name": "084. Execute Admin Action",
           "event": [
             {
               "listen": "test",
@@ -3667,7 +3844,7 @@
           "response": []
         },
         {
-          "name": "081. Get Permission Presets",
+          "name": "085. Get Permission Presets",
           "event": [
             {
               "listen": "test",
@@ -3703,7 +3880,7 @@
           "response": []
         },
         {
-          "name": "082. Remove Applicant Admin",
+          "name": "086. Remove Applicant Admin",
           "event": [
             {
               "listen": "test",
@@ -3741,10 +3918,10 @@
       ]
     },
     {
-      "name": "11 - Negative & Validation Tests",
+      "name": "12 - Negative & Validation Tests",
       "item": [
         {
-          "name": "083. Login with Invalid Password",
+          "name": "087. Login with Invalid Password",
           "event": [
             {
               "listen": "test",
@@ -3782,7 +3959,7 @@
           "response": []
         },
         {
-          "name": "084. Protected Route with Invalid Token",
+          "name": "088. Protected Route with Invalid Token",
           "event": [
             {
               "listen": "test",
@@ -3815,7 +3992,7 @@
           "response": []
         },
         {
-          "name": "085. Apply to Invalid Project Role",
+          "name": "089. Apply to Invalid Project Role",
           "event": [
             {
               "listen": "test",
@@ -3860,7 +4037,7 @@
           "response": []
         },
         {
-          "name": "086. Create Project Missing Title",
+          "name": "090. Create Project Missing Title",
           "event": [
             {
               "listen": "test",
@@ -3901,10 +4078,10 @@
       ]
     },
     {
-      "name": "12 - Cleanup & Logout",
+      "name": "13 - Cleanup & Logout",
       "item": [
         {
-          "name": "087. Remove Applicant from Project Team",
+          "name": "091. Remove Applicant from Project Team",
           "event": [
             {
               "listen": "test",
@@ -3941,7 +4118,7 @@
           "response": []
         },
         {
-          "name": "088. Delete Community Post",
+          "name": "092. Delete Community Post",
           "event": [
             {
               "listen": "test",
@@ -3977,7 +4154,7 @@
           "response": []
         },
         {
-          "name": "089. Delete Project",
+          "name": "093. Delete Project",
           "event": [
             {
               "listen": "test",
@@ -4013,7 +4190,7 @@
           "response": []
         },
         {
-          "name": "090. Logout via Cookie",
+          "name": "094. Logout via Cookie",
           "event": [
             {
               "listen": "test",
@@ -4049,6 +4226,48 @@
                   "type": "string"
                 }
               ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "095. Logout Dedicated Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Expected status', () => { pm.response.to.have.status(200) });",
+                  "pm.test('Response is JSON', () => {",
+                  "  const ct = pm.response.headers.get('Content-Type') || '';",
+                  "  pm.expect(ct.toLowerCase()).to.include('application/json');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/admin/auth/logout",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           },
           "response": []

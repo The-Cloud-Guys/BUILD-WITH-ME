@@ -81,6 +81,11 @@ const adminAccountSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    bootstrapOwner: {
+      type: Boolean,
+      default: false,
+      select: false,
+    },
     addedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'AdminAccount',
@@ -115,5 +120,22 @@ adminAccountSchema.virtual('fullName').get(function getFullName() {
 
 adminAccountSchema.index({ role: 1, isActive: 1 });
 adminAccountSchema.index({ 'ssoIdentities.provider': 1, 'ssoIdentities.subject': 1 });
+adminAccountSchema.index(
+  { bootstrapOwner: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { bootstrapOwner: true },
+  }
+);
+
+adminAccountSchema.set('toJSON', {
+  virtuals: true,
+  transform: (_document, result) => {
+    delete result.passwordHash;
+    delete result.bootstrapOwner;
+    delete result.tokenVersion;
+    return result;
+  },
+});
 
 module.exports = mongoose.model('AdminAccount', adminAccountSchema);

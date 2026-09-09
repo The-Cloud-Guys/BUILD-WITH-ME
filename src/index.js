@@ -20,6 +20,7 @@ const notificationRoutes = require('./routes/notification.routes');
 const communityRoutes = require('./routes/community.routes');
 const applicationRoutes = require('./routes/application.routes');
 const chatRoutes = require('./routes/chat.routes');
+const adminAuthRoutes = require('./routes/adminAuth.routes');
 const adminRoutes = require('./routes/admin.routes');
 const shareRoutes = require('./routes/share.routes');
 
@@ -54,9 +55,20 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
+const allowedOrigins = new Set(
+  [
+    process.env.FRONTEND_URL || 'http://localhost:3000',
+    process.env.ADMIN_DASHBOARD_URL,
+  ].filter(Boolean)
+);
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin(origin, callback) {
+      // Requests without an Origin header include trusted server-to-server,
+      // mobile, Postman, and same-origin traffic.
+      callback(null, !origin || allowedOrigins.has(origin));
+    },
     credentials: true,
   })
 );
@@ -119,6 +131,7 @@ app.use('/api/applications', applicationRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/community', communityRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/admin/auth', adminAuthRoutes);
 app.use('/api/admin', adminRoutes);
 
 // Public HTTPS share fallback. Verified mobile app/universal links can intercept

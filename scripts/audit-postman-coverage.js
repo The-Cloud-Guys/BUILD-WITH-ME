@@ -9,6 +9,7 @@ const routeModules = {
   'src/routes/notification.routes.js': '/api/notifications',
   'src/routes/community.routes.js': '/api/community',
   'src/routes/chat.routes.js': '/api/chat',
+  'src/routes/adminAuth.routes.js': '/api/admin/auth',
   'src/routes/admin.routes.js': '/api/admin',
 };
 
