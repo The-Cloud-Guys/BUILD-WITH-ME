@@ -27,10 +27,49 @@ test('admin local-auth router exposes the Phase 2 endpoints', () => {
     'POST /bootstrap',
     'POST /accept-invitation',
     'POST /login',
+    'GET /sso/:provider',
+    'GET /sso/:provider/callback',
     'POST /refresh-token',
     'POST /logout',
     'GET /me',
   ]);
+});
+
+test('admin SSO uses state, nonce, PKCE, and verified provider identity', () => {
+  const serviceSource = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'services', 'adminSso.service.js'),
+    'utf8'
+  );
+  const controllerSource = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'controllers', 'adminAuth.controller.js'),
+    'utf8'
+  );
+  assert.match(serviceSource, /code_challenge_method: 'S256'/);
+  assert.match(serviceSource, /claims\.nonce !== nonce/);
+  assert.match(serviceSource, /algorithms: \['RS256'\]/);
+  assert.match(controllerSource, /req\.query\.state !== req\.cookies\?\.adminSsoState/);
+  assert.match(controllerSource, /SSO access has not been provisioned/);
+  assert.doesNotMatch(controllerSource, /AdminAccount\.create\([^)]*sso/i);
+});
+
+test('Microsoft admin SSO requires a specific tenant', () => {
+  const { getConfiguration } = require('../src/services/adminSso.service');
+  const names = [
+    'ADMIN_MICROSOFT_TENANT_ID',
+    'ADMIN_MICROSOFT_CLIENT_ID',
+    'ADMIN_MICROSOFT_CLIENT_SECRET',
+    'ADMIN_MICROSOFT_CALLBACK_URL',
+  ];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  try {
+    process.env.ADMIN_MICROSOFT_TENANT_ID = 'common';
+    assert.throws(() => getConfiguration('microsoft'), /specific tenant ID/);
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+  }
 });
 
 test('admin bootstrap requires a strong password and complete identity', () => {

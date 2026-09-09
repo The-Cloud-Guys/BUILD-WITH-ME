@@ -123,7 +123,10 @@ adminAccountSchema.virtual('fullName').get(function getFullName() {
 });
 
 adminAccountSchema.index({ role: 1, isActive: 1 });
-adminAccountSchema.index({ 'ssoIdentities.provider': 1, 'ssoIdentities.subject': 1 });
+adminAccountSchema.index(
+  { 'ssoIdentities.provider': 1, 'ssoIdentities.subject': 1 },
+  { unique: true, sparse: true }
+);
 adminAccountSchema.index(
   { bootstrapOwner: 1 },
   {

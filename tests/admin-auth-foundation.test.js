@@ -45,3 +45,11 @@ test('admin SSO identities support Google and Microsoft only', () => {
     ['google', 'microsoft']
   );
 });
+
+test('admin SSO provider subjects have a unique compound index', () => {
+  assert.ok(AdminAccount.schema.indexes().some(([keys, options]) => (
+    keys['ssoIdentities.provider'] === 1
+    && keys['ssoIdentities.subject'] === 1
+    && options.unique === true
+  )));
+});

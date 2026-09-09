@@ -4,6 +4,11 @@ const mongoose = require('mongoose');
 const AdminAccount = require('../models/adminAccount.model');
 const AdminInvite = require('../models/adminInvite.model');
 const { hashInvitationToken } = require('../services/adminInvitation.service');
+const {
+  createSsoRequest,
+  exchangeAuthorizationCode,
+  verifySsoState,
+} = require('../services/adminSso.service');
 const { DEFAULT_ADMIN_PERMISSIONS } = require('../constants/admin.constants');
 const {
   assertAdminAuthConfigured,
@@ -48,6 +53,21 @@ const clearAdminCookies = (res) => {
   };
   res.clearCookie('adminAccessToken', options);
   res.clearCookie('adminRefreshToken', options);
+};
+
+const ssoCookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+  path: '/api/admin/auth',
+  maxAge: 10 * 60 * 1000,
+});
+
+const clearSsoCookies = (res) => {
+  const options = ssoCookieOptions();
+  delete options.maxAge;
+  res.clearCookie('adminSsoState', options);
+  res.clearCookie('adminSsoVerifier', options);
 };
 
 const serializeAdmin = (admin) => ({
@@ -162,6 +182,85 @@ const loginAdmin = async (req, res) => {
     console.error('Admin login failed:', error.message);
     return res.status(error.statusCode || 500).json({
       message: error.statusCode ? error.message : 'Unable to authenticate administrator',
+    });
+  }
+};
+
+const startAdminSso = async (req, res) => {
+  try {
+    assertAdminAuthConfigured();
+    const request = createSsoRequest(req.params.provider);
+    const options = ssoCookieOptions();
+    res.cookie('adminSsoState', request.state, options);
+    res.cookie('adminSsoVerifier', request.verifier, options);
+    return res.redirect(302, request.authorizationUrl);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      message: error.statusCode ? error.message : 'Unable to start admin SSO',
+    });
+  }
+};
+
+const completeAdminSso = async (req, res) => {
+  try {
+    if (!req.query.code || !req.query.state) {
+      clearSsoCookies(res);
+      return res.status(400).json({ message: 'SSO authorization code and state are required' });
+    }
+    if (
+      req.query.state !== req.cookies?.adminSsoState
+      || !req.cookies?.adminSsoVerifier
+    ) {
+      clearSsoCookies(res);
+      return res.status(401).json({ message: 'Invalid admin SSO state' });
+    }
+    const state = verifySsoState(req.query.state);
+    if (state.type !== 'admin_sso_state' || state.provider !== req.params.provider) {
+      clearSsoCookies(res);
+      return res.status(401).json({ message: 'Invalid admin SSO state' });
+    }
+    const identity = await exchangeAuthorizationCode(
+      req.params.provider,
+      req.query.code,
+      req.cookies.adminSsoVerifier,
+      state.nonce
+    );
+    let admin = await AdminAccount.findOne({
+      ssoIdentities: { $elemMatch: { provider: req.params.provider, subject: identity.subject } },
+    });
+    if (admin && admin.email !== identity.email) {
+      clearSsoCookies(res);
+      return res.status(401).json({ message: 'Admin SSO identity does not match account email' });
+    }
+    if (!admin) admin = await AdminAccount.findOne({ email: identity.email });
+    if (!admin || admin.isActive === false || admin.migrationPending) {
+      clearSsoCookies(res);
+      return res.status(403).json({ message: 'SSO access has not been provisioned for this administrator' });
+    }
+    if (!admin.ssoIdentities.some((item) => (
+      item.provider === req.params.provider && item.subject === identity.subject
+    ))) {
+      admin.ssoIdentities.push({ provider: req.params.provider, subject: identity.subject });
+    }
+    if (!admin.authMethods.includes(req.params.provider)) {
+      admin.authMethods.push(req.params.provider);
+    }
+    admin.emailVerified = true;
+    admin.lastLoginAt = new Date();
+    admin.lastActivityAt = new Date();
+    await admin.save();
+    const tokens = await issueAdminTokenPair(admin, req, { authMethod: req.params.provider });
+    clearSsoCookies(res);
+    setAdminCookies(res, tokens.accessToken, tokens.refreshToken);
+
+    const dashboardUrl = String(process.env.ADMIN_DASHBOARD_URL || '').replace(/\/$/, '');
+    if (dashboardUrl) return res.redirect(302, `${dashboardUrl}/auth/callback?status=success`);
+    return res.json({ message: 'Admin SSO login successful', admin: serializeAdmin(admin) });
+  } catch (error) {
+    clearSsoCookies(res);
+    console.error('Admin SSO callback failed:', error.message);
+    return res.status(error.statusCode || 401).json({
+      message: error.statusCode ? error.message : 'Unable to authenticate administrator with SSO',
     });
   }
 };
@@ -296,10 +395,12 @@ module.exports = {
   acceptAdminInvitation,
   bootstrapAdmin,
   clearAdminCookies,
+  completeAdminSso,
   getCurrentAdmin,
   loginAdmin,
   logoutAdmin,
   refreshAdminSession,
   serializeAdmin,
   setAdminCookies,
+  startAdminSso,
 };

@@ -3,10 +3,12 @@ const express = require('express');
 const {
   acceptAdminInvitation,
   bootstrapAdmin,
+  completeAdminSso,
   getCurrentAdmin,
   loginAdmin,
   logoutAdmin,
   refreshAdminSession,
+  startAdminSso,
 } = require('../controllers/adminAuth.controller');
 const {
   authenticateAdmin,
@@ -23,6 +25,8 @@ router.use(verifyAdminRequestOrigin);
 router.post('/bootstrap', adminBootstrapLimiter, bootstrapAdmin);
 router.post('/accept-invitation', adminAuthLimiter, acceptAdminInvitation);
 router.post('/login', adminAuthLimiter, loginAdmin);
+router.get('/sso/:provider', adminAuthLimiter, startAdminSso);
+router.get('/sso/:provider/callback', adminAuthLimiter, completeAdminSso);
 router.post('/refresh-token', refreshAdminSession);
 router.post('/logout', logoutAdmin);
 router.get('/me', authenticateAdmin, getCurrentAdmin);
