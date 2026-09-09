@@ -29,9 +29,13 @@ test('admin local-auth router exposes the Phase 2 endpoints', () => {
     'POST /login',
     'GET /sso/:provider',
     'GET /sso/:provider/callback',
+    'POST /mfa/challenge',
     'POST /refresh-token',
     'POST /logout',
     'GET /me',
+    'POST /mfa/setup',
+    'POST /mfa/confirm',
+    'DELETE /mfa',
   ]);
 });
 

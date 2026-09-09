@@ -9,6 +9,10 @@ const {
   exchangeAuthorizationCode,
   verifySsoState,
 } = require('../services/adminSso.service');
+const {
+  createMfaChallenge,
+  setMfaChallengeCookie,
+} = require('../services/adminMfa.service');
 const { DEFAULT_ADMIN_PERMISSIONS } = require('../constants/admin.constants');
 const {
   assertAdminAuthConfigured,
@@ -168,6 +172,14 @@ const loginAdmin = async (req, res) => {
       return res.status(401).json({ message: 'Admin account unavailable' });
     }
 
+    if (admin.mfaEnabled) {
+      setMfaChallengeCookie(res, await createMfaChallenge(admin, 'password'));
+      return res.status(202).json({
+        message: 'Admin MFA verification required',
+        requiresMfa: true,
+      });
+    }
+
     const tokens = await issueAdminTokenPair(admin, req, { authMethod: 'password' });
     admin.lastLoginAt = new Date();
     admin.lastActivityAt = new Date();
@@ -246,6 +258,18 @@ const completeAdminSso = async (req, res) => {
       admin.authMethods.push(req.params.provider);
     }
     admin.emailVerified = true;
+    await admin.save();
+
+    if (admin.mfaEnabled) {
+      clearSsoCookies(res);
+      setMfaChallengeCookie(res, await createMfaChallenge(admin, req.params.provider));
+      const dashboardUrl = String(process.env.ADMIN_DASHBOARD_URL || '').replace(/\/$/, '');
+      if (dashboardUrl) return res.redirect(302, `${dashboardUrl}/auth/callback?status=mfa-required`);
+      return res.status(202).json({
+        message: 'Admin MFA verification required',
+        requiresMfa: true,
+      });
+    }
     admin.lastLoginAt = new Date();
     admin.lastActivityAt = new Date();
     await admin.save();

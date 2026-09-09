@@ -76,6 +76,16 @@ const adminAccountSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    mfaSecretEncrypted: {
+      type: String,
+      select: false,
+      default: null,
+    },
+    mfaPendingSecretEncrypted: {
+      type: String,
+      select: false,
+      default: null,
+    },
     tokenVersion: {
       type: Number,
       default: 0,
