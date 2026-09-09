@@ -1,6 +1,9 @@
 const bcrypt = require('bcryptjs');
+const mongoose = require('mongoose');
 
 const AdminAccount = require('../models/adminAccount.model');
+const AdminInvite = require('../models/adminInvite.model');
+const { hashInvitationToken } = require('../services/adminInvitation.service');
 const { DEFAULT_ADMIN_PERMISSIONS } = require('../constants/admin.constants');
 const {
   assertAdminAuthConfigured,
@@ -11,6 +14,7 @@ const {
   verifyAdminBootstrapSecret,
 } = require('../services/adminAuth.service');
 const {
+  acceptAdminInvitationValidation,
   adminLoginValidation,
   bootstrapAdminValidation,
 } = require('../validation/adminAuth.validation');
@@ -162,6 +166,101 @@ const loginAdmin = async (req, res) => {
   }
 };
 
+const acceptAdminInvitation = async (req, res) => {
+  const { error, value } = acceptAdminInvitationValidation(req.body);
+  if (error) return res.status(400).json({ message: error.details[0].message });
+
+  const passwordHash = await bcrypt.hash(value.password, 12);
+  let databaseSession;
+  let admin;
+  let tokens;
+  try {
+    databaseSession = await mongoose.startSession();
+    await databaseSession.withTransaction(async () => {
+      const now = new Date();
+      const invitation = await AdminInvite.findOneAndUpdate(
+        {
+          tokenHash: hashInvitationToken(value.token),
+          acceptedAt: null,
+          revokedAt: null,
+          expiresAt: { $gt: now },
+        },
+        { $set: { acceptedAt: now } },
+        { new: true, session: databaseSession }
+      );
+
+      if (!invitation) {
+        const invalidInvite = new Error('Admin invitation is invalid or expired');
+        invalidInvite.statusCode = 400;
+        throw invalidInvite;
+      }
+
+      if (invitation.existingAdmin) {
+        admin = await AdminAccount.findOne({
+          _id: invitation.existingAdmin,
+          migrationPending: true,
+        }).session(databaseSession);
+        if (!admin) {
+          const unavailable = new Error('Migrated administrator is unavailable');
+          unavailable.statusCode = 409;
+          throw unavailable;
+        }
+        admin.email = invitation.email;
+        admin.firstName = invitation.firstName;
+        admin.lastName = invitation.lastName;
+        admin.role = invitation.role;
+        admin.permissions = invitation.permissions;
+        admin.passwordHash = passwordHash;
+        admin.authMethods = Array.from(new Set([...admin.authMethods, 'password']));
+        admin.emailVerified = true;
+        admin.isActive = true;
+        admin.migrationPending = false;
+        admin.addedBy = invitation.invitedBy;
+        admin.lastLoginAt = now;
+        admin.lastActivityAt = now;
+        await admin.save({ session: databaseSession });
+      } else {
+        [admin] = await AdminAccount.create([{
+          email: invitation.email,
+          passwordHash,
+          firstName: invitation.firstName,
+          lastName: invitation.lastName,
+          role: invitation.role,
+          permissions: invitation.permissions,
+          authMethods: ['password'],
+          emailVerified: true,
+          isActive: true,
+          addedBy: invitation.invitedBy,
+          lastLoginAt: now,
+          lastActivityAt: now,
+        }], { session: databaseSession });
+      }
+
+      tokens = await issueAdminTokenPair(admin, req, {
+        authMethod: 'password',
+        dbSession: databaseSession,
+      });
+    });
+
+    setAdminCookies(res, tokens.accessToken, tokens.refreshToken);
+    return res.status(201).json({
+      message: 'Admin invitation accepted successfully',
+      admin: serializeAdmin(admin),
+    });
+  } catch (acceptanceError) {
+    const statusCode = acceptanceError.statusCode ||
+      (acceptanceError.code === 11000 ? 409 : 500);
+    console.error('Accept admin invitation failed:', acceptanceError.message);
+    return res.status(statusCode).json({
+      message: statusCode === 500
+        ? 'Unable to accept admin invitation'
+        : acceptanceError.message,
+    });
+  } finally {
+    if (databaseSession) await databaseSession.endSession();
+  }
+};
+
 const refreshAdminSession = async (req, res) => {
   try {
     const suppliedToken = req.cookies?.adminRefreshToken;
@@ -194,6 +293,7 @@ const getCurrentAdmin = async (req, res) => res.json({
 });
 
 module.exports = {
+  acceptAdminInvitation,
   bootstrapAdmin,
   clearAdminCookies,
   getCurrentAdmin,

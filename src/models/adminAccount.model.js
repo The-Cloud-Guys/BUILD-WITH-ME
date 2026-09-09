@@ -86,6 +86,10 @@ const adminAccountSchema = new mongoose.Schema(
       default: false,
       select: false,
     },
+    migrationPending: {
+      type: Boolean,
+      default: false,
+    },
     addedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'AdminAccount',

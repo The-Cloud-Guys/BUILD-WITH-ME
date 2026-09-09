@@ -1,6 +1,7 @@
 const express = require('express');
 
 const {
+  acceptAdminInvitation,
   bootstrapAdmin,
   getCurrentAdmin,
   loginAdmin,
@@ -20,6 +21,7 @@ const router = express.Router();
 
 router.use(verifyAdminRequestOrigin);
 router.post('/bootstrap', adminBootstrapLimiter, bootstrapAdmin);
+router.post('/accept-invitation', adminAuthLimiter, acceptAdminInvitation);
 router.post('/login', adminAuthLimiter, loginAdmin);
 router.post('/refresh-token', refreshAdminSession);
 router.post('/logout', logoutAdmin);

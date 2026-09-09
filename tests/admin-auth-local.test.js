@@ -25,6 +25,7 @@ const routeSignatures = () => adminAuthRoutes.stack
 test('admin local-auth router exposes the Phase 2 endpoints', () => {
   assert.deepEqual(routeSignatures(), [
     'POST /bootstrap',
+    'POST /accept-invitation',
     'POST /login',
     'POST /refresh-token',
     'POST /logout',

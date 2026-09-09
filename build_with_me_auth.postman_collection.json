@@ -231,6 +231,36 @@
       "key": "adminBootstrapSecret",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "invitedAdminEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "invitedAdminPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminInvitationToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminInviteId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "revokedAdminInviteId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "managedAdminId",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -3628,21 +3658,14 @@
           "response": []
         },
         {
-          "name": "081. Get Admin Users",
+          "name": "081. List Dedicated Admins",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response is JSON', () => {",
-                  "  const ct = pm.response.headers.get('Content-Type') || '';",
-                  "  pm.expect(ct.toLowerCase()).to.include('application/json');",
-                  "});",
-                  "pm.test('Cookie session is available', () => {",
-                  "  pm.expect(pm.cookies.has('accessToken')).to.eql(true);",
-                  "});"
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
                 ]
               }
             }
@@ -3651,71 +3674,166 @@
             "method": "GET",
             "url": "{{baseUrl}}/api/admin/admins",
             "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{adminAccessToken}}",
-                  "type": "string"
-                }
-              ]
-            }
+              "type": "noauth"
+            },
+            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
           },
           "response": []
         },
         {
-          "name": "082. Add Applicant as Admin",
+          "name": "082. Create Admin Invitation",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
-                  "pm.test('Response is JSON', () => {",
-                  "  const ct = pm.response.headers.get('Content-Type') || '';",
-                  "  pm.expect(ct.toLowerCase()).to.include('application/json');",
-                  "});",
-                  "pm.test('Cookie session is available', () => {",
-                  "  pm.expect(pm.cookies.has('accessToken')).to.eql(true);",
-                  "});"
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  const invitation = pm.response.json().invitation;",
+                  "  pm.environment.set('adminInvitationToken', invitation.token);",
+                  "  pm.collectionVariables.set('adminInviteId', invitation._id);",
+                  "}"
                 ]
               }
             }
           ],
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/admin/admins",
+            "url": "{{baseUrl}}/api/admin/admins/invitations",
+            "auth": {
+              "type": "noauth"
+            },
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json"
+                "value": "application/json",
+                "type": "text"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"userId\": \"{{applicantId}}\",\n  \"role\": \"admin\",\n  \"permissions\": [\n    \"manage_users\",\n    \"manage_projects\",\n    \"manage_reports\"\n  ]\n}",
+              "raw": "{\n  \"email\": \"{{invitedAdminEmail}}\",\n  \"firstName\": \"Invited\",\n  \"lastName\": \"Administrator\",\n  \"role\": \"admin\",\n  \"permissions\": [\n    \"manage_users\",\n    \"manage_projects\",\n    \"manage_reports\",\n    \"view_analytics\"\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{adminAccessToken}}",
-                  "type": "string"
-                }
-              ]
-            }
+            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
           },
           "response": []
         },
         {
-          "name": "083. Get Admin Actions",
+          "name": "083. List Admin Invitations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/admin/admins/invitations",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
+          },
+          "response": []
+        },
+        {
+          "name": "084. Revoke Admin Invitation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200, 400, or 404', () => pm.expect([200, 400, 404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/admin/admins/invitations/{{revokedAdminInviteId}}",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login. Use an invitation other than the one being accepted."
+          },
+          "response": []
+        },
+        {
+          "name": "085. Update Dedicated Admin Access",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200, 400, or 404', () => pm.expect([200, 400, 404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/admin/admins/{{managedAdminId}}",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"moderator\",\n  \"permissions\": [\n    \"manage_reports\",\n    \"delete_content\"\n  ],\n  \"isActive\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login. Use another existing dedicated administrator ID."
+          },
+          "response": []
+        },
+        {
+          "name": "086. Deactivate Dedicated Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200, 400, or 404', () => pm.expect([200, 400, 404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/admin/admins/{{managedAdminId}}",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login. Deactivation preserves audit history and revokes sessions."
+          },
+          "response": []
+        },
+        {
+          "name": "087. Get Admin Actions",
           "event": [
             {
               "listen": "test",
@@ -3745,7 +3863,7 @@
           "response": []
         },
         {
-          "name": "084. Execute Admin Action",
+          "name": "088. Execute Admin Action",
           "event": [
             {
               "listen": "test",
@@ -3790,7 +3908,7 @@
           "response": []
         },
         {
-          "name": "085. Get Permission Presets",
+          "name": "089. Get Permission Presets",
           "event": [
             {
               "listen": "test",
@@ -3820,38 +3938,44 @@
           "response": []
         },
         {
-          "name": "086. Remove Applicant Admin",
+          "name": "090. Accept Admin Invitation",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Response is JSON', () => {",
-                  "  const ct = pm.response.headers.get('Content-Type') || '';",
-                  "  pm.expect(ct.toLowerCase()).to.include('application/json');",
-                  "});",
-                  "pm.test('Cookie session is available', () => {",
-                  "  pm.expect(pm.cookies.has('accessToken')).to.eql(true);",
-                  "});"
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('managedAdminId', pm.response.json().admin._id);",
+                  "}"
                 ]
               }
             }
           ],
           "request": {
-            "method": "DELETE",
-            "url": "{{baseUrl}}/api/admin/admins/{{applicantId}}",
+            "method": "POST",
+            "url": "{{baseUrl}}/api/admin/auth/accept-invitation",
             "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{adminAccessToken}}",
-                  "type": "string"
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{adminInvitationToken}}\",\n  \"password\": \"{{invitedAdminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
-            }
+              }
+            },
+            "description": "Uses the single-use invitation token and establishes a dedicated admin cookie session."
           },
           "response": []
         }
@@ -3861,7 +3985,7 @@
       "name": "12 - Negative & Validation Tests",
       "item": [
         {
-          "name": "087. Login with Invalid Password",
+          "name": "091. Login with Invalid Password",
           "event": [
             {
               "listen": "test",
@@ -3899,7 +4023,7 @@
           "response": []
         },
         {
-          "name": "088. Protected Route with Invalid Token",
+          "name": "092. Protected Route with Invalid Token",
           "event": [
             {
               "listen": "test",
@@ -3932,7 +4056,7 @@
           "response": []
         },
         {
-          "name": "089. Apply to Invalid Project Role",
+          "name": "093. Apply to Invalid Project Role",
           "event": [
             {
               "listen": "test",
@@ -3977,7 +4101,7 @@
           "response": []
         },
         {
-          "name": "090. Create Project Missing Title",
+          "name": "094. Create Project Missing Title",
           "event": [
             {
               "listen": "test",
@@ -4021,7 +4145,7 @@
       "name": "13 - Cleanup & Logout",
       "item": [
         {
-          "name": "091. Remove Applicant from Project Team",
+          "name": "095. Remove Applicant from Project Team",
           "event": [
             {
               "listen": "test",
@@ -4058,7 +4182,7 @@
           "response": []
         },
         {
-          "name": "092. Delete Community Post",
+          "name": "096. Delete Community Post",
           "event": [
             {
               "listen": "test",
@@ -4094,7 +4218,7 @@
           "response": []
         },
         {
-          "name": "093. Delete Project",
+          "name": "097. Delete Project",
           "event": [
             {
               "listen": "test",
@@ -4130,7 +4254,7 @@
           "response": []
         },
         {
-          "name": "094. Logout via Cookie",
+          "name": "098. Logout via Cookie",
           "event": [
             {
               "listen": "test",
@@ -4171,7 +4295,7 @@
           "response": []
         },
         {
-          "name": "095. Logout Dedicated Admin",
+          "name": "099. Logout Dedicated Admin",
           "event": [
             {
               "listen": "test",

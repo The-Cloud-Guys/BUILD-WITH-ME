@@ -15,7 +15,13 @@ const adminLoginValidation = (data) => Joi.object({
   password: Joi.string().max(128).required(),
 }).validate(data, { abortEarly: false, stripUnknown: true });
 
+const acceptAdminInvitationValidation = (data) => Joi.object({
+  token: Joi.string().min(32).max(512).required(),
+  password,
+}).validate(data, { abortEarly: false, stripUnknown: true });
+
 module.exports = {
+  acceptAdminInvitationValidation,
   adminLoginValidation,
   bootstrapAdminValidation,
 };

@@ -11,6 +11,7 @@
     "gen-token-page": "node generate-token-page.js",
     "migrate:project-status": "node scripts/backfill-project-status.js",
     "migrate:community-media": "node scripts/migrate-community-media-paths.js",
+    "migrate:legacy-admins": "node scripts/migrate-legacy-admins.js",
     "verify:transactions": "node scripts/verify-mongodb-transactions.js"
   },
   "keywords": [

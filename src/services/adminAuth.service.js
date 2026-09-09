@@ -104,7 +104,7 @@ const issueAdminTokenPair = async (admin, req, options = {}) => {
   );
 
   const metadata = getRequestMetadata(req);
-  await AdminSession.create({
+  const sessionDocument = {
     admin: admin._id,
     jti,
     family,
@@ -115,7 +115,12 @@ const issueAdminTokenPair = async (admin, req, options = {}) => {
     expiresAt: new Date(
       Date.now() + getDurationMs(process.env.ADMIN_REFRESH_EXPIRES_IN, '12h')
     ),
-  });
+  };
+  if (options.dbSession) {
+    await AdminSession.create([sessionDocument], { session: options.dbSession });
+  } else {
+    await AdminSession.create(sessionDocument);
+  }
 
   return { accessToken, refreshToken };
 };

@@ -1,6 +1,4 @@
 const express = require('express');
-const { protect } = require('../middleware/auth.middleware');
-const { isAdmin, isSuperAdmin } = require('../middleware/admin.middleware');
 const {
   authenticateAdmin,
   requireAdminPermission,
@@ -15,25 +13,32 @@ const {
   getAdminActivities,
   getReports,
   resolveReport,
-  getAdminUsers,
-  addAdmin,
-  removeAdmin,
   getAdminActions,
   performAdminAction,
   getPermissionPresets
 } = require('../controllers/admin.controller');
+const {
+  createAdminInvitation,
+  deactivateDedicatedAdmin,
+  getAdminInvitations,
+  getDedicatedAdmins,
+  revokeAdminInvitation,
+  updateDedicatedAdmin,
+} = require('../controllers/adminManagement.controller');
 
 const router = express.Router();
 
-// Legacy admin provisioning remains available to existing user-linked super
-// admins until Phase 4 replaces it with dedicated admin invitations.
-router.get('/admins', protect, isAdmin, isSuperAdmin, getAdminUsers);
-router.post('/admins', protect, isAdmin, isSuperAdmin, addAdmin);
-router.delete('/admins/:userId', protect, isAdmin, isSuperAdmin, removeAdmin);
-
-// Dashboard and moderation operations now require dedicated admin sessions.
+// Every admin route now uses the independent admin identity and session.
 router.use(authenticateAdmin);
 router.use(verifyAdminRequestOrigin);
+
+// Dedicated admin management and invitations
+router.get('/admins', requireAdminPermission('manage_admins'), getDedicatedAdmins);
+router.post('/admins/invitations', requireAdminPermission('manage_admins'), createAdminInvitation);
+router.get('/admins/invitations', requireAdminPermission('manage_admins'), getAdminInvitations);
+router.delete('/admins/invitations/:inviteId', requireAdminPermission('manage_admins'), revokeAdminInvitation);
+router.patch('/admins/:adminId', requireAdminPermission('manage_admins'), updateDedicatedAdmin);
+router.delete('/admins/:adminId', requireAdminPermission('manage_admins'), deactivateDedicatedAdmin);
 
 // Dashboard
 router.get('/dashboard', requireAdminPermission('view_analytics'), getDashboardStats);

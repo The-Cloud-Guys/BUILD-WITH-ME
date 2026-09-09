@@ -113,7 +113,7 @@ test('operational admin routes use dedicated authentication and explicit permiss
     'utf8'
   );
   const dedicatedStart = source.indexOf('router.use(authenticateAdmin)');
-  assert.ok(dedicatedStart > source.indexOf("router.delete('/admins/:userId'"));
+  assert.ok(dedicatedStart > 0);
 
   const operationalSource = source.slice(dedicatedStart);
   for (const permission of [
@@ -149,22 +149,15 @@ test('dedicated access authentication requires a live admin session', () => {
   assert.match(middlewareSource, /revokedAt: null/);
 });
 
-test('Postman uses dedicated admin cookies for operational dashboard routes', () => {
+test('Postman uses dedicated admin cookies for all admin management routes', () => {
   const collection = JSON.parse(fs.readFileSync(
     path.join(__dirname, '..', 'build_with_me_auth.postman_collection.json'),
     'utf8'
   ));
   const administration = collection.item.find(({ name }) => name === '11 - Administration');
-  const legacyUrls = new Set([
-    '{{baseUrl}}/api/admin/admins',
-    '{{baseUrl}}/api/admin/admins/{{applicantId}}',
-  ]);
-
   for (const item of administration.item) {
-    if (legacyUrls.has(item.request.url)) {
-      assert.equal(item.request.auth.type, 'bearer');
-    } else {
-      assert.equal(item.request.auth.type, 'noauth');
+    assert.equal(item.request.auth.type, 'noauth');
+    if (item.request.url !== '{{baseUrl}}/api/admin/auth/accept-invitation') {
       assert.match(item.request.description, /dedicated adminAccessToken HttpOnly cookie/);
     }
   }
