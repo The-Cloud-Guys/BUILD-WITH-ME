@@ -3426,15 +3426,9 @@
             "method": "GET",
             "url": "{{baseUrl}}/api/admin/dashboard",
             "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{adminAccessToken}}",
-                  "type": "string"
-                }
-              ]
-            }
+              "type": "noauth"
+            },
+            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
           },
           "response": []
         },
@@ -3462,15 +3456,9 @@
             "method": "GET",
             "url": "{{baseUrl}}/api/admin/users?page=1&limit=20&status=all",
             "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{adminAccessToken}}",
-                  "type": "string"
-                }
-              ]
-            }
+              "type": "noauth"
+            },
+            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
           },
           "response": []
         },
@@ -3498,15 +3486,9 @@
             "method": "GET",
             "url": "{{baseUrl}}/api/admin/users/{{applicantId}}",
             "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{adminAccessToken}}",
-                  "type": "string"
-                }
-              ]
-            }
+              "type": "noauth"
+            },
+            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
           },
           "response": []
         },
@@ -3534,15 +3516,9 @@
             "method": "GET",
             "url": "{{baseUrl}}/api/admin/projects?page=1&limit=20&status=all",
             "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{adminAccessToken}}",
-                  "type": "string"
-                }
-              ]
-            }
+              "type": "noauth"
+            },
+            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
           },
           "response": []
         },
@@ -3570,15 +3546,9 @@
             "method": "GET",
             "url": "{{baseUrl}}/api/admin/reports?status=all&page=1&limit=20",
             "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{adminAccessToken}}",
-                  "type": "string"
-                }
-              ]
-            }
+              "type": "noauth"
+            },
+            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
           },
           "response": []
         },
@@ -3621,15 +3591,9 @@
               }
             },
             "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{adminAccessToken}}",
-                  "type": "string"
-                }
-              ]
-            }
+              "type": "noauth"
+            },
+            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
           },
           "response": []
         },
@@ -3657,15 +3621,9 @@
             "method": "GET",
             "url": "{{baseUrl}}/api/admin/activities?type=all&page=1&limit=20",
             "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{adminAccessToken}}",
-                  "type": "string"
-                }
-              ]
-            }
+              "type": "noauth"
+            },
+            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
           },
           "response": []
         },
@@ -3780,15 +3738,9 @@
             "method": "GET",
             "url": "{{baseUrl}}/api/admin/actions?page=1&limit=20",
             "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{adminAccessToken}}",
-                  "type": "string"
-                }
-              ]
-            }
+              "type": "noauth"
+            },
+            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
           },
           "response": []
         },
@@ -3831,15 +3783,9 @@
               }
             },
             "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{adminAccessToken}}",
-                  "type": "string"
-                }
-              ]
-            }
+              "type": "noauth"
+            },
+            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
           },
           "response": []
         },
@@ -3867,15 +3813,9 @@
             "method": "GET",
             "url": "{{baseUrl}}/api/admin/permissions",
             "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{adminAccessToken}}",
-                  "type": "string"
-                }
-              ]
-            }
+              "type": "noauth"
+            },
+            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
           },
           "response": []
         },

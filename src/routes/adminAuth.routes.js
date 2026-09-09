@@ -7,7 +7,10 @@ const {
   logoutAdmin,
   refreshAdminSession,
 } = require('../controllers/adminAuth.controller');
-const { authenticateAdmin } = require('../middleware/adminAuth.middleware');
+const {
+  authenticateAdmin,
+  verifyAdminRequestOrigin,
+} = require('../middleware/adminAuth.middleware');
 const {
   adminAuthLimiter,
   adminBootstrapLimiter,
@@ -15,6 +18,7 @@ const {
 
 const router = express.Router();
 
+router.use(verifyAdminRequestOrigin);
 router.post('/bootstrap', adminBootstrapLimiter, bootstrapAdmin);
 router.post('/login', adminAuthLimiter, loginAdmin);
 router.post('/refresh-token', refreshAdminSession);

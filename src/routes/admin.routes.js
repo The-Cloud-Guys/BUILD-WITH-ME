@@ -2,6 +2,11 @@ const express = require('express');
 const { protect } = require('../middleware/auth.middleware');
 const { isAdmin, isSuperAdmin } = require('../middleware/admin.middleware');
 const {
+  authenticateAdmin,
+  requireAdminPermission,
+  verifyAdminRequestOrigin,
+} = require('../middleware/adminAuth.middleware');
+const {
   getDashboardStats,
   getUsers,
   getUserDetails,
@@ -20,35 +25,36 @@ const {
 
 const router = express.Router();
 
-// All admin routes require authentication and admin privileges
-router.use(protect);
-router.use(isAdmin);
+// Legacy admin provisioning remains available to existing user-linked super
+// admins until Phase 4 replaces it with dedicated admin invitations.
+router.get('/admins', protect, isAdmin, isSuperAdmin, getAdminUsers);
+router.post('/admins', protect, isAdmin, isSuperAdmin, addAdmin);
+router.delete('/admins/:userId', protect, isAdmin, isSuperAdmin, removeAdmin);
+
+// Dashboard and moderation operations now require dedicated admin sessions.
+router.use(authenticateAdmin);
+router.use(verifyAdminRequestOrigin);
 
 // Dashboard
-router.get('/dashboard', getDashboardStats);
+router.get('/dashboard', requireAdminPermission('view_analytics'), getDashboardStats);
 
 // User Management
-router.get('/users', getUsers);
-router.get('/users/:userId', getUserDetails);
+router.get('/users', requireAdminPermission('manage_users'), getUsers);
+router.get('/users/:userId', requireAdminPermission('manage_users'), getUserDetails);
 
 // Project Management
-router.get('/projects', getAdminProjects);
+router.get('/projects', requireAdminPermission('manage_projects'), getAdminProjects);
 
 // Reports
-router.get('/reports', getAdminReports);
-router.put('/reports/:reportId', resolveReport);
+router.get('/reports', requireAdminPermission('manage_reports'), getAdminReports);
+router.put('/reports/:reportId', requireAdminPermission('manage_reports'), resolveReport);
 
 // Activity Logs
-router.get('/activities', getAdminActivities);
-
-// Admin Management
-router.get('/admins', isSuperAdmin, getAdminUsers);
-router.post('/admins', isSuperAdmin, addAdmin);
-router.delete('/admins/:userId', isSuperAdmin, removeAdmin);
+router.get('/activities', requireAdminPermission('view_analytics'), getAdminActivities);
 
 // Admin Actions
 router.get('/actions', getAdminActions);
 router.post('/action', performAdminAction);
-router.get('/permissions', getPermissionPresets);
+router.get('/permissions', requireAdminPermission('manage_admins'), getPermissionPresets);
 
 module.exports = router;

@@ -99,6 +99,12 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
+    suspendedByAdmin: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'AdminAccount',
+      default: null,
+    },
+
     suspendDuration: {
       type: String,
       default: null,
@@ -112,6 +118,12 @@ const userSchema = new mongoose.Schema(
     terminatedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
+      default: null,
+    },
+
+    terminatedByAdmin: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'AdminAccount',
       default: null,
     },
 

@@ -270,10 +270,12 @@ const getDashboardStats = async (req, res) => {
     const response = {
       greeting: getGreeting(),
       admin: {
-        id: req.user.id,
-        firstName: req.user.firstName,
-        lastName: req.user.lastName,
-        profilePhoto: req.user.profilePhoto ? await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, req.user.profilePhoto) : null
+        id: req.adminAccount.id,
+        firstName: req.adminAccount.firstName,
+        lastName: req.adminAccount.lastName,
+        role: req.adminAccount.role,
+        permissions: req.adminAccount.permissions,
+        profilePhoto: null
       },
       stats: {
         totalUsers,
@@ -734,21 +736,25 @@ const resolveReport = async (req, res) => {
 
     // Check if user has permission for this action
     const requiresUserAction = ['suspend', 'terminate_account'].includes(action);
-    if (requiresUserAction && !req.admin.permissions.includes('manage_users')) {
+    if (
+      requiresUserAction &&
+      req.admin.role !== 'super_admin' &&
+      !req.admin.permissions.includes('manage_users')
+    ) {
       return res.status(403).json({ message: 'Insufficient permissions to take this action on users' });
     }
 
     report.status = 'resolved';
     report.actionTaken = action;
     report.resolution = resolution || 'No resolution provided';
-    report.reviewedBy = req.user.id;
+    report.reviewedByAdmin = req.adminAccount.id;
     report.reviewedAt = new Date();
 
     await report.save();
 
     // Log the action
     await AuditLog.create({
-      admin: req.user.id,
+      adminAccount: req.adminAccount.id,
       action: `resolved_report_${action}`,
       targetType: 'report',
       targetId: report._id,
@@ -765,10 +771,12 @@ const resolveReport = async (req, res) => {
         if (action === 'suspend') {
           user.suspendReason = resolution || 'Violation of community guidelines';
           user.suspendedAt = new Date();
+          user.suspendedByAdmin = req.adminAccount.id;
           user.suspendDuration = '30 days';
         }
         if (action === 'terminate_account') {
           user.terminatedAt = new Date();
+          user.terminatedByAdmin = req.adminAccount.id;
           user.terminationReason = resolution || 'Repeated violations';
         }
         await user.save();
@@ -1158,16 +1166,16 @@ const performAdminAction = async (req, res) => {
     switch (action) {
       // USER ACTIONS
       case ADMIN_ACTIONS.USER.SUSPEND:
-        result = await suspendUser(targetId, req.user.id, data);
+        result = await suspendUser(targetId, req.adminAccount.id, data);
         break;
       case ADMIN_ACTIONS.USER.UNSUSPEND:
-        result = await unsuspendUser(targetId, req.user.id);
+        result = await unsuspendUser(targetId, req.adminAccount.id);
         break;
       case ADMIN_ACTIONS.USER.TERMINATE:
-        result = await terminateUser(targetId, req.user.id, data);
+        result = await terminateUser(targetId, req.adminAccount.id, data);
         break;
       case ADMIN_ACTIONS.USER.WARN:
-        result = await warnUser(targetId, req.user.id, data);
+        result = await warnUser(targetId, req.adminAccount.id, data);
         break;
       case ADMIN_ACTIONS.USER.VIEW_DETAILS:
         result = await viewUserDetails(targetId);
@@ -1175,38 +1183,38 @@ const performAdminAction = async (req, res) => {
         
       // PROJECT ACTIONS
       case ADMIN_ACTIONS.PROJECT.DELETE:
-        result = await deleteProject(targetId, req.user.id);
+        result = await deleteProject(targetId, req.adminAccount.id);
         break;
       case ADMIN_ACTIONS.PROJECT.HIDE:
-        result = await hideProject(targetId, req.user.id);
+        result = await hideProject(targetId, req.adminAccount.id);
         break;
       case ADMIN_ACTIONS.PROJECT.UNHIDE:
-        result = await unhideProject(targetId, req.user.id);
+        result = await unhideProject(targetId, req.adminAccount.id);
         break;
       case ADMIN_ACTIONS.PROJECT.REVIEW:
-        result = await reviewProject(targetId, req.user.id, data);
+        result = await reviewProject(targetId, req.adminAccount.id, data);
         break;
         
       // REPORT ACTIONS
       case ADMIN_ACTIONS.REPORT.RESOLVE:
-        result = await resolveReportAction(targetId, req.user.id, data);
+        result = await resolveReportAction(targetId, req.adminAccount.id, data);
         break;
       case ADMIN_ACTIONS.REPORT.DISMISS:
-        result = await dismissReport(targetId, req.user.id, data);
+        result = await dismissReport(targetId, req.adminAccount.id, data);
         break;
       case ADMIN_ACTIONS.REPORT.ESCALATE:
-        result = await escalateReport(targetId, req.user.id);
+        result = await escalateReport(targetId, req.adminAccount.id);
         break;
         
       // CONTENT ACTIONS
       case ADMIN_ACTIONS.CONTENT.DELETE_POST:
-        result = await deletePost(targetId, req.user.id);
+        result = await deletePost(targetId, req.adminAccount.id);
         break;
       case ADMIN_ACTIONS.CONTENT.DELETE_COMMENT:
-        result = await deleteComment(targetId, req.user.id);
+        result = await deleteComment(targetId, req.adminAccount.id);
         break;
       case ADMIN_ACTIONS.CONTENT.HIDE_POST:
-        result = await hidePost(targetId, req.user.id);
+        result = await hidePost(targetId, req.adminAccount.id);
         break;
         
       default:
@@ -1225,7 +1233,7 @@ const performAdminAction = async (req, res) => {
 
     // Log the action
     await AuditLog.create({
-      admin: req.user.id,
+      adminAccount: req.adminAccount.id,
       action: action,
       targetType: auditTargetType,
       targetId: targetId,
@@ -1251,7 +1259,7 @@ async function suspendUser(userId, adminId, data) {
   user.isSuspended = true;
   user.suspendReason = data?.reason || 'No reason provided';
   user.suspendedAt = new Date();
-  user.suspendedBy = adminId;
+  user.suspendedByAdmin = adminId;
   user.suspendDuration = data?.duration || '30 days';
   await user.save();
   
@@ -1272,6 +1280,7 @@ async function unsuspendUser(userId, adminId) {
   user.suspendReason = undefined;
   user.suspendedAt = undefined;
   user.suspendedBy = undefined;
+  user.suspendedByAdmin = undefined;
   user.suspendDuration = undefined;
   await user.save();
   
@@ -1290,7 +1299,7 @@ async function terminateUser(userId, adminId, data) {
   
   user.isActive = false;
   user.terminatedAt = new Date();
-  user.terminatedBy = adminId;
+  user.terminatedByAdmin = adminId;
   user.terminationReason = data?.reason || 'No reason provided';
   await user.save();
   
@@ -1359,7 +1368,7 @@ async function reviewProject(projectId, adminId, data) {
   if (!project) return { success: false, message: 'Project not found' };
   
   project.reviewed = true;
-  project.reviewedBy = adminId;
+  project.reviewedByAdmin = adminId;
   project.reviewedAt = new Date();
   project.reviewNotes = data?.notes || '';
   project.reviewStatus = data?.status || 'approved';
@@ -1375,7 +1384,7 @@ async function resolveReportAction(reportId, adminId, data) {
   
   report.status = 'resolved';
   report.resolution = data?.resolution || 'Resolved by admin';
-  report.reviewedBy = adminId;
+  report.reviewedByAdmin = adminId;
   report.reviewedAt = new Date();
   await report.save();
   
@@ -1388,7 +1397,7 @@ async function dismissReport(reportId, adminId, data) {
   
   report.status = 'dismissed';
   report.resolution = data?.reason || 'Dismissed by admin';
-  report.reviewedBy = adminId;
+  report.reviewedByAdmin = adminId;
   report.reviewedAt = new Date();
   await report.save();
   
@@ -1454,6 +1463,7 @@ const getActivities = async (req, res) => {
 
     const activities = await AuditLog.find(filter)
       .populate('admin', 'firstName lastName profilePhoto role')
+      .populate('adminAccount', 'firstName lastName email role permissions')
       .sort('-createdAt')
       .skip((page - 1) * limit)
       .limit(limit)
@@ -1509,23 +1519,27 @@ const getAdminActivities = async (req, res) => {
 
     const activities = await AuditLog.find(filter)
       .populate('admin', 'firstName lastName profilePhoto email role')
+      .populate('adminAccount', 'firstName lastName email role permissions')
       .sort('-createdAt')
       .skip((page - 1) * limit)
       .limit(parseInt(limit))
       .lean();
 
     const activitiesWithDetails = await Promise.all(
-      activities.map(async (a) => ({
-        ...a,
-        logId: `ACT-${String(a._id).substring(0, 8).toUpperCase()}`,
-        timeAgo: getTimeAgo(a.createdAt),
-        admin: {
-          ...a.admin,
-          profilePhoto: a.admin?.profilePhoto ? 
-            await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, a.admin.profilePhoto) : 
-            null
-        }
-      }))
+      activities.map(async (activity) => {
+        const actor = activity.adminAccount || activity.admin;
+        return {
+          ...activity,
+          logId: `ACT-${String(activity._id).substring(0, 8).toUpperCase()}`,
+          timeAgo: getTimeAgo(activity.createdAt),
+          admin: actor ? {
+            ...actor,
+            profilePhoto: actor.profilePhoto
+              ? await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, actor.profilePhoto)
+              : null,
+          } : null,
+        };
+      })
     );
 
     // Get counts

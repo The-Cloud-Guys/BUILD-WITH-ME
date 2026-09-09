@@ -97,6 +97,11 @@ const projectSchema = new mongoose.Schema(
       ref: 'User',
       default: null,
     },
+    reviewedByAdmin: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'AdminAccount',
+      default: null,
+    },
     reviewedAt: {
       type: Date,
       default: null,

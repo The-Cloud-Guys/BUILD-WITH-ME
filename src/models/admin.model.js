@@ -84,6 +84,11 @@ const reportSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
+  reviewedByAdmin: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'AdminAccount',
+    default: null
+  },
   reviewedAt: Date,
   resolution: String,
   severity: {
@@ -127,7 +132,16 @@ const auditLogSchema = new mongoose.Schema({
   admin: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: function requireLegacyAdminActor() {
+      return !this.adminAccount;
+    }
+  },
+  adminAccount: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'AdminAccount',
+    required: function requireDedicatedAdminActor() {
+      return !this.admin;
+    }
   },
   action: {
     type: String,
