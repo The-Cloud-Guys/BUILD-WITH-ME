@@ -53,3 +53,10 @@ test('admin SSO provider subjects have a unique compound index', () => {
     && options.unique === true
   )));
 });
+
+test('Firebase identities and sessions are dedicated admin authentication methods', () => {
+  assert.equal(AdminAccount.schema.path('firebaseUid').options.unique, true);
+  assert.equal(AdminAccount.schema.path('firebaseUid').options.sparse, true);
+  assert.ok(AdminAccount.schema.path('authMethods').caster.enumValues.includes('firebase'));
+  assert.ok(AdminSession.schema.path('authMethod').enumValues.includes('firebase'));
+});

@@ -33,6 +33,7 @@ const ADMIN_AUTH_METHODS = Object.freeze([
   'password',
   'google',
   'microsoft',
+  'firebase',
 ]);
 
 module.exports = {

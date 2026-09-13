@@ -16,7 +16,7 @@ const adminMfaChallengeSchema = new mongoose.Schema(
     },
     authMethod: {
       type: String,
-      enum: ['password', 'google', 'microsoft'],
+      enum: ['password', 'google', 'microsoft', 'firebase'],
       required: true,
     },
     expiresAt: {

@@ -27,6 +27,7 @@ test('admin local-auth router exposes the Phase 2 endpoints', () => {
     'POST /bootstrap',
     'POST /accept-invitation',
     'POST /login',
+    'POST /firebase',
     'GET /sso/:provider',
     'GET /sso/:provider/callback',
     'POST /mfa/challenge',
@@ -37,6 +38,23 @@ test('admin local-auth router exposes the Phase 2 endpoints', () => {
     'POST /mfa/confirm',
     'DELETE /mfa',
   ]);
+});
+
+test('admin Firebase login verifies identity without creating an administrator', () => {
+  const controllerSource = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'controllers', 'adminAuth.controller.js'),
+    'utf8'
+  );
+  const firebaseServiceSource = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'services', 'firebase.service.js'),
+    'utf8'
+  );
+  assert.match(controllerSource, /verifyFirebaseToken\(value\.idToken, \{ checkRevoked: true \}\)/);
+  assert.match(controllerSource, /decoded\.email_verified !== true/);
+  assert.match(controllerSource, /Firebase access has not been provisioned/);
+  assert.match(controllerSource, /createMfaChallenge\(admin, 'firebase'\)/);
+  assert.doesNotMatch(controllerSource, /AdminAccount\.create\([^)]*firebase/i);
+  assert.match(firebaseServiceSource, /verifyIdToken\(idToken, checkRevoked\)/);
 });
 
 test('admin SSO uses state, nonce, PKCE, and verified provider identity', () => {

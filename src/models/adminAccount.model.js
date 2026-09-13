@@ -63,6 +63,13 @@ const adminAccountSchema = new mongoose.Schema(
       type: [ssoIdentitySchema],
       default: [],
     },
+    firebaseUid: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      default: null,
+    },
     isActive: {
       type: Boolean,
       default: true,

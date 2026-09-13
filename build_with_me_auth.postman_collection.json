@@ -3365,7 +3365,40 @@
           "response": []
         },
         {
-          "name": "072. Admin SSO - Start Google",
+          "name": "072. Firebase Login - Dedicated Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idToken\": \"{{firebaseIdToken}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/admin/auth/firebase",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Expected status', () => { pm.expect([200, 202, 400, 401, 403, 409]).to.include(pm.response.code) });",
+                  "pm.test('Response is JSON', () => { pm.expect((pm.response.headers.get('Content-Type') || '').toLowerCase()).to.include('application/json') });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "073. Admin SSO - Start Google",
           "request": {
             "method": "GET",
             "header": [],
@@ -3391,7 +3424,7 @@
           ]
         },
         {
-          "name": "073. Admin SSO - Google Callback Validation",
+          "name": "074. Admin SSO - Google Callback Validation",
           "request": {
             "method": "GET",
             "header": [],
@@ -3417,7 +3450,7 @@
           ]
         },
         {
-          "name": "074. Admin SSO - Start Microsoft",
+          "name": "075. Admin SSO - Start Microsoft",
           "request": {
             "method": "GET",
             "header": [],
@@ -3443,7 +3476,7 @@
           ]
         },
         {
-          "name": "075. Admin SSO - Microsoft Callback Validation",
+          "name": "076. Admin SSO - Microsoft Callback Validation",
           "request": {
             "method": "GET",
             "header": [],
@@ -3469,7 +3502,7 @@
           ]
         },
         {
-          "name": "076. Get Current Dedicated Admin",
+          "name": "077. Get Current Dedicated Admin",
           "event": [
             {
               "listen": "test",
@@ -3495,7 +3528,7 @@
           "response": []
         },
         {
-          "name": "077. Complete Admin MFA Login Challenge",
+          "name": "078. Complete Admin MFA Login Challenge",
           "request": {
             "method": "POST",
             "header": [
@@ -3524,7 +3557,7 @@
           ]
         },
         {
-          "name": "078. Start Admin MFA Setup",
+          "name": "079. Start Admin MFA Setup",
           "request": {
             "method": "POST",
             "header": [],
@@ -3544,7 +3577,7 @@
           ]
         },
         {
-          "name": "079. Confirm Admin MFA Setup",
+          "name": "080. Confirm Admin MFA Setup",
           "request": {
             "method": "POST",
             "header": [
@@ -3573,7 +3606,7 @@
           ]
         },
         {
-          "name": "080. Disable Admin MFA",
+          "name": "081. Disable Admin MFA",
           "request": {
             "method": "DELETE",
             "header": [
@@ -3602,7 +3635,7 @@
           ]
         },
         {
-          "name": "081. Refresh Dedicated Admin Session",
+          "name": "082. Refresh Dedicated Admin Session",
           "event": [
             {
               "listen": "test",
@@ -3649,7 +3682,7 @@
       "name": "11 - Administration",
       "item": [
         {
-          "name": "082. Get Admin Dashboard",
+          "name": "083. Get Admin Dashboard",
           "event": [
             {
               "listen": "test",
@@ -3679,7 +3712,7 @@
           "response": []
         },
         {
-          "name": "083. Get Users",
+          "name": "084. Get Users",
           "event": [
             {
               "listen": "test",
@@ -3709,7 +3742,7 @@
           "response": []
         },
         {
-          "name": "084. Get Applicant User Details",
+          "name": "085. Get Applicant User Details",
           "event": [
             {
               "listen": "test",
@@ -3739,7 +3772,7 @@
           "response": []
         },
         {
-          "name": "085. Get Admin Project List",
+          "name": "086. Get Admin Project List",
           "event": [
             {
               "listen": "test",
@@ -3769,7 +3802,7 @@
           "response": []
         },
         {
-          "name": "086. Get Reports",
+          "name": "087. Get Reports",
           "event": [
             {
               "listen": "test",
@@ -3799,7 +3832,7 @@
           "response": []
         },
         {
-          "name": "087. Resolve Report - No Violation",
+          "name": "088. Resolve Report - No Violation",
           "event": [
             {
               "listen": "test",
@@ -3844,7 +3877,7 @@
           "response": []
         },
         {
-          "name": "088. Get Admin Activities",
+          "name": "089. Get Admin Activities",
           "event": [
             {
               "listen": "test",
@@ -3874,7 +3907,7 @@
           "response": []
         },
         {
-          "name": "089. List Dedicated Admins",
+          "name": "090. List Dedicated Admins",
           "event": [
             {
               "listen": "test",
@@ -3897,7 +3930,7 @@
           "response": []
         },
         {
-          "name": "090. Create Admin Invitation",
+          "name": "091. Create Admin Invitation",
           "event": [
             {
               "listen": "test",
@@ -3941,7 +3974,7 @@
           "response": []
         },
         {
-          "name": "091. List Admin Invitations",
+          "name": "092. List Admin Invitations",
           "event": [
             {
               "listen": "test",
@@ -3964,7 +3997,7 @@
           "response": []
         },
         {
-          "name": "092. Revoke Admin Invitation",
+          "name": "093. Revoke Admin Invitation",
           "event": [
             {
               "listen": "test",
@@ -3987,7 +4020,7 @@
           "response": []
         },
         {
-          "name": "093. Update Dedicated Admin Access",
+          "name": "094. Update Dedicated Admin Access",
           "event": [
             {
               "listen": "test",
@@ -4026,7 +4059,7 @@
           "response": []
         },
         {
-          "name": "094. Deactivate Dedicated Admin",
+          "name": "095. Deactivate Dedicated Admin",
           "event": [
             {
               "listen": "test",
@@ -4049,7 +4082,7 @@
           "response": []
         },
         {
-          "name": "095. Get Admin Actions",
+          "name": "096. Get Admin Actions",
           "event": [
             {
               "listen": "test",
@@ -4079,7 +4112,7 @@
           "response": []
         },
         {
-          "name": "096. Execute Admin Action",
+          "name": "097. Execute Admin Action",
           "event": [
             {
               "listen": "test",
@@ -4124,7 +4157,7 @@
           "response": []
         },
         {
-          "name": "097. Get Permission Presets",
+          "name": "098. Get Permission Presets",
           "event": [
             {
               "listen": "test",
@@ -4154,7 +4187,7 @@
           "response": []
         },
         {
-          "name": "098. Accept Admin Invitation",
+          "name": "099. Accept Admin Invitation",
           "event": [
             {
               "listen": "test",
@@ -4201,7 +4234,7 @@
       "name": "12 - Negative & Validation Tests",
       "item": [
         {
-          "name": "099. Login with Invalid Password",
+          "name": "100. Login with Invalid Password",
           "event": [
             {
               "listen": "test",
@@ -4239,7 +4272,7 @@
           "response": []
         },
         {
-          "name": "100. Protected Route with Invalid Token",
+          "name": "101. Protected Route with Invalid Token",
           "event": [
             {
               "listen": "test",
@@ -4272,7 +4305,7 @@
           "response": []
         },
         {
-          "name": "101. Apply to Invalid Project Role",
+          "name": "102. Apply to Invalid Project Role",
           "event": [
             {
               "listen": "test",
@@ -4317,7 +4350,7 @@
           "response": []
         },
         {
-          "name": "102. Create Project Missing Title",
+          "name": "103. Create Project Missing Title",
           "event": [
             {
               "listen": "test",
@@ -4361,7 +4394,7 @@
       "name": "13 - Cleanup & Logout",
       "item": [
         {
-          "name": "103. Remove Applicant from Project Team",
+          "name": "104. Remove Applicant from Project Team",
           "event": [
             {
               "listen": "test",
@@ -4398,7 +4431,7 @@
           "response": []
         },
         {
-          "name": "104. Delete Community Post",
+          "name": "105. Delete Community Post",
           "event": [
             {
               "listen": "test",
@@ -4434,7 +4467,7 @@
           "response": []
         },
         {
-          "name": "105. Delete Project",
+          "name": "106. Delete Project",
           "event": [
             {
               "listen": "test",
@@ -4470,7 +4503,7 @@
           "response": []
         },
         {
-          "name": "106. Logout via Cookie",
+          "name": "107. Logout via Cookie",
           "event": [
             {
               "listen": "test",
@@ -4511,7 +4544,7 @@
           "response": []
         },
         {
-          "name": "107. Logout Dedicated Admin",
+          "name": "108. Logout Dedicated Admin",
           "event": [
             {
               "listen": "test",

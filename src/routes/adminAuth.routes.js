@@ -6,6 +6,7 @@ const {
   completeAdminSso,
   getCurrentAdmin,
   loginAdmin,
+  loginAdminWithFirebase,
   logoutAdmin,
   refreshAdminSession,
   startAdminSso,
@@ -31,6 +32,7 @@ router.use(verifyAdminRequestOrigin);
 router.post('/bootstrap', adminBootstrapLimiter, bootstrapAdmin);
 router.post('/accept-invitation', adminAuthLimiter, acceptAdminInvitation);
 router.post('/login', adminAuthLimiter, loginAdmin);
+router.post('/firebase', adminAuthLimiter, loginAdminWithFirebase);
 router.get('/sso/:provider', adminAuthLimiter, startAdminSso);
 router.get('/sso/:provider/callback', adminAuthLimiter, completeAdminSso);
 router.post('/mfa/challenge', adminAuthLimiter, completeAdminMfaChallenge);

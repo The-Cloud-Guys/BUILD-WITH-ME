@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 
 const AdminAccount = require('../models/adminAccount.model');
 const AdminInvite = require('../models/adminInvite.model');
+const { verifyFirebaseToken } = require('../services/firebase.service');
 const { hashInvitationToken } = require('../services/adminInvitation.service');
 const {
   createSsoRequest,
@@ -24,6 +25,7 @@ const {
 } = require('../services/adminAuth.service');
 const {
   acceptAdminInvitationValidation,
+  adminFirebaseValidation,
   adminLoginValidation,
   bootstrapAdminValidation,
 } = require('../validation/adminAuth.validation');
@@ -194,6 +196,70 @@ const loginAdmin = async (req, res) => {
     console.error('Admin login failed:', error.message);
     return res.status(error.statusCode || 500).json({
       message: error.statusCode ? error.message : 'Unable to authenticate administrator',
+    });
+  }
+};
+
+const loginAdminWithFirebase = async (req, res) => {
+  const { error, value } = adminFirebaseValidation(req.body);
+  if (error) return res.status(400).json({ message: error.details[0].message });
+
+  try {
+    assertAdminAuthConfigured();
+    const decoded = await verifyFirebaseToken(value.idToken, { checkRevoked: true });
+    const uid = typeof decoded.uid === 'string' ? decoded.uid.trim() : '';
+    const email = typeof decoded.email === 'string'
+      ? decoded.email.trim().toLowerCase()
+      : '';
+    if (!uid || !email || decoded.email_verified !== true) {
+      return res.status(401).json({ message: 'A verified Firebase email is required' });
+    }
+
+    let admin = await AdminAccount.findOne({ firebaseUid: uid });
+    if (admin && admin.email !== email) {
+      return res.status(401).json({ message: 'Firebase identity does not match admin email' });
+    }
+    if (!admin) admin = await AdminAccount.findOne({ email });
+    if (!admin || admin.isActive === false || admin.migrationPending) {
+      return res.status(403).json({
+        message: 'Firebase access has not been provisioned for this administrator',
+      });
+    }
+    if (admin.firebaseUid && admin.firebaseUid !== uid) {
+      return res.status(409).json({ message: 'Admin account is linked to another Firebase identity' });
+    }
+
+    admin.firebaseUid = uid;
+    if (!admin.authMethods.includes('firebase')) admin.authMethods.push('firebase');
+    admin.emailVerified = true;
+    await admin.save();
+
+    if (admin.mfaEnabled) {
+      setMfaChallengeCookie(res, await createMfaChallenge(admin, 'firebase'));
+      return res.status(202).json({
+        message: 'Admin MFA verification required',
+        requiresMfa: true,
+      });
+    }
+
+    const tokens = await issueAdminTokenPair(admin, req, { authMethod: 'firebase' });
+    admin.lastLoginAt = new Date();
+    admin.lastActivityAt = new Date();
+    await admin.save();
+    setAdminCookies(res, tokens.accessToken, tokens.refreshToken);
+    return res.json({
+      message: 'Admin Firebase login successful',
+      admin: serializeAdmin(admin),
+    });
+  } catch (firebaseError) {
+    const statusCode = firebaseError.code === 11000
+      ? 409
+      : (firebaseError.statusCode || 401);
+    console.error('Admin Firebase login failed:', firebaseError.message);
+    return res.status(statusCode).json({
+      message: statusCode === 409
+        ? 'Firebase identity is already linked to another administrator'
+        : 'Unable to authenticate administrator with Firebase',
     });
   }
 };
@@ -422,6 +488,7 @@ module.exports = {
   completeAdminSso,
   getCurrentAdmin,
   loginAdmin,
+  loginAdminWithFirebase,
   logoutAdmin,
   refreshAdminSession,
   serializeAdmin,
