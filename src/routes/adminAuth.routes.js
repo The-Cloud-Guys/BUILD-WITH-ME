@@ -1,24 +1,18 @@
 const express = require('express');
 
 const {
-  acceptAdminInvitation,
-  bootstrapAdmin,
-  completeAdminSso,
+  acceptFirebaseInvitation,
+  bootstrapFirebaseAdmin,
   getCurrentAdmin,
-  loginAdmin,
   loginAdminWithFirebase,
   logoutAdmin,
-  refreshAdminSession,
-  startAdminSso,
+  verifyAdminInvitation,
 } = require('../controllers/adminAuth.controller');
 const {
   authenticateAdmin,
   verifyAdminRequestOrigin,
 } = require('../middleware/adminAuth.middleware');
-const {
-  adminAuthLimiter,
-  adminBootstrapLimiter,
-} = require('../middleware/rateLimiter');
+const { adminAuthLimiter, adminBootstrapLimiter } = require('../middleware/rateLimiter');
 const {
   completeAdminMfaChallenge,
   confirmAdminMfa,
@@ -29,14 +23,11 @@ const {
 const router = express.Router();
 
 router.use(verifyAdminRequestOrigin);
-router.post('/bootstrap', adminBootstrapLimiter, bootstrapAdmin);
-router.post('/accept-invitation', adminAuthLimiter, acceptAdminInvitation);
-router.post('/login', adminAuthLimiter, loginAdmin);
+router.post('/bootstrap/firebase', adminBootstrapLimiter, bootstrapFirebaseAdmin);
 router.post('/firebase', adminAuthLimiter, loginAdminWithFirebase);
-router.get('/sso/:provider', adminAuthLimiter, startAdminSso);
-router.get('/sso/:provider/callback', adminAuthLimiter, completeAdminSso);
+router.post('/invitations/verify', adminAuthLimiter, verifyAdminInvitation);
+router.post('/firebase/accept-invitation', adminAuthLimiter, acceptFirebaseInvitation);
 router.post('/mfa/challenge', adminAuthLimiter, completeAdminMfaChallenge);
-router.post('/refresh-token', refreshAdminSession);
 router.post('/logout', logoutAdmin);
 router.get('/me', authenticateAdmin, getCurrentAdmin);
 router.post('/mfa/setup', authenticateAdmin, setupAdminMfa);

@@ -54,15 +54,15 @@ test('admin MFA challenges are hashed, expiring, and single-use', () => {
   );
   assert.match(source, /findOneAndUpdate\(/);
   assert.match(source, /usedAt: null/);
+  assert.equal(AdminMfaChallenge.schema.path('encryptedCredential').options.select, false);
 });
 
-test('password and SSO login both stop for MFA before issuing a session', () => {
+test('Firebase login stops for MFA before issuing a session', () => {
   const source = fs.readFileSync(
     path.join(__dirname, '..', 'src', 'controllers', 'adminAuth.controller.js'),
     'utf8'
   );
-  assert.match(source, /createMfaChallenge\(admin, 'password'\)/);
-  assert.match(source, /createMfaChallenge\(admin, req\.params\.provider\)/);
+  assert.match(source, /createMfaChallenge\(admin, 'firebase', idToken\)/);
   assert.match(source, /requiresMfa: true/);
 });
 
@@ -71,7 +71,7 @@ test('enabling or disabling MFA invalidates existing admin sessions', () => {
     path.join(__dirname, '..', 'src', 'controllers', 'adminMfa.controller.js'),
     'utf8'
   );
-  const revocations = source.match(/AdminSession\.updateMany\(/g) || [];
+  const revocations = source.match(/revokeFirebaseSessions\(/g) || [];
   assert.equal(revocations.length, 2);
   assert.match(source, /tokenVersion = \(admin\.tokenVersion \|\| 0\) \+ 1/);
 });

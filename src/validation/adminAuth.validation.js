@@ -1,32 +1,28 @@
 const Joi = require('joi');
 
-const email = Joi.string().email().trim().lowercase().required();
-const password = Joi.string().min(12).max(128).required();
+const idToken = Joi.string().min(100).max(10000).required();
+const invitationToken = Joi.string().min(32).max(512).required();
 
-const bootstrapAdminValidation = (data) => Joi.object({
-  email,
-  password,
+const adminFirebaseValidation = (data) => Joi.object({ idToken })
+  .validate(data, { abortEarly: false, stripUnknown: true });
+
+const bootstrapFirebaseAdminValidation = (data) => Joi.object({
+  idToken,
   firstName: Joi.string().trim().min(1).max(100).required(),
   lastName: Joi.string().trim().min(1).max(100).required(),
 }).validate(data, { abortEarly: false, stripUnknown: true });
 
-const adminLoginValidation = (data) => Joi.object({
-  email,
-  password: Joi.string().max(128).required(),
-}).validate(data, { abortEarly: false, stripUnknown: true });
+const invitationTokenValidation = (data) => Joi.object({ token: invitationToken })
+  .validate(data, { abortEarly: false, stripUnknown: true });
 
-const acceptAdminInvitationValidation = (data) => Joi.object({
-  token: Joi.string().min(32).max(512).required(),
-  password,
-}).validate(data, { abortEarly: false, stripUnknown: true });
-
-const adminFirebaseValidation = (data) => Joi.object({
-  idToken: Joi.string().min(100).max(10000).required(),
+const acceptFirebaseInvitationValidation = (data) => Joi.object({
+  token: invitationToken,
+  idToken,
 }).validate(data, { abortEarly: false, stripUnknown: true });
 
 module.exports = {
-  acceptAdminInvitationValidation,
+  acceptFirebaseInvitationValidation,
   adminFirebaseValidation,
-  adminLoginValidation,
-  bootstrapAdminValidation,
+  bootstrapFirebaseAdminValidation,
+  invitationTokenValidation,
 };

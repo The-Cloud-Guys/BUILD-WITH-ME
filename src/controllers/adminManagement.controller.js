@@ -3,11 +3,13 @@ const mongoose = require('mongoose');
 
 const AdminAccount = require('../models/adminAccount.model');
 const AdminInvite = require('../models/adminInvite.model');
-const AdminSession = require('../models/adminSession.model');
 const { AuditLog } = require('../models/admin.model');
 const { DEFAULT_ADMIN_PERMISSIONS } = require('../constants/admin.constants');
-const { getDurationMs } = require('../services/adminAuth.service');
+const { getDurationMs } = require('../services/duration.service');
+const { revokeFirebaseSessions } = require('../services/firebase.service');
 const { hashInvitationToken } = require('../services/adminInvitation.service');
+const { buildAdminInvitationEmail } = require('../services/adminInvitationEmail.service');
+const { sendEmail } = require('../services/email.service');
 const {
   createAdminInvitationValidation,
   updateAdminValidation,
@@ -83,6 +85,29 @@ const createAdminInvitation = async (req, res) => {
       expiresAt,
     });
 
+    const dashboardUrl = process.env.ADMIN_DASHBOARD_URL?.replace(/\/$/, '');
+    if (!dashboardUrl) {
+      invitation.revokedAt = new Date();
+      await invitation.save();
+      return res.status(503).json({ message: 'Admin dashboard URL is not configured' });
+    }
+    const acceptUrl = `${dashboardUrl}/accept-invitation?token=${encodeURIComponent(token)}`;
+    const emailMessage = buildAdminInvitationEmail({
+      firstName: invitation.firstName,
+      invitedByName: req.adminAccount.fullName,
+      role: invitation.role,
+      invitedEmail: invitation.email,
+      invitationUrl: acceptUrl,
+      expiresAt: invitation.expiresAt,
+    });
+    try {
+      await sendEmail({ email: invitation.email, ...emailMessage });
+    } catch (deliveryError) {
+      invitation.revokedAt = new Date();
+      await invitation.save();
+      throw deliveryError;
+    }
+
     await AuditLog.create({
       adminAccount: req.adminAccount._id,
       action: 'invite_admin',
@@ -91,24 +116,23 @@ const createAdminInvitation = async (req, res) => {
       details: { email: value.email, role: value.role, permissions },
     });
 
-    const dashboardUrl = process.env.ADMIN_DASHBOARD_URL?.replace(/\/$/, '');
     return res.status(201).json({
-      message: 'Admin invitation created successfully',
+      message: 'Admin invitation created and emailed successfully',
       invitation: {
         _id: invitation._id,
         email: invitation.email,
         role: invitation.role,
         permissions: invitation.permissions,
         expiresAt: invitation.expiresAt,
-        token,
-        acceptUrl: dashboardUrl
-          ? `${dashboardUrl}/accept-invitation?token=${encodeURIComponent(token)}`
-          : null,
+        delivered: true,
+        ...(process.env.NODE_ENV !== 'production' ? { token, acceptUrl } : {}),
       },
     });
   } catch (error) {
     console.error('Create admin invitation failed:', error.message);
-    return res.status(500).json({ message: 'Unable to create admin invitation' });
+    return res.status(error.statusCode || 500).json({
+      message: error.statusCode ? error.message : 'Unable to create admin invitation',
+    });
   }
 };
 
@@ -191,10 +215,7 @@ const updateDedicatedAdmin = async (req, res) => {
     if (value.isActive !== undefined) target.isActive = value.isActive;
     target.tokenVersion += 1;
     await target.save();
-    await AdminSession.updateMany(
-      { admin: target._id, revokedAt: null },
-      { $set: { revokedAt: new Date() } }
-    );
+    await revokeFirebaseSessions(target.firebaseUid);
 
     await AuditLog.create({
       adminAccount: req.adminAccount._id,

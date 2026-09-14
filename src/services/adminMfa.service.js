@@ -1,5 +1,4 @@
 const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
 const AdminMfaChallenge = require('../models/adminMfaChallenge.model');
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -93,33 +92,24 @@ const buildOtpAuthUrl = (admin, secret) => {
 
 const hashChallengeId = (jti) => crypto.createHash('sha256').update(jti).digest('hex');
 
-const createMfaChallenge = async (admin, authMethod) => {
-  const jti = crypto.randomUUID();
-  const token = jwt.sign({
-    sub: admin._id.toString(),
-    jti,
-    authMethod,
-    tokenVersion: admin.tokenVersion || 0,
-    type: 'admin_mfa_challenge',
-  },
-  process.env.ADMIN_JWT_SECRET, {
-    expiresIn: '5m',
-    issuer: 'connexd-admin-api',
-    audience: 'connexd-admin-mfa',
-  });
+const createMfaChallenge = async (admin, authMethod, firebaseIdToken) => {
+  const token = crypto.randomBytes(32).toString('base64url');
   await AdminMfaChallenge.create({
     admin: admin._id,
-    jtiHash: hashChallengeId(jti),
+    jtiHash: hashChallengeId(token),
     authMethod,
+    encryptedCredential: encryptSecret(firebaseIdToken),
+    tokenVersion: admin.tokenVersion || 0,
     expiresAt: new Date(Date.now() + 5 * 60 * 1000),
   });
   return token;
 };
 
-const verifyMfaChallenge = (token) => jwt.verify(token, process.env.ADMIN_JWT_SECRET, {
-  issuer: 'connexd-admin-api',
-  audience: 'connexd-admin-mfa',
-});
+const verifyMfaChallenge = (token) => (
+  typeof token === 'string' && /^[A-Za-z0-9_-]{40,}$/.test(token)
+    ? hashChallengeId(token)
+    : null
+);
 
 const mfaCookieOptions = () => ({
   httpOnly: true,

@@ -2,7 +2,6 @@ const User = require('../models/user.model');
 const PendingRegistration = require('../models/pendingRegistration.model');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const axios = require('axios');
 const bcrypt = require('bcryptjs');
 
 const {
@@ -19,6 +18,7 @@ const { verifyFirebaseToken } = require('../services/firebase.service');
 const { generateNumericOTP, hashOTP } = require('../utils/otp.util');
 const { getOnboardingStatus } = require('../utils/onboardingStatus');
 const { getSignedUrl } = require('../services/supabase.service');
+const { sendEmail } = require('../services/email.service');
 
 const {
   issueTokenPair,
@@ -59,33 +59,6 @@ const setAuthCookies = (res, accessToken, refreshToken) => {
 // ==============================
 // EMAIL SETUP (KEPT)
 // ==============================
-
-const sendEmail = async ({ email, subject, html }) => {
-  try {
-    const response = await axios.post(
-      'https://api.brevo.com/v3/smtp/email',
-      {
-        sender: {
-          email: process.env.EMAIL_FROM,
-          name: 'Build With Me',
-        },
-        to: [{ email }],
-        subject,
-        htmlContent: html,
-      },
-      {
-        headers: {
-          'api-key': process.env.BREVO_API_KEY,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Brevo email error:', error.response?.data || error.message);
-    throw new Error('Email sending failed');
-  }
-};
 
 // ==============================
 // OTP HELPERS (KEPT - for password reset)

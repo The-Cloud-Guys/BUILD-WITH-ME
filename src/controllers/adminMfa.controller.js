@@ -1,22 +1,24 @@
 const AdminAccount = require('../models/adminAccount.model');
-const AdminSession = require('../models/adminSession.model');
 const AdminMfaChallenge = require('../models/adminMfaChallenge.model');
-const { issueAdminTokenPair } = require('../services/adminAuth.service');
 const {
   buildOtpAuthUrl,
   clearMfaChallengeCookie,
   decryptSecret,
   encryptSecret,
   generateTotpSecret,
-  hashChallengeId,
   verifyMfaChallenge,
   verifyTotp,
 } = require('../services/adminMfa.service');
+const {
+  createFirebaseSessionCookie,
+  revokeFirebaseSessions,
+} = require('../services/firebase.service');
 const { adminMfaCodeValidation } = require('../validation/adminMfa.validation');
 const {
   clearAdminCookies,
+  getSessionDuration,
   serializeAdmin,
-  setAdminCookies,
+  setAdminSessionCookie,
 } = require('./adminAuth.controller');
 
 const setupAdminMfa = async (req, res) => {
@@ -60,10 +62,7 @@ const confirmAdminMfa = async (req, res) => {
     admin.mfaEnabled = true;
     admin.tokenVersion = (admin.tokenVersion || 0) + 1;
     await admin.save();
-    await AdminSession.updateMany(
-      { admin: admin._id, revokedAt: null },
-      { $set: { revokedAt: new Date() } }
-    );
+    await revokeFirebaseSessions(admin.firebaseUid);
     clearAdminCookies(res);
     return res.json({
       message: 'Admin MFA enabled successfully; sign in again to continue',
@@ -80,25 +79,24 @@ const completeAdminMfaChallenge = async (req, res) => {
   const { error, value } = adminMfaCodeValidation(req.body);
   if (error) return res.status(400).json({ message: error.details[0].message });
   try {
-    const challenge = verifyMfaChallenge(req.cookies?.adminMfaChallenge || '');
-    if (challenge.type !== 'admin_mfa_challenge' || !challenge.sub || !challenge.jti) {
+    const challengeHash = verifyMfaChallenge(req.cookies?.adminMfaChallenge || '');
+    if (!challengeHash) {
       clearMfaChallengeCookie(res);
       return res.status(401).json({ message: 'Invalid or expired admin MFA challenge' });
     }
     const storedChallenge = await AdminMfaChallenge.findOne({
-      admin: challenge.sub,
-      jtiHash: hashChallengeId(challenge.jti),
+      jtiHash: challengeHash,
       usedAt: null,
       expiresAt: { $gt: new Date() },
-    });
-    if (!storedChallenge || storedChallenge.authMethod !== challenge.authMethod) {
+    }).select('+encryptedCredential');
+    if (!storedChallenge) {
       clearMfaChallengeCookie(res);
       return res.status(401).json({ message: 'Invalid or expired admin MFA challenge' });
     }
-    const admin = await AdminAccount.findById(challenge.sub).select('+mfaSecretEncrypted');
+    const admin = await AdminAccount.findById(storedChallenge.admin).select('+mfaSecretEncrypted');
     if (
-      !admin || admin.isActive === false || !admin.mfaEnabled
-      || (admin.tokenVersion || 0) !== challenge.tokenVersion
+      !admin || admin.isActive === false || !admin.mfaEnabled || !admin.firebaseUid
+      || (admin.tokenVersion || 0) !== storedChallenge.tokenVersion
       || !admin.mfaSecretEncrypted
     ) {
       clearMfaChallengeCookie(res);
@@ -112,17 +110,15 @@ const completeAdminMfaChallenge = async (req, res) => {
       { $set: { usedAt: new Date() } },
       { new: true }
     );
-    if (!consumed) {
-      return res.status(401).json({ message: 'Invalid or expired admin MFA challenge' });
-    }
-    const tokens = await issueAdminTokenPair(admin, req, {
-      authMethod: challenge.authMethod,
-    });
+    if (!consumed) return res.status(401).json({ message: 'Invalid or expired admin MFA challenge' });
+
+    const firebaseIdToken = decryptSecret(storedChallenge.encryptedCredential);
+    const sessionCookie = await createFirebaseSessionCookie(firebaseIdToken, getSessionDuration());
     admin.lastLoginAt = new Date();
     admin.lastActivityAt = new Date();
     await admin.save();
     clearMfaChallengeCookie(res);
-    setAdminCookies(res, tokens.accessToken, tokens.refreshToken);
+    setAdminSessionCookie(res, sessionCookie);
     return res.json({ message: 'Admin MFA verification successful', admin: serializeAdmin(admin) });
   } catch (_) {
     clearMfaChallengeCookie(res);
@@ -146,10 +142,7 @@ const disableAdminMfa = async (req, res) => {
     admin.mfaPendingSecretEncrypted = null;
     admin.tokenVersion = (admin.tokenVersion || 0) + 1;
     await admin.save();
-    await AdminSession.updateMany(
-      { admin: admin._id, revokedAt: null },
-      { $set: { revokedAt: new Date() } }
-    );
+    await revokeFirebaseSessions(admin.firebaseUid);
     clearAdminCookies(res);
     return res.json({
       message: 'Admin MFA disabled; sign in again to continue',

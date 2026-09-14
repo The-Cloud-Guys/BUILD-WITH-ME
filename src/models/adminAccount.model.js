@@ -6,22 +6,6 @@ const {
   ADMIN_ROLES,
 } = require('../constants/admin.constants');
 
-const ssoIdentitySchema = new mongoose.Schema(
-  {
-    provider: {
-      type: String,
-      enum: ['google', 'microsoft'],
-      required: true,
-    },
-    subject: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-  },
-  { _id: false }
-);
-
 const adminAccountSchema = new mongoose.Schema(
   {
     email: {
@@ -30,11 +14,6 @@ const adminAccountSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
-    },
-    passwordHash: {
-      type: String,
-      select: false,
-      default: null,
     },
     firstName: {
       type: String,
@@ -59,10 +38,6 @@ const adminAccountSchema = new mongoose.Schema(
       type: String,
       enum: ADMIN_AUTH_METHODS,
     }],
-    ssoIdentities: {
-      type: [ssoIdentitySchema],
-      default: [],
-    },
     firebaseUid: {
       type: String,
       unique: true,
@@ -141,10 +116,6 @@ adminAccountSchema.virtual('fullName').get(function getFullName() {
 
 adminAccountSchema.index({ role: 1, isActive: 1 });
 adminAccountSchema.index(
-  { 'ssoIdentities.provider': 1, 'ssoIdentities.subject': 1 },
-  { unique: true, sparse: true }
-);
-adminAccountSchema.index(
   { bootstrapOwner: 1 },
   {
     unique: true,
@@ -155,7 +126,6 @@ adminAccountSchema.index(
 adminAccountSchema.set('toJSON', {
   virtuals: true,
   transform: (_document, result) => {
-    delete result.passwordHash;
     delete result.bootstrapOwner;
     delete result.tokenVersion;
     return result;

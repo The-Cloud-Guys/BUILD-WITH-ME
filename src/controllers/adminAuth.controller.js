@@ -1,80 +1,44 @@
-const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const mongoose = require('mongoose');
 
 const AdminAccount = require('../models/adminAccount.model');
 const AdminInvite = require('../models/adminInvite.model');
-const { verifyFirebaseToken } = require('../services/firebase.service');
-const { hashInvitationToken } = require('../services/adminInvitation.service');
-const {
-  createSsoRequest,
-  exchangeAuthorizationCode,
-  verifySsoState,
-} = require('../services/adminSso.service');
-const {
-  createMfaChallenge,
-  setMfaChallengeCookie,
-} = require('../services/adminMfa.service');
+const { AuditLog } = require('../models/admin.model');
 const { DEFAULT_ADMIN_PERMISSIONS } = require('../constants/admin.constants');
+const { hashInvitationToken } = require('../services/adminInvitation.service');
+const { createMfaChallenge, setMfaChallengeCookie } = require('../services/adminMfa.service');
+const { getDurationMs } = require('../services/duration.service');
 const {
-  assertAdminAuthConfigured,
-  issueAdminTokenPair,
-  getDurationMs,
-  revokeAdminRefreshToken,
-  rotateAdminRefreshToken,
-  verifyAdminBootstrapSecret,
-} = require('../services/adminAuth.service');
+  createFirebaseSessionCookie,
+  revokeFirebaseSessions,
+  verifyFirebaseSessionCookie,
+  verifyFirebaseToken,
+} = require('../services/firebase.service');
 const {
-  acceptAdminInvitationValidation,
   adminFirebaseValidation,
-  adminLoginValidation,
-  bootstrapAdminValidation,
+  bootstrapFirebaseAdminValidation,
+  invitationTokenValidation,
+  acceptFirebaseInvitationValidation,
 } = require('../validation/adminAuth.validation');
 
-const setAdminCookies = (res, accessToken, refreshToken) => {
-  const isProduction = process.env.NODE_ENV === 'production';
-  const sharedOptions = {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? 'none' : 'lax',
-    path: '/api/admin',
-  };
-
-  res.cookie('adminAccessToken', accessToken, {
-    ...sharedOptions,
-    maxAge: getDurationMs(process.env.ADMIN_ACCESS_EXPIRES_IN, '15m'),
-  });
-  res.cookie('adminRefreshToken', refreshToken, {
-    ...sharedOptions,
-    maxAge: getDurationMs(process.env.ADMIN_REFRESH_EXPIRES_IN, '12h'),
-  });
+const getSessionDuration = () => {
+  const duration = getDurationMs(process.env.ADMIN_SESSION_EXPIRES_IN, '12h');
+  return Math.min(Math.max(duration, 5 * 60 * 1000), 14 * 24 * 60 * 60 * 1000);
 };
 
-const clearAdminCookies = (res) => {
-  const isProduction = process.env.NODE_ENV === 'production';
-  const options = {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? 'none' : 'lax',
-    path: '/api/admin',
-  };
-  res.clearCookie('adminAccessToken', options);
-  res.clearCookie('adminRefreshToken', options);
-};
-
-const ssoCookieOptions = () => ({
+const adminCookieOptions = () => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax',
-  path: '/api/admin/auth',
-  maxAge: 10 * 60 * 1000,
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+  path: '/api/admin',
 });
 
-const clearSsoCookies = (res) => {
-  const options = ssoCookieOptions();
-  delete options.maxAge;
-  res.clearCookie('adminSsoState', options);
-  res.clearCookie('adminSsoVerifier', options);
-};
+const setAdminSessionCookie = (res, sessionCookie) => res.cookie('adminSession', sessionCookie, {
+  ...adminCookieOptions(),
+  maxAge: getSessionDuration(),
+});
+
+const clearAdminCookies = (res) => res.clearCookie('adminSession', adminCookieOptions());
 
 const serializeAdmin = (admin) => ({
   _id: admin._id,
@@ -89,113 +53,82 @@ const serializeAdmin = (admin) => ({
   lastLoginAt: admin.lastLoginAt,
 });
 
-const bootstrapAdmin = async (req, res) => {
+const verifyBootstrapSecret = (provided) => {
+  const configured = process.env.ADMIN_SECRET_KEY;
+  if (!configured || typeof provided !== 'string' || !provided) return false;
+  const expected = crypto.createHash('sha256').update(configured).digest();
+  const actual = crypto.createHash('sha256').update(provided).digest();
+  return crypto.timingSafeEqual(expected, actual);
+};
+
+const getVerifiedFirebaseIdentity = async (idToken) => {
+  const decoded = await verifyFirebaseToken(idToken, { checkRevoked: true });
+  const uid = typeof decoded.uid === 'string' ? decoded.uid.trim() : '';
+  const email = typeof decoded.email === 'string' ? decoded.email.trim().toLowerCase() : '';
+  if (!uid || !email || decoded.email_verified !== true) {
+    const error = new Error('A verified Firebase email is required');
+    error.statusCode = 401;
+    throw error;
+  }
+  return { decoded, email, uid };
+};
+
+const establishFirebaseSession = async (admin, idToken, req, res) => {
+  if (admin.mfaEnabled) {
+    setMfaChallengeCookie(res, await createMfaChallenge(admin, 'firebase', idToken));
+    return false;
+  }
+  const sessionCookie = await createFirebaseSessionCookie(idToken, getSessionDuration());
+  setAdminSessionCookie(res, sessionCookie);
+  admin.lastLoginAt = new Date();
+  admin.lastActivityAt = new Date();
+  await admin.save();
+  return true;
+};
+
+const bootstrapFirebaseAdmin = async (req, res) => {
+  const { error, value } = bootstrapFirebaseAdminValidation(req.body);
+  if (error) return res.status(400).json({ message: error.details[0].message });
   try {
-    const { error, value } = bootstrapAdminValidation(req.body);
-    if (error) {
-      return res.status(400).json({ message: error.details[0].message });
-    }
-
-    // Validate all required signing configuration before creating the only
-    // bootstrap account, so a configuration error cannot lock bootstrap.
-    assertAdminAuthConfigured({ includeBootstrap: true });
-
-    const bootstrapSecret = req.get('x-admin-bootstrap-secret');
-    if (!verifyAdminBootstrapSecret(bootstrapSecret)) {
+    if (!verifyBootstrapSecret(req.get('x-admin-bootstrap-secret'))) {
       return res.status(403).json({ message: 'Invalid admin bootstrap credentials' });
     }
-
     if (await AdminAccount.exists({})) {
       return res.status(409).json({ message: 'Admin bootstrap is no longer available' });
     }
-
-    const passwordHash = await bcrypt.hash(value.password, 12);
+    const identity = await getVerifiedFirebaseIdentity(value.idToken);
     let admin;
     try {
       admin = await AdminAccount.create({
-        email: value.email,
-        passwordHash,
+        email: identity.email,
+        firebaseUid: identity.uid,
         firstName: value.firstName,
         lastName: value.lastName,
         role: 'super_admin',
         permissions: DEFAULT_ADMIN_PERMISSIONS.super_admin,
-        authMethods: ['password'],
+        authMethods: ['firebase'],
         emailVerified: true,
         bootstrapOwner: true,
-        lastLoginAt: new Date(),
-        lastActivityAt: new Date(),
+        isActive: true,
       });
-    } catch (errorCreatingAdmin) {
-      if (errorCreatingAdmin?.code === 11000) {
+    } catch (createError) {
+      if (createError.code === 11000) {
         return res.status(409).json({ message: 'Admin bootstrap is no longer available' });
       }
-      throw errorCreatingAdmin;
+      throw createError;
     }
-
-    let tokens;
-    try {
-      tokens = await issueAdminTokenPair(admin, req, { authMethod: 'password' });
-    } catch (tokenError) {
-      // Allow a safe retry if the initial session could not be persisted.
-      await AdminAccount.deleteOne({ _id: admin._id, bootstrapOwner: true });
-      throw tokenError;
-    }
-    setAdminCookies(res, tokens.accessToken, tokens.refreshToken);
-
+    const authenticated = await establishFirebaseSession(admin, value.idToken, req, res);
     return res.status(201).json({
-      message: 'Initial super administrator created successfully',
+      message: 'Initial Firebase super administrator created successfully',
+      requiresMfa: !authenticated,
       admin: serializeAdmin(admin),
     });
-  } catch (error) {
-    console.error('Admin bootstrap failed:', error.message);
-    return res.status(error.statusCode || 500).json({
-      message: error.statusCode ? error.message : 'Unable to bootstrap administrator',
-    });
-  }
-};
-
-const loginAdmin = async (req, res) => {
-  try {
-    const { error, value } = adminLoginValidation(req.body);
-    if (error) {
-      return res.status(400).json({ message: error.details[0].message });
-    }
-
-    const admin = await AdminAccount.findOne({ email: value.email })
-      .select('+passwordHash');
-    const passwordMatches = admin?.passwordHash
-      ? await bcrypt.compare(value.password, admin.passwordHash)
-      : false;
-
-    if (!admin || !passwordMatches) {
-      return res.status(401).json({ message: 'Invalid admin credentials' });
-    }
-    if (admin.isActive === false) {
-      return res.status(401).json({ message: 'Admin account unavailable' });
-    }
-
-    if (admin.mfaEnabled) {
-      setMfaChallengeCookie(res, await createMfaChallenge(admin, 'password'));
-      return res.status(202).json({
-        message: 'Admin MFA verification required',
-        requiresMfa: true,
-      });
-    }
-
-    const tokens = await issueAdminTokenPair(admin, req, { authMethod: 'password' });
-    admin.lastLoginAt = new Date();
-    admin.lastActivityAt = new Date();
-    await admin.save();
-    setAdminCookies(res, tokens.accessToken, tokens.refreshToken);
-
-    return res.json({
-      message: 'Admin login successful',
-      admin: serializeAdmin(admin),
-    });
-  } catch (error) {
-    console.error('Admin login failed:', error.message);
-    return res.status(error.statusCode || 500).json({
-      message: error.statusCode ? error.message : 'Unable to authenticate administrator',
+  } catch (bootstrapError) {
+    console.error('Firebase admin bootstrap failed:', bootstrapError.message);
+    return res.status(bootstrapError.statusCode || 500).json({
+      message: bootstrapError.statusCode === 503
+        ? 'Firebase authentication is unavailable'
+        : 'Unable to bootstrap administrator',
     });
   }
 };
@@ -203,295 +136,185 @@ const loginAdmin = async (req, res) => {
 const loginAdminWithFirebase = async (req, res) => {
   const { error, value } = adminFirebaseValidation(req.body);
   if (error) return res.status(400).json({ message: error.details[0].message });
-
   try {
-    assertAdminAuthConfigured();
-    const decoded = await verifyFirebaseToken(value.idToken, { checkRevoked: true });
-    const uid = typeof decoded.uid === 'string' ? decoded.uid.trim() : '';
-    const email = typeof decoded.email === 'string'
-      ? decoded.email.trim().toLowerCase()
-      : '';
-    if (!uid || !email || decoded.email_verified !== true) {
-      return res.status(401).json({ message: 'A verified Firebase email is required' });
-    }
-
-    let admin = await AdminAccount.findOne({ firebaseUid: uid });
-    if (admin && admin.email !== email) {
-      return res.status(401).json({ message: 'Firebase identity does not match admin email' });
-    }
-    if (!admin) admin = await AdminAccount.findOne({ email });
-    if (!admin || admin.isActive === false || admin.migrationPending) {
-      return res.status(403).json({
-        message: 'Firebase access has not been provisioned for this administrator',
-      });
-    }
-    if (admin.firebaseUid && admin.firebaseUid !== uid) {
-      return res.status(409).json({ message: 'Admin account is linked to another Firebase identity' });
-    }
-
-    admin.firebaseUid = uid;
-    if (!admin.authMethods.includes('firebase')) admin.authMethods.push('firebase');
-    admin.emailVerified = true;
-    await admin.save();
-
-    if (admin.mfaEnabled) {
-      setMfaChallengeCookie(res, await createMfaChallenge(admin, 'firebase'));
-      return res.status(202).json({
-        message: 'Admin MFA verification required',
-        requiresMfa: true,
-      });
-    }
-
-    const tokens = await issueAdminTokenPair(admin, req, { authMethod: 'firebase' });
-    admin.lastLoginAt = new Date();
-    admin.lastActivityAt = new Date();
-    await admin.save();
-    setAdminCookies(res, tokens.accessToken, tokens.refreshToken);
-    return res.json({
-      message: 'Admin Firebase login successful',
-      admin: serializeAdmin(admin),
-    });
-  } catch (firebaseError) {
-    const statusCode = firebaseError.code === 11000
-      ? 409
-      : (firebaseError.statusCode || 401);
-    console.error('Admin Firebase login failed:', firebaseError.message);
-    return res.status(statusCode).json({
-      message: statusCode === 409
-        ? 'Firebase identity is already linked to another administrator'
-        : 'Unable to authenticate administrator with Firebase',
-    });
-  }
-};
-
-const startAdminSso = async (req, res) => {
-  try {
-    assertAdminAuthConfigured();
-    const request = createSsoRequest(req.params.provider);
-    const options = ssoCookieOptions();
-    res.cookie('adminSsoState', request.state, options);
-    res.cookie('adminSsoVerifier', request.verifier, options);
-    return res.redirect(302, request.authorizationUrl);
-  } catch (error) {
-    return res.status(error.statusCode || 500).json({
-      message: error.statusCode ? error.message : 'Unable to start admin SSO',
-    });
-  }
-};
-
-const completeAdminSso = async (req, res) => {
-  try {
-    if (!req.query.code || !req.query.state) {
-      clearSsoCookies(res);
-      return res.status(400).json({ message: 'SSO authorization code and state are required' });
-    }
-    if (
-      req.query.state !== req.cookies?.adminSsoState
-      || !req.cookies?.adminSsoVerifier
-    ) {
-      clearSsoCookies(res);
-      return res.status(401).json({ message: 'Invalid admin SSO state' });
-    }
-    const state = verifySsoState(req.query.state);
-    if (state.type !== 'admin_sso_state' || state.provider !== req.params.provider) {
-      clearSsoCookies(res);
-      return res.status(401).json({ message: 'Invalid admin SSO state' });
-    }
-    const identity = await exchangeAuthorizationCode(
-      req.params.provider,
-      req.query.code,
-      req.cookies.adminSsoVerifier,
-      state.nonce
-    );
-    let admin = await AdminAccount.findOne({
-      ssoIdentities: { $elemMatch: { provider: req.params.provider, subject: identity.subject } },
-    });
+    const identity = await getVerifiedFirebaseIdentity(value.idToken);
+    let admin = await AdminAccount.findOne({ firebaseUid: identity.uid });
     if (admin && admin.email !== identity.email) {
-      clearSsoCookies(res);
-      return res.status(401).json({ message: 'Admin SSO identity does not match account email' });
+      return res.status(401).json({ message: 'Firebase identity does not match admin email' });
     }
     if (!admin) admin = await AdminAccount.findOne({ email: identity.email });
     if (!admin || admin.isActive === false || admin.migrationPending) {
-      clearSsoCookies(res);
-      return res.status(403).json({ message: 'SSO access has not been provisioned for this administrator' });
+      return res.status(403).json({ message: 'Administrator access has not been activated' });
     }
-    if (!admin.ssoIdentities.some((item) => (
-      item.provider === req.params.provider && item.subject === identity.subject
-    ))) {
-      admin.ssoIdentities.push({ provider: req.params.provider, subject: identity.subject });
+    if (admin.firebaseUid && admin.firebaseUid !== identity.uid) {
+      return res.status(409).json({ message: 'Admin account is linked to another Firebase identity' });
     }
-    if (!admin.authMethods.includes(req.params.provider)) {
-      admin.authMethods.push(req.params.provider);
-    }
+    admin.firebaseUid = identity.uid;
+    admin.authMethods = ['firebase'];
     admin.emailVerified = true;
     await admin.save();
-
-    if (admin.mfaEnabled) {
-      clearSsoCookies(res);
-      setMfaChallengeCookie(res, await createMfaChallenge(admin, req.params.provider));
-      const dashboardUrl = String(process.env.ADMIN_DASHBOARD_URL || '').replace(/\/$/, '');
-      if (dashboardUrl) return res.redirect(302, `${dashboardUrl}/auth/callback?status=mfa-required`);
+    const authenticated = await establishFirebaseSession(admin, value.idToken, req, res);
+    if (!authenticated) {
       return res.status(202).json({
         message: 'Admin MFA verification required',
         requiresMfa: true,
       });
     }
-    admin.lastLoginAt = new Date();
-    admin.lastActivityAt = new Date();
-    await admin.save();
-    const tokens = await issueAdminTokenPair(admin, req, { authMethod: req.params.provider });
-    clearSsoCookies(res);
-    setAdminCookies(res, tokens.accessToken, tokens.refreshToken);
-
-    const dashboardUrl = String(process.env.ADMIN_DASHBOARD_URL || '').replace(/\/$/, '');
-    if (dashboardUrl) return res.redirect(302, `${dashboardUrl}/auth/callback?status=success`);
-    return res.json({ message: 'Admin SSO login successful', admin: serializeAdmin(admin) });
-  } catch (error) {
-    clearSsoCookies(res);
-    console.error('Admin SSO callback failed:', error.message);
-    return res.status(error.statusCode || 401).json({
-      message: error.statusCode ? error.message : 'Unable to authenticate administrator with SSO',
+    return res.json({ message: 'Admin Firebase login successful', admin: serializeAdmin(admin) });
+  } catch (loginError) {
+    console.error('Admin Firebase login failed:', loginError.message);
+    const status = loginError.code === 11000 ? 409 : (loginError.statusCode || 401);
+    return res.status(status).json({
+      message: loginError.statusCode === 503
+        ? 'Firebase authentication is unavailable'
+        : loginError.code === 11000
+          ? 'Firebase identity is already linked to another administrator'
+          : 'Unable to authenticate administrator with Firebase',
     });
   }
 };
 
-const acceptAdminInvitation = async (req, res) => {
-  const { error, value } = acceptAdminInvitationValidation(req.body);
+const verifyAdminInvitation = async (req, res) => {
+  const { error, value } = invitationTokenValidation(req.body);
   if (error) return res.status(400).json({ message: error.details[0].message });
+  try {
+    const invitation = await AdminInvite.findOne({
+      tokenHash: hashInvitationToken(value.token),
+      acceptedAt: null,
+      revokedAt: null,
+      expiresAt: { $gt: new Date() },
+    }).select('email firstName lastName role expiresAt');
+    if (!invitation) return res.status(404).json({ valid: false, message: 'Invitation is invalid or expired' });
+    return res.json({
+      valid: true,
+      invitation: {
+        email: invitation.email,
+        firstName: invitation.firstName,
+        lastName: invitation.lastName,
+        role: invitation.role,
+        expiresAt: invitation.expiresAt,
+      },
+    });
+  } catch (verifyError) {
+    console.error('Verify admin invitation failed:', verifyError.message);
+    return res.status(500).json({ message: 'Unable to verify admin invitation' });
+  }
+};
 
-  const passwordHash = await bcrypt.hash(value.password, 12);
+const acceptFirebaseInvitation = async (req, res) => {
+  const { error, value } = acceptFirebaseInvitationValidation(req.body);
+  if (error) return res.status(400).json({ message: error.details[0].message });
   let databaseSession;
   let admin;
-  let tokens;
   try {
+    const identity = await getVerifiedFirebaseIdentity(value.idToken);
     databaseSession = await mongoose.startSession();
     await databaseSession.withTransaction(async () => {
-      const now = new Date();
       const invitation = await AdminInvite.findOneAndUpdate(
         {
           tokenHash: hashInvitationToken(value.token),
+          email: identity.email,
           acceptedAt: null,
           revokedAt: null,
-          expiresAt: { $gt: now },
+          expiresAt: { $gt: new Date() },
         },
-        { $set: { acceptedAt: now } },
+        { $set: { acceptedAt: new Date() } },
         { new: true, session: databaseSession }
       );
-
       if (!invitation) {
-        const invalidInvite = new Error('Admin invitation is invalid or expired');
-        invalidInvite.statusCode = 400;
-        throw invalidInvite;
+        const invalid = new Error('Invitation is invalid, expired, or belongs to another email');
+        invalid.statusCode = 400;
+        throw invalid;
       }
-
       if (invitation.existingAdmin) {
         admin = await AdminAccount.findOne({
           _id: invitation.existingAdmin,
           migrationPending: true,
         }).session(databaseSession);
         if (!admin) {
-          const unavailable = new Error('Migrated administrator is unavailable');
+          const unavailable = new Error('Invited administrator is unavailable');
           unavailable.statusCode = 409;
           throw unavailable;
         }
-        admin.email = invitation.email;
-        admin.firstName = invitation.firstName;
-        admin.lastName = invitation.lastName;
-        admin.role = invitation.role;
-        admin.permissions = invitation.permissions;
-        admin.passwordHash = passwordHash;
-        admin.authMethods = Array.from(new Set([...admin.authMethods, 'password']));
-        admin.emailVerified = true;
-        admin.isActive = true;
-        admin.migrationPending = false;
-        admin.addedBy = invitation.invitedBy;
-        admin.lastLoginAt = now;
-        admin.lastActivityAt = now;
-        await admin.save({ session: databaseSession });
-      } else {
-        [admin] = await AdminAccount.create([{
+        Object.assign(admin, {
           email: invitation.email,
-          passwordHash,
+          firebaseUid: identity.uid,
           firstName: invitation.firstName,
           lastName: invitation.lastName,
           role: invitation.role,
           permissions: invitation.permissions,
-          authMethods: ['password'],
+          authMethods: ['firebase'],
+          emailVerified: true,
+          isActive: true,
+          migrationPending: false,
+          addedBy: invitation.invitedBy,
+        });
+        await admin.save({ session: databaseSession });
+      } else {
+        [admin] = await AdminAccount.create([{
+          email: invitation.email,
+          firebaseUid: identity.uid,
+          firstName: invitation.firstName,
+          lastName: invitation.lastName,
+          role: invitation.role,
+          permissions: invitation.permissions,
+          authMethods: ['firebase'],
           emailVerified: true,
           isActive: true,
           addedBy: invitation.invitedBy,
-          lastLoginAt: now,
-          lastActivityAt: now,
         }], { session: databaseSession });
       }
-
-      tokens = await issueAdminTokenPair(admin, req, {
-        authMethod: 'password',
-        dbSession: databaseSession,
-      });
+      await AuditLog.create([{
+        adminAccount: invitation.invitedBy,
+        action: 'accept_admin_invitation',
+        targetType: 'admin',
+        targetId: admin._id,
+        details: { email: invitation.email, activationMethod: 'firebase' },
+      }], { session: databaseSession });
     });
-
-    setAdminCookies(res, tokens.accessToken, tokens.refreshToken);
+    const authenticated = await establishFirebaseSession(admin, value.idToken, req, res);
     return res.status(201).json({
-      message: 'Admin invitation accepted successfully',
+      message: 'Firebase administrator invitation accepted successfully',
+      requiresMfa: !authenticated,
       admin: serializeAdmin(admin),
     });
-  } catch (acceptanceError) {
-    const statusCode = acceptanceError.statusCode ||
-      (acceptanceError.code === 11000 ? 409 : 500);
-    console.error('Accept admin invitation failed:', acceptanceError.message);
-    return res.status(statusCode).json({
-      message: statusCode === 500
-        ? 'Unable to accept admin invitation'
-        : acceptanceError.message,
+  } catch (acceptError) {
+    const status = acceptError.code === 11000 ? 409 : (acceptError.statusCode || 500);
+    console.error('Accept Firebase admin invitation failed:', acceptError.message);
+    return res.status(status).json({
+      message: acceptError.code === 11000
+        ? 'Firebase identity or email is already linked to another administrator'
+        : status === 500
+          ? 'Unable to accept admin invitation'
+          : acceptError.message,
     });
   } finally {
     if (databaseSession) await databaseSession.endSession();
   }
 };
 
-const refreshAdminSession = async (req, res) => {
-  try {
-    const suppliedToken = req.cookies?.adminRefreshToken;
-    if (!suppliedToken) {
-      return res.status(401).json({ message: 'Admin refresh token required' });
-    }
-
-    const rotated = await rotateAdminRefreshToken(suppliedToken, req);
-    setAdminCookies(res, rotated.accessToken, rotated.refreshToken);
-    return res.json({
-      message: 'Admin session refreshed',
-      admin: serializeAdmin(rotated.admin),
-    });
-  } catch (error) {
-    clearAdminCookies(res);
-    return res.status(error.statusCode || 401).json({
-      message: error.statusCode ? error.message : 'Invalid admin refresh token',
-    });
-  }
-};
-
 const logoutAdmin = async (req, res) => {
-  await revokeAdminRefreshToken(req.cookies?.adminRefreshToken);
+  try {
+    const decoded = await verifyFirebaseSessionCookie(req.cookies?.adminSession);
+    await revokeFirebaseSessions(decoded.uid);
+  } catch (_) {
+    // Logout remains idempotent for missing or expired sessions.
+  }
   clearAdminCookies(res);
   return res.json({ message: 'Admin logged out' });
 };
 
-const getCurrentAdmin = async (req, res) => res.json({
-  admin: serializeAdmin(req.adminAccount),
-});
+const getCurrentAdmin = async (req, res) => res.json({ admin: serializeAdmin(req.adminAccount) });
 
 module.exports = {
-  acceptAdminInvitation,
-  bootstrapAdmin,
+  acceptFirebaseInvitation,
+  bootstrapFirebaseAdmin,
   clearAdminCookies,
-  completeAdminSso,
   getCurrentAdmin,
-  loginAdmin,
   loginAdminWithFirebase,
   logoutAdmin,
-  refreshAdminSession,
   serializeAdmin,
-  setAdminCookies,
-  startAdminSso,
+  setAdminSessionCookie,
+  getSessionDuration,
+  verifyAdminInvitation,
 };

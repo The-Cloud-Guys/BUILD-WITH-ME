@@ -30,9 +30,6 @@ const DEFAULT_ADMIN_PERMISSIONS = Object.freeze({
 });
 
 const ADMIN_AUTH_METHODS = Object.freeze([
-  'password',
-  'google',
-  'microsoft',
   'firebase',
 ]);
 

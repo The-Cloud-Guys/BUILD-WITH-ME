@@ -3276,96 +3276,45 @@
       "name": "10 - Admin Authentication",
       "item": [
         {
-          "name": "070. Bootstrap Initial Super Admin",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Expected status', () => { pm.expect([201, 409]).to.include(pm.response.code) });",
-                  "pm.test('Response is JSON', () => {",
-                  "  const ct = pm.response.headers.get('Content-Type') || '';",
-                  "  pm.expect(ct.toLowerCase()).to.include('application/json');",
-                  "});"
-                ]
-              }
-            }
-          ],
+          "name": "070. Bootstrap Initial Firebase Super Admin",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/admin/auth/bootstrap",
-            "auth": {
-              "type": "noauth"
-            },
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
+                "value": "application/json"
               },
               {
                 "key": "x-admin-bootstrap-secret",
-                "value": "{{adminBootstrapSecret}}",
-                "type": "text"
+                "value": "{{adminBootstrapSecret}}"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"{{webAdminEmail}}\",\n  \"password\": \"{{webAdminPassword}}\",\n  \"firstName\": \"System\",\n  \"lastName\": \"Administrator\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
+              "raw": "{\n  \"idToken\": \"{{firebaseIdToken}}\",\n  \"firstName\": \"System\",\n  \"lastName\": \"Administrator\"\n}"
+            },
+            "url": "{{baseUrl}}/api/admin/auth/bootstrap/firebase",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Uses the Firebase adminSession HttpOnly cookie where authentication is required."
           },
-          "response": []
-        },
-        {
-          "name": "071. Login Dedicated Admin",
+          "response": [],
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Expected status', () => { pm.response.to.have.status(200) });",
-                  "pm.test('Response is JSON', () => {",
-                  "  const ct = pm.response.headers.get('Content-Type') || '';",
-                  "  pm.expect(ct.toLowerCase()).to.include('application/json');",
-                  "});"
+                  "pm.test('Expected status', () => { pm.expect([201,400,401,403,409,503]).to.include(pm.response.code) });",
+                  "pm.test('Response is JSON', () => { pm.expect((pm.response.headers.get('Content-Type') || '').toLowerCase()).to.include('application/json') });"
                 ]
               }
             }
-          ],
-          "request": {
-            "method": "POST",
-            "url": "{{baseUrl}}/api/admin/auth/login",
-            "auth": {
-              "type": "noauth"
-            },
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{webAdminEmail}}\",\n  \"password\": \"{{webAdminPassword}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
+          ]
         },
         {
-          "name": "072. Firebase Login - Dedicated Admin",
+          "name": "071. Login Dedicated Admin with Firebase",
           "request": {
             "method": "POST",
             "header": [
@@ -3381,7 +3330,8 @@
             "url": "{{baseUrl}}/api/admin/auth/firebase",
             "auth": {
               "type": "noauth"
-            }
+            },
+            "description": "Uses the Firebase adminSession HttpOnly cookie where authentication is required."
           },
           "response": [],
           "event": [
@@ -3390,7 +3340,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Expected status', () => { pm.expect([200, 202, 400, 401, 403, 409]).to.include(pm.response.code) });",
+                  "pm.test('Expected status', () => { pm.expect([200,202,400,401,403,409,503]).to.include(pm.response.code) });",
                   "pm.test('Response is JSON', () => { pm.expect((pm.response.headers.get('Content-Type') || '').toLowerCase()).to.include('application/json') });"
                 ]
               }
@@ -3398,150 +3348,15 @@
           ]
         },
         {
-          "name": "073. Admin SSO - Start Google",
+          "name": "072. Get Current Firebase Administrator",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/admin/auth/sso/google",
-            "auth": {
-              "type": "noauth"
-            }
-          },
-          "protocolProfileBehavior": {
-            "followRedirects": false
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Expected status', () => { pm.expect([302,503]).to.include(pm.response.code) });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "074. Admin SSO - Google Callback Validation",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/admin/auth/sso/google/callback?code=invalid&state=invalid",
-            "auth": {
-              "type": "noauth"
-            }
-          },
-          "protocolProfileBehavior": {
-            "followRedirects": false
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Expected status', () => { pm.expect([401]).to.include(pm.response.code) });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "075. Admin SSO - Start Microsoft",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/admin/auth/sso/microsoft",
-            "auth": {
-              "type": "noauth"
-            }
-          },
-          "protocolProfileBehavior": {
-            "followRedirects": false
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Expected status', () => { pm.expect([302,503]).to.include(pm.response.code) });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "076. Admin SSO - Microsoft Callback Validation",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/admin/auth/sso/microsoft/callback?code=invalid&state=invalid",
-            "auth": {
-              "type": "noauth"
-            }
-          },
-          "protocolProfileBehavior": {
-            "followRedirects": false
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Expected status', () => { pm.expect([401]).to.include(pm.response.code) });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "077. Get Current Dedicated Admin",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Expected status', () => { pm.response.to.have.status(200) });",
-                  "pm.test('Response is JSON', () => {",
-                  "  const ct = pm.response.headers.get('Content-Type') || '';",
-                  "  pm.expect(ct.toLowerCase()).to.include('application/json');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
             "url": "{{baseUrl}}/api/admin/auth/me",
             "auth": {
               "type": "noauth"
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "078. Complete Admin MFA Login Challenge",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": "{{baseUrl}}/api/admin/auth/mfa/challenge",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"code\": \"{{adminMfaCode}}\"\n}"
-            }
+            },
+            "description": "Uses the Firebase adminSession HttpOnly cookie where authentication is required."
           },
           "response": [],
           "event": [
@@ -3550,18 +3365,57 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Expected status', () => { pm.expect([200,400,401]).to.include(pm.response.code) });"
+                  "pm.test('Expected status', () => { pm.expect([200,401,503]).to.include(pm.response.code) });",
+                  "pm.test('Response is JSON', () => { pm.expect((pm.response.headers.get('Content-Type') || '').toLowerCase()).to.include('application/json') });"
                 ]
               }
             }
           ]
         },
         {
-          "name": "079. Start Admin MFA Setup",
+          "name": "073. Complete Admin MFA Login Challenge",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{adminMfaCode}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/admin/auth/mfa/challenge",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Uses the Firebase adminSession HttpOnly cookie where authentication is required."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Expected status', () => { pm.expect([200,400,401]).to.include(pm.response.code) });",
+                  "pm.test('Response is JSON', () => { pm.expect((pm.response.headers.get('Content-Type') || '').toLowerCase()).to.include('application/json') });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "074. Start Admin MFA Setup",
           "request": {
             "method": "POST",
             "header": [],
-            "url": "{{baseUrl}}/api/admin/auth/mfa/setup"
+            "url": "{{baseUrl}}/api/admin/auth/mfa/setup",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Uses the Firebase adminSession HttpOnly cookie where authentication is required."
           },
           "response": [],
           "event": [
@@ -3570,14 +3424,15 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Expected status', () => { pm.expect([200,401,409,503]).to.include(pm.response.code) });"
+                  "pm.test('Expected status', () => { pm.expect([200,401,409,503]).to.include(pm.response.code) });",
+                  "pm.test('Response is JSON', () => { pm.expect((pm.response.headers.get('Content-Type') || '').toLowerCase()).to.include('application/json') });"
                 ]
               }
             }
           ]
         },
         {
-          "name": "080. Confirm Admin MFA Setup",
+          "name": "075. Confirm Admin MFA Setup",
           "request": {
             "method": "POST",
             "header": [
@@ -3586,11 +3441,15 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{baseUrl}}/api/admin/auth/mfa/confirm",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"code\": \"{{adminMfaCode}}\"\n}"
-            }
+            },
+            "url": "{{baseUrl}}/api/admin/auth/mfa/confirm",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Uses the Firebase adminSession HttpOnly cookie where authentication is required."
           },
           "response": [],
           "event": [
@@ -3599,14 +3458,15 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Expected status', () => { pm.expect([200,400,401,409,503]).to.include(pm.response.code) });"
+                  "pm.test('Expected status', () => { pm.expect([200,400,401,409,503]).to.include(pm.response.code) });",
+                  "pm.test('Response is JSON', () => { pm.expect((pm.response.headers.get('Content-Type') || '').toLowerCase()).to.include('application/json') });"
                 ]
               }
             }
           ]
         },
         {
-          "name": "081. Disable Admin MFA",
+          "name": "076. Disable Admin MFA",
           "request": {
             "method": "DELETE",
             "header": [
@@ -3615,11 +3475,15 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{baseUrl}}/api/admin/auth/mfa",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"code\": \"{{adminMfaCode}}\"\n}"
-            }
+            },
+            "url": "{{baseUrl}}/api/admin/auth/mfa",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Uses the Firebase adminSession HttpOnly cookie where authentication is required."
           },
           "response": [],
           "event": [
@@ -3628,53 +3492,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Expected status', () => { pm.expect([200,400,401,409,503]).to.include(pm.response.code) });"
+                  "pm.test('Expected status', () => { pm.expect([200,400,401,409,503]).to.include(pm.response.code) });",
+                  "pm.test('Response is JSON', () => { pm.expect((pm.response.headers.get('Content-Type') || '').toLowerCase()).to.include('application/json') });"
                 ]
               }
             }
           ]
-        },
-        {
-          "name": "082. Refresh Dedicated Admin Session",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Expected status', () => { pm.response.to.have.status(200) });",
-                  "pm.test('Response is JSON', () => {",
-                  "  const ct = pm.response.headers.get('Content-Type') || '';",
-                  "  pm.expect(ct.toLowerCase()).to.include('application/json');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "url": "{{baseUrl}}/api/admin/auth/refresh-token",
-            "auth": {
-              "type": "noauth"
-            },
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
         }
       ]
     },
@@ -3682,7 +3505,7 @@
       "name": "11 - Administration",
       "item": [
         {
-          "name": "083. Get Admin Dashboard",
+          "name": "077. Get Admin Dashboard",
           "event": [
             {
               "listen": "test",
@@ -3707,12 +3530,12 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
+            "description": "Requires the Firebase adminSession HttpOnly cookie and the documented admin permission."
           },
           "response": []
         },
         {
-          "name": "084. Get Users",
+          "name": "078. Get Users",
           "event": [
             {
               "listen": "test",
@@ -3737,12 +3560,12 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
+            "description": "Requires the Firebase adminSession HttpOnly cookie and the documented admin permission."
           },
           "response": []
         },
         {
-          "name": "085. Get Applicant User Details",
+          "name": "079. Get Applicant User Details",
           "event": [
             {
               "listen": "test",
@@ -3767,12 +3590,12 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
+            "description": "Requires the Firebase adminSession HttpOnly cookie and the documented admin permission."
           },
           "response": []
         },
         {
-          "name": "086. Get Admin Project List",
+          "name": "080. Get Admin Project List",
           "event": [
             {
               "listen": "test",
@@ -3797,12 +3620,12 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
+            "description": "Requires the Firebase adminSession HttpOnly cookie and the documented admin permission."
           },
           "response": []
         },
         {
-          "name": "087. Get Reports",
+          "name": "081. Get Reports",
           "event": [
             {
               "listen": "test",
@@ -3827,12 +3650,12 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
+            "description": "Requires the Firebase adminSession HttpOnly cookie and the documented admin permission."
           },
           "response": []
         },
         {
-          "name": "088. Resolve Report - No Violation",
+          "name": "082. Resolve Report - No Violation",
           "event": [
             {
               "listen": "test",
@@ -3872,12 +3695,12 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
+            "description": "Requires the Firebase adminSession HttpOnly cookie and the documented admin permission."
           },
           "response": []
         },
         {
-          "name": "089. Get Admin Activities",
+          "name": "083. Get Admin Activities",
           "event": [
             {
               "listen": "test",
@@ -3902,12 +3725,12 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
+            "description": "Requires the Firebase adminSession HttpOnly cookie and the documented admin permission."
           },
           "response": []
         },
         {
-          "name": "090. List Dedicated Admins",
+          "name": "084. List Dedicated Admins",
           "event": [
             {
               "listen": "test",
@@ -3925,12 +3748,12 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
+            "description": "Requires the Firebase adminSession HttpOnly cookie and the documented admin permission."
           },
           "response": []
         },
         {
-          "name": "091. Create Admin Invitation",
+          "name": "085. Create Admin Invitation",
           "event": [
             {
               "listen": "test",
@@ -3969,12 +3792,12 @@
                 }
               }
             },
-            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
+            "description": "Requires the Firebase adminSession HttpOnly cookie and the documented admin permission."
           },
           "response": []
         },
         {
-          "name": "092. List Admin Invitations",
+          "name": "086. List Admin Invitations",
           "event": [
             {
               "listen": "test",
@@ -3992,12 +3815,12 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
+            "description": "Requires the Firebase adminSession HttpOnly cookie and the documented admin permission."
           },
           "response": []
         },
         {
-          "name": "093. Revoke Admin Invitation",
+          "name": "087. Revoke Admin Invitation",
           "event": [
             {
               "listen": "test",
@@ -4015,12 +3838,12 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login. Use an invitation other than the one being accepted."
+            "description": "Requires the Firebase adminSession HttpOnly cookie and the documented admin permission."
           },
           "response": []
         },
         {
-          "name": "094. Update Dedicated Admin Access",
+          "name": "088. Update Dedicated Admin Access",
           "event": [
             {
               "listen": "test",
@@ -4054,12 +3877,12 @@
                 }
               }
             },
-            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login. Use another existing dedicated administrator ID."
+            "description": "Requires the Firebase adminSession HttpOnly cookie and the documented admin permission."
           },
           "response": []
         },
         {
-          "name": "095. Deactivate Dedicated Admin",
+          "name": "089. Deactivate Dedicated Admin",
           "event": [
             {
               "listen": "test",
@@ -4077,12 +3900,12 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login. Deactivation preserves audit history and revokes sessions."
+            "description": "Requires the Firebase adminSession HttpOnly cookie and the documented admin permission."
           },
           "response": []
         },
         {
-          "name": "096. Get Admin Actions",
+          "name": "090. Get Admin Actions",
           "event": [
             {
               "listen": "test",
@@ -4107,12 +3930,12 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
+            "description": "Requires the Firebase adminSession HttpOnly cookie and the documented admin permission."
           },
           "response": []
         },
         {
-          "name": "097. Execute Admin Action",
+          "name": "091. Execute Admin Action",
           "event": [
             {
               "listen": "test",
@@ -4152,12 +3975,12 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
+            "description": "Requires the Firebase adminSession HttpOnly cookie and the documented admin permission."
           },
           "response": []
         },
         {
-          "name": "098. Get Permission Presets",
+          "name": "092. Get Permission Presets",
           "event": [
             {
               "listen": "test",
@@ -4182,51 +4005,77 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "Requires the dedicated adminAccessToken HttpOnly cookie from /api/admin/auth/login."
+            "description": "Requires the Firebase adminSession HttpOnly cookie and the documented admin permission."
           },
           "response": []
         },
         {
-          "name": "099. Accept Admin Invitation",
+          "name": "093. Verify Admin Invitation Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{adminInvitationToken}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/admin/auth/invitations/verify",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Uses the Firebase adminSession HttpOnly cookie where authentication is required."
+          },
+          "response": [],
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
-                  "if (pm.response.code === 201) {",
-                  "  pm.collectionVariables.set('managedAdminId', pm.response.json().admin._id);",
-                  "}"
+                  "pm.test('Expected status', () => { pm.expect([200,400,404]).to.include(pm.response.code) });",
+                  "pm.test('Response is JSON', () => { pm.expect((pm.response.headers.get('Content-Type') || '').toLowerCase()).to.include('application/json') });"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "094. Accept Admin Invitation with Firebase",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/admin/auth/accept-invitation",
-            "auth": {
-              "type": "noauth"
-            },
             "header": [
               {
                 "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
+                "value": "application/json"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"token\": \"{{adminInvitationToken}}\",\n  \"password\": \"{{invitedAdminPassword}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
+              "raw": "{\n  \"token\": \"{{adminInvitationToken}}\",\n  \"idToken\": \"{{firebaseIdToken}}\"\n}"
             },
-            "description": "Uses the single-use invitation token and establishes a dedicated admin cookie session."
+            "url": "{{baseUrl}}/api/admin/auth/firebase/accept-invitation",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Uses the Firebase adminSession HttpOnly cookie where authentication is required."
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Expected status', () => { pm.expect([201,400,401,409,500,503]).to.include(pm.response.code) });",
+                  "pm.test('Response is JSON', () => { pm.expect((pm.response.headers.get('Content-Type') || '').toLowerCase()).to.include('application/json') });"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -4234,7 +4083,7 @@
       "name": "12 - Negative & Validation Tests",
       "item": [
         {
-          "name": "100. Login with Invalid Password",
+          "name": "095. Login with Invalid Password",
           "event": [
             {
               "listen": "test",
@@ -4272,7 +4121,7 @@
           "response": []
         },
         {
-          "name": "101. Protected Route with Invalid Token",
+          "name": "096. Protected Route with Invalid Token",
           "event": [
             {
               "listen": "test",
@@ -4305,7 +4154,7 @@
           "response": []
         },
         {
-          "name": "102. Apply to Invalid Project Role",
+          "name": "097. Apply to Invalid Project Role",
           "event": [
             {
               "listen": "test",
@@ -4350,7 +4199,7 @@
           "response": []
         },
         {
-          "name": "103. Create Project Missing Title",
+          "name": "098. Create Project Missing Title",
           "event": [
             {
               "listen": "test",
@@ -4394,7 +4243,7 @@
       "name": "13 - Cleanup & Logout",
       "item": [
         {
-          "name": "104. Remove Applicant from Project Team",
+          "name": "099. Remove Applicant from Project Team",
           "event": [
             {
               "listen": "test",
@@ -4431,7 +4280,7 @@
           "response": []
         },
         {
-          "name": "105. Delete Community Post",
+          "name": "100. Delete Community Post",
           "event": [
             {
               "listen": "test",
@@ -4467,7 +4316,7 @@
           "response": []
         },
         {
-          "name": "106. Delete Project",
+          "name": "101. Delete Project",
           "event": [
             {
               "listen": "test",
@@ -4503,7 +4352,7 @@
           "response": []
         },
         {
-          "name": "107. Logout via Cookie",
+          "name": "102. Logout via Cookie",
           "event": [
             {
               "listen": "test",
@@ -4544,7 +4393,7 @@
           "response": []
         },
         {
-          "name": "108. Logout Dedicated Admin",
+          "name": "103. Logout Dedicated Admin",
           "event": [
             {
               "listen": "test",

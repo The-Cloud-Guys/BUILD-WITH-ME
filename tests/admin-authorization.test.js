@@ -73,13 +73,13 @@ test('cookie-authenticated admin mutations require an allowed browser origin', (
   }
 });
 
-test('explicit bearer admin mutations are not subject to ambient-cookie origin checks', () => {
+test('bearer headers do not bypass Firebase admin origin checks', () => {
   const result = invokeMiddleware(verifyAdminRequestOrigin, {
     method: 'POST',
     headers: { authorization: 'Bearer test-token' },
     get: () => 'https://attacker.example',
   });
-  assert.equal(result.nextCalled, true);
+  assert.equal(result.statusCode, 403);
 });
 
 test('ordinary frontend origins are not trusted for admin cookie requests', () => {
@@ -139,14 +139,13 @@ test('dedicated admin actions use dedicated audit and moderation actor fields', 
   assert.match(controllerSource, /terminatedByAdmin = adminId/);
 });
 
-test('dedicated access authentication requires a live admin session', () => {
+test('dedicated access authentication verifies revoked Firebase session cookies', () => {
   const middlewareSource = fs.readFileSync(
     path.join(__dirname, '..', 'src', 'middleware', 'adminAuth.middleware.js'),
     'utf8'
   );
-  assert.match(middlewareSource, /AdminSession\.exists/);
-  assert.match(middlewareSource, /family: decoded\.sid/);
-  assert.match(middlewareSource, /revokedAt: null/);
+  assert.match(middlewareSource, /verifyFirebaseSessionCookie/);
+  assert.match(middlewareSource, /firebaseUid: decoded\.uid/);
 });
 
 test('Postman uses dedicated admin cookies for all admin management routes', () => {
@@ -157,8 +156,6 @@ test('Postman uses dedicated admin cookies for all admin management routes', () 
   const administration = collection.item.find(({ name }) => name === '11 - Administration');
   for (const item of administration.item) {
     assert.equal(item.request.auth.type, 'noauth');
-    if (item.request.url !== '{{baseUrl}}/api/admin/auth/accept-invitation') {
-      assert.match(item.request.description, /dedicated adminAccessToken HttpOnly cookie/);
-    }
+    assert.match(item.request.description, /Firebase adminSession HttpOnly cookie/);
   }
 });

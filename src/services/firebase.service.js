@@ -42,4 +42,41 @@ const verifyFirebaseToken = async (idToken, { checkRevoked = false } = {}) => {
   }
 };
 
-module.exports = { getFirebaseAuth, verifyFirebaseToken };
+const createFirebaseSessionCookie = async (idToken, expiresIn) => {
+  const decoded = await verifyFirebaseToken(idToken, { checkRevoked: true });
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (!decoded.auth_time || nowSeconds - decoded.auth_time > 5 * 60) {
+    const error = new Error('Recent Firebase authentication is required');
+    error.statusCode = 401;
+    throw error;
+  }
+  return getFirebaseAuth().createSessionCookie(idToken, { expiresIn });
+};
+
+const verifyFirebaseSessionCookie = async (sessionCookie) => {
+  if (!sessionCookie || typeof sessionCookie !== 'string') {
+    const error = new Error('Admin session cookie required');
+    error.statusCode = 401;
+    throw error;
+  }
+  try {
+    return await getFirebaseAuth().verifySessionCookie(sessionCookie, true);
+  } catch (error) {
+    if (error.statusCode === 503) throw error;
+    const invalidSession = new Error('Invalid or expired admin session');
+    invalidSession.statusCode = 401;
+    throw invalidSession;
+  }
+};
+
+const revokeFirebaseSessions = async (uid) => {
+  if (uid) await getFirebaseAuth().revokeRefreshTokens(uid);
+};
+
+module.exports = {
+  createFirebaseSessionCookie,
+  getFirebaseAuth,
+  revokeFirebaseSessions,
+  verifyFirebaseSessionCookie,
+  verifyFirebaseToken,
+};

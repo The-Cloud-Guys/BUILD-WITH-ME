@@ -162,7 +162,26 @@ For `GET /api/projects/:id/applications`, `projectDetails.teamMembers[].profileP
 
 ## Administration
 
-All routes below use `/api/admin` and require admin authentication; those marked super-admin require the stronger role.
+Admin identity is Firebase-only. The backend exchanges a recently issued Firebase ID token for an HttpOnly `adminSession` Firebase session cookie. MongoDB `AdminAccount` records remain the authority for activation, roles and permissions. There is no public admin registration or password-login endpoint.
+
+### Admin authentication (`/api/admin/auth`)
+
+| Method | Endpoint | Access | Input | Success response |
+|---|---|---|---|---|
+| POST | `/bootstrap/firebase` | one-time bootstrap secret | `{ idToken:string, firstName:string, lastName:string }` | 201 object: super-admin; sets `adminSession` |
+| POST | `/firebase` | activated admin | `{ idToken:string }` | object: admin; sets `adminSession`, or 202 MFA challenge |
+| POST | `/invitations/verify` | public invitation token | `{ token:string }` | object: validity and safe invitation metadata |
+| POST | `/firebase/accept-invitation` | invitation + Firebase | `{ token:string, idToken:string }` | 201 object: activated admin; sets session or MFA challenge |
+| POST | `/mfa/challenge` | opaque MFA challenge cookie | `{ code:string }` | object: admin; sets `adminSession` |
+| POST | `/logout` | session if available | none | object: message; revokes Firebase sessions and clears cookie |
+| GET | `/me` | Firebase admin session | none | object: admin |
+| POST | `/mfa/setup` | Firebase admin session | none | object: TOTP secret and authenticator URI |
+| POST | `/mfa/confirm` | Firebase admin session | `{ code:string }` | object: enabled status; revokes existing sessions |
+| DELETE | `/mfa` | Firebase admin session | `{ code:string }` | object: disabled status; revokes existing sessions |
+
+### Admin operations (`/api/admin`)
+
+All routes below require the Firebase `adminSession` cookie and their assigned MongoDB permission.
 
 | Method | Endpoint | Access | Input | Success response |
 |---|---|---|---|---|
@@ -173,9 +192,12 @@ All routes below use `/api/admin` and require admin authentication; those marked
 | GET | `/reports` | admin | pagination/status/type query | object: reports, pagination |
 | PUT | `/reports/:reportId` | admin | `{ status:string, resolution?:string }` | object: report/message |
 | GET | `/activities` | admin | pagination/type query | object: activities, pagination |
-| GET | `/admins` | super-admin | none | object/array: admins |
-| POST | `/admins` | super-admin | `{ userId:ObjectId, role?:"admin"|"super_admin", permissions?:string[] }` | 201 object: admin |
-| DELETE | `/admins/:userId` | super-admin | none | object: message |
+| GET | `/admins` | `manage_admins` | none | object: dedicated admins |
+| POST | `/admins/invitations` | `manage_admins` | `{ email:string, firstName:string, lastName:string, role:string, permissions?:string[] }` | 201 object: emailed invitation metadata |
+| GET | `/admins/invitations` | `manage_admins` | none | object: invitations |
+| DELETE | `/admins/invitations/:inviteId` | `manage_admins` | none | object: message |
+| PATCH | `/admins/:adminId` | `manage_admins` | `{ role?:string, permissions?:string[], isActive?:boolean }` | object: admin |
+| DELETE | `/admins/:adminId` | `manage_admins` | none | object: deactivation message |
 | GET | `/actions` | admin | pagination/action query | object: audit actions, pagination |
 | POST | `/action` | admin | `{ action:string, targetType:string, targetId:ObjectId, reason?:string, duration?:number }` | object: action result |
 | GET | `/permissions` | admin | none | object: permission presets |
