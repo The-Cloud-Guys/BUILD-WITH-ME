@@ -26,7 +26,6 @@ const serializeManagedAdmin = (admin) => ({
   authMethods: admin.authMethods,
   isActive: admin.isActive,
   migrationPending: admin.migrationPending,
-  mfaEnabled: admin.mfaEnabled,
   lastLoginAt: admin.lastLoginAt,
   createdAt: admin.createdAt,
 });
@@ -213,7 +212,6 @@ const updateDedicatedAdmin = async (req, res) => {
     if (value.role !== undefined) target.role = value.role;
     if (value.permissions !== undefined) target.permissions = value.permissions;
     if (value.isActive !== undefined) target.isActive = value.isActive;
-    target.tokenVersion += 1;
     await target.save();
     await revokeFirebaseSessions(target.firebaseUid);
 

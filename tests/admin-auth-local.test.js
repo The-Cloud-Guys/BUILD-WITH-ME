@@ -6,8 +6,22 @@ const routes = require('../src/routes/adminAuth.routes');
 
 const routeSignatures = () => routes.stack.filter((layer) => layer.route).map((layer) => `${Object.keys(layer.route.methods)[0].toUpperCase()} ${layer.route.path}`);
 
-test('admin auth exposes only Firebase, invitation, session, and MFA routes', () => {
-  assert.deepEqual(routeSignatures(), ['POST /bootstrap/firebase', 'POST /firebase', 'POST /invitations/verify', 'POST /firebase/accept-invitation', 'POST /mfa/challenge', 'POST /logout', 'GET /me', 'POST /mfa/setup', 'POST /mfa/confirm', 'DELETE /mfa']);
+test('admin auth exposes only Firebase, invitation, and session routes', () => {
+  assert.deepEqual(routeSignatures(), ['POST /bootstrap/firebase', 'POST /firebase', 'POST /invitations/verify', 'POST /firebase/accept-invitation', 'POST /logout', 'GET /me']);
+});
+
+test('admin MFA implementation is removed', () => {
+  const removedPaths = [
+    ['controllers', 'adminMfa.controller.js'],
+    ['models', 'adminMfaChallenge.model.js'],
+    ['services', 'adminMfa.service.js'],
+    ['validation', 'adminMfa.validation.js'],
+  ];
+  for (const parts of removedPaths) {
+    assert.equal(fs.existsSync(path.join(__dirname, '..', 'src', ...parts)), false);
+  }
+  const accountModel = fs.readFileSync(path.join(__dirname, '..', 'src', 'models', 'adminAccount.model.js'), 'utf8');
+  assert.doesNotMatch(accountModel, /mfa|tokenVersion/i);
 });
 
 test('Firebase login is provisioned and never auto-creates an admin', () => {

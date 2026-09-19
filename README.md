@@ -302,7 +302,7 @@ Notes:
 ## Future Enhancements
 
 - GitHub OAuth and Verification – Link GitHub and verify ownership
-- Firebase-only administrator identity with invitation-gated activation and TOTP MFA
+- Firebase-only administrator identity with invitation-gated activation
 - Predefined Skills Library – Curated list with free-text fallback
 - Project Recommendation Engine – Match projects to users by skills
 - Real-Time Notifications – WebSocket or Server-Sent Events

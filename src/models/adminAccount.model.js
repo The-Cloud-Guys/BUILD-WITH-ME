@@ -54,25 +54,6 @@ const adminAccountSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    mfaEnabled: {
-      type: Boolean,
-      default: false,
-    },
-    mfaSecretEncrypted: {
-      type: String,
-      select: false,
-      default: null,
-    },
-    mfaPendingSecretEncrypted: {
-      type: String,
-      select: false,
-      default: null,
-    },
-    tokenVersion: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
     bootstrapOwner: {
       type: Boolean,
       default: false,
@@ -127,7 +108,6 @@ adminAccountSchema.set('toJSON', {
   virtuals: true,
   transform: (_document, result) => {
     delete result.bootstrapOwner;
-    delete result.tokenVersion;
     return result;
   },
 });

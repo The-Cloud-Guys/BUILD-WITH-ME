@@ -169,15 +169,11 @@ Admin identity is Firebase-only. The backend exchanges a recently issued Firebas
 | Method | Endpoint | Access | Input | Success response |
 |---|---|---|---|---|
 | POST | `/bootstrap/firebase` | one-time bootstrap secret | `{ idToken:string, firstName:string, lastName:string }` | 201 object: super-admin; sets `adminSession` |
-| POST | `/firebase` | activated admin | `{ idToken:string }` | object: admin; sets `adminSession`, or 202 MFA challenge |
+| POST | `/firebase` | activated admin | `{ idToken:string }` | object: admin; sets `adminSession` |
 | POST | `/invitations/verify` | public invitation token | `{ token:string }` | object: validity and safe invitation metadata |
-| POST | `/firebase/accept-invitation` | invitation + Firebase | `{ token:string, idToken:string }` | 201 object: activated admin; sets session or MFA challenge |
-| POST | `/mfa/challenge` | opaque MFA challenge cookie | `{ code:string }` | object: admin; sets `adminSession` |
+| POST | `/firebase/accept-invitation` | invitation + Firebase | `{ token:string, idToken:string }` | 201 object: activated admin; sets `adminSession` |
 | POST | `/logout` | session if available | none | object: message; revokes Firebase sessions and clears cookie |
 | GET | `/me` | Firebase admin session | none | object: admin |
-| POST | `/mfa/setup` | Firebase admin session | none | object: TOTP secret and authenticator URI |
-| POST | `/mfa/confirm` | Firebase admin session | `{ code:string }` | object: enabled status; revokes existing sessions |
-| DELETE | `/mfa` | Firebase admin session | `{ code:string }` | object: disabled status; revokes existing sessions |
 
 ### Admin operations (`/api/admin`)
 

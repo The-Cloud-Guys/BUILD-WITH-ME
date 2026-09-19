@@ -261,11 +261,6 @@
       "key": "managedAdminId",
       "value": "",
       "type": "string"
-    },
-    {
-      "key": "adminMfaCode",
-      "value": "",
-      "type": "string"
     }
   ],
   "item": [
@@ -3371,133 +3366,6 @@
               }
             }
           ]
-        },
-        {
-          "name": "073. Complete Admin MFA Login Challenge",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"code\": \"{{adminMfaCode}}\"\n}"
-            },
-            "url": "{{baseUrl}}/api/admin/auth/mfa/challenge",
-            "auth": {
-              "type": "noauth"
-            },
-            "description": "Uses the Firebase adminSession HttpOnly cookie where authentication is required."
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Expected status', () => { pm.expect([200,400,401]).to.include(pm.response.code) });",
-                  "pm.test('Response is JSON', () => { pm.expect((pm.response.headers.get('Content-Type') || '').toLowerCase()).to.include('application/json') });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "074. Start Admin MFA Setup",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": "{{baseUrl}}/api/admin/auth/mfa/setup",
-            "auth": {
-              "type": "noauth"
-            },
-            "description": "Uses the Firebase adminSession HttpOnly cookie where authentication is required."
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Expected status', () => { pm.expect([200,401,409,503]).to.include(pm.response.code) });",
-                  "pm.test('Response is JSON', () => { pm.expect((pm.response.headers.get('Content-Type') || '').toLowerCase()).to.include('application/json') });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "075. Confirm Admin MFA Setup",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"code\": \"{{adminMfaCode}}\"\n}"
-            },
-            "url": "{{baseUrl}}/api/admin/auth/mfa/confirm",
-            "auth": {
-              "type": "noauth"
-            },
-            "description": "Uses the Firebase adminSession HttpOnly cookie where authentication is required."
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Expected status', () => { pm.expect([200,400,401,409,503]).to.include(pm.response.code) });",
-                  "pm.test('Response is JSON', () => { pm.expect((pm.response.headers.get('Content-Type') || '').toLowerCase()).to.include('application/json') });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "076. Disable Admin MFA",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"code\": \"{{adminMfaCode}}\"\n}"
-            },
-            "url": "{{baseUrl}}/api/admin/auth/mfa",
-            "auth": {
-              "type": "noauth"
-            },
-            "description": "Uses the Firebase adminSession HttpOnly cookie where authentication is required."
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Expected status', () => { pm.expect([200,400,401,409,503]).to.include(pm.response.code) });",
-                  "pm.test('Response is JSON', () => { pm.expect((pm.response.headers.get('Content-Type') || '').toLowerCase()).to.include('application/json') });"
-                ]
-              }
-            }
-          ]
         }
       ]
     },
@@ -3505,7 +3373,7 @@
       "name": "11 - Administration",
       "item": [
         {
-          "name": "077. Get Admin Dashboard",
+          "name": "073. Get Admin Dashboard",
           "event": [
             {
               "listen": "test",
@@ -3535,7 +3403,7 @@
           "response": []
         },
         {
-          "name": "078. Get Users",
+          "name": "074. Get Users",
           "event": [
             {
               "listen": "test",
@@ -3565,7 +3433,7 @@
           "response": []
         },
         {
-          "name": "079. Get Applicant User Details",
+          "name": "075. Get Applicant User Details",
           "event": [
             {
               "listen": "test",
@@ -3595,7 +3463,7 @@
           "response": []
         },
         {
-          "name": "080. Get Admin Project List",
+          "name": "076. Get Admin Project List",
           "event": [
             {
               "listen": "test",
@@ -3625,7 +3493,7 @@
           "response": []
         },
         {
-          "name": "081. Get Reports",
+          "name": "077. Get Reports",
           "event": [
             {
               "listen": "test",
@@ -3655,7 +3523,7 @@
           "response": []
         },
         {
-          "name": "082. Resolve Report - No Violation",
+          "name": "078. Resolve Report - No Violation",
           "event": [
             {
               "listen": "test",
@@ -3700,7 +3568,7 @@
           "response": []
         },
         {
-          "name": "083. Get Admin Activities",
+          "name": "079. Get Admin Activities",
           "event": [
             {
               "listen": "test",
@@ -3730,7 +3598,7 @@
           "response": []
         },
         {
-          "name": "084. List Dedicated Admins",
+          "name": "080. List Dedicated Admins",
           "event": [
             {
               "listen": "test",
@@ -3753,7 +3621,7 @@
           "response": []
         },
         {
-          "name": "085. Create Admin Invitation",
+          "name": "081. Create Admin Invitation",
           "event": [
             {
               "listen": "test",
@@ -3797,7 +3665,7 @@
           "response": []
         },
         {
-          "name": "086. List Admin Invitations",
+          "name": "082. List Admin Invitations",
           "event": [
             {
               "listen": "test",
@@ -3820,7 +3688,7 @@
           "response": []
         },
         {
-          "name": "087. Revoke Admin Invitation",
+          "name": "083. Revoke Admin Invitation",
           "event": [
             {
               "listen": "test",
@@ -3843,7 +3711,7 @@
           "response": []
         },
         {
-          "name": "088. Update Dedicated Admin Access",
+          "name": "084. Update Dedicated Admin Access",
           "event": [
             {
               "listen": "test",
@@ -3882,7 +3750,7 @@
           "response": []
         },
         {
-          "name": "089. Deactivate Dedicated Admin",
+          "name": "085. Deactivate Dedicated Admin",
           "event": [
             {
               "listen": "test",
@@ -3905,7 +3773,7 @@
           "response": []
         },
         {
-          "name": "090. Get Admin Actions",
+          "name": "086. Get Admin Actions",
           "event": [
             {
               "listen": "test",
@@ -3935,7 +3803,7 @@
           "response": []
         },
         {
-          "name": "091. Execute Admin Action",
+          "name": "087. Execute Admin Action",
           "event": [
             {
               "listen": "test",
@@ -3980,7 +3848,7 @@
           "response": []
         },
         {
-          "name": "092. Get Permission Presets",
+          "name": "088. Get Permission Presets",
           "event": [
             {
               "listen": "test",
@@ -4010,7 +3878,7 @@
           "response": []
         },
         {
-          "name": "093. Verify Admin Invitation Token",
+          "name": "089. Verify Admin Invitation Token",
           "request": {
             "method": "POST",
             "header": [
@@ -4044,7 +3912,7 @@
           ]
         },
         {
-          "name": "094. Accept Admin Invitation with Firebase",
+          "name": "090. Accept Admin Invitation with Firebase",
           "request": {
             "method": "POST",
             "header": [
@@ -4083,7 +3951,7 @@
       "name": "12 - Negative & Validation Tests",
       "item": [
         {
-          "name": "095. Login with Invalid Password",
+          "name": "091. Login with Invalid Password",
           "event": [
             {
               "listen": "test",
@@ -4121,7 +3989,7 @@
           "response": []
         },
         {
-          "name": "096. Protected Route with Invalid Token",
+          "name": "092. Protected Route with Invalid Token",
           "event": [
             {
               "listen": "test",
@@ -4154,7 +4022,7 @@
           "response": []
         },
         {
-          "name": "097. Apply to Invalid Project Role",
+          "name": "093. Apply to Invalid Project Role",
           "event": [
             {
               "listen": "test",
@@ -4199,7 +4067,7 @@
           "response": []
         },
         {
-          "name": "098. Create Project Missing Title",
+          "name": "094. Create Project Missing Title",
           "event": [
             {
               "listen": "test",
@@ -4243,7 +4111,7 @@
       "name": "13 - Cleanup & Logout",
       "item": [
         {
-          "name": "099. Remove Applicant from Project Team",
+          "name": "095. Remove Applicant from Project Team",
           "event": [
             {
               "listen": "test",
@@ -4280,7 +4148,7 @@
           "response": []
         },
         {
-          "name": "100. Delete Community Post",
+          "name": "096. Delete Community Post",
           "event": [
             {
               "listen": "test",
@@ -4316,7 +4184,7 @@
           "response": []
         },
         {
-          "name": "101. Delete Project",
+          "name": "097. Delete Project",
           "event": [
             {
               "listen": "test",
@@ -4352,7 +4220,7 @@
           "response": []
         },
         {
-          "name": "102. Logout via Cookie",
+          "name": "098. Logout via Cookie",
           "event": [
             {
               "listen": "test",
@@ -4393,7 +4261,7 @@
           "response": []
         },
         {
-          "name": "103. Logout Dedicated Admin",
+          "name": "099. Logout Dedicated Admin",
           "event": [
             {
               "listen": "test",

@@ -6,7 +6,6 @@ const AdminInvite = require('../models/adminInvite.model');
 const { AuditLog } = require('../models/admin.model');
 const { DEFAULT_ADMIN_PERMISSIONS } = require('../constants/admin.constants');
 const { hashInvitationToken } = require('../services/adminInvitation.service');
-const { createMfaChallenge, setMfaChallengeCookie } = require('../services/adminMfa.service');
 const { getDurationMs } = require('../services/duration.service');
 const {
   createFirebaseSessionCookie,
@@ -49,7 +48,6 @@ const serializeAdmin = (admin) => ({
   role: admin.role,
   permissions: admin.permissions,
   authMethods: admin.authMethods,
-  mfaEnabled: admin.mfaEnabled,
   lastLoginAt: admin.lastLoginAt,
 });
 
@@ -73,17 +71,12 @@ const getVerifiedFirebaseIdentity = async (idToken) => {
   return { decoded, email, uid };
 };
 
-const establishFirebaseSession = async (admin, idToken, req, res) => {
-  if (admin.mfaEnabled) {
-    setMfaChallengeCookie(res, await createMfaChallenge(admin, 'firebase', idToken));
-    return false;
-  }
+const establishFirebaseSession = async (admin, idToken, res) => {
   const sessionCookie = await createFirebaseSessionCookie(idToken, getSessionDuration());
   setAdminSessionCookie(res, sessionCookie);
   admin.lastLoginAt = new Date();
   admin.lastActivityAt = new Date();
   await admin.save();
-  return true;
 };
 
 const bootstrapFirebaseAdmin = async (req, res) => {
@@ -117,10 +110,9 @@ const bootstrapFirebaseAdmin = async (req, res) => {
       }
       throw createError;
     }
-    const authenticated = await establishFirebaseSession(admin, value.idToken, req, res);
+    await establishFirebaseSession(admin, value.idToken, res);
     return res.status(201).json({
       message: 'Initial Firebase super administrator created successfully',
-      requiresMfa: !authenticated,
       admin: serializeAdmin(admin),
     });
   } catch (bootstrapError) {
@@ -153,13 +145,7 @@ const loginAdminWithFirebase = async (req, res) => {
     admin.authMethods = ['firebase'];
     admin.emailVerified = true;
     await admin.save();
-    const authenticated = await establishFirebaseSession(admin, value.idToken, req, res);
-    if (!authenticated) {
-      return res.status(202).json({
-        message: 'Admin MFA verification required',
-        requiresMfa: true,
-      });
-    }
+    await establishFirebaseSession(admin, value.idToken, res);
     return res.json({ message: 'Admin Firebase login successful', admin: serializeAdmin(admin) });
   } catch (loginError) {
     console.error('Admin Firebase login failed:', loginError.message);
@@ -272,10 +258,9 @@ const acceptFirebaseInvitation = async (req, res) => {
         details: { email: invitation.email, activationMethod: 'firebase' },
       }], { session: databaseSession });
     });
-    const authenticated = await establishFirebaseSession(admin, value.idToken, req, res);
+    await establishFirebaseSession(admin, value.idToken, res);
     return res.status(201).json({
       message: 'Firebase administrator invitation accepted successfully',
-      requiresMfa: !authenticated,
       admin: serializeAdmin(admin),
     });
   } catch (acceptError) {
