@@ -3,6 +3,8 @@ const Project = require('../models/project.model');
 const Application = require('../models/application.model');
 const User = require('../models/user.model');
 const { getSignedUrl } = require('../services/supabase.service');
+const CallSession = require('../models/callSession.model');
+const { sendCallPush, sendChatMessagePush } = require('../services/pushNotification.service');
 
 const isParticipant = (room, userId) =>
   room.participants.some((participant) => participant.toString() === userId.toString());
@@ -189,6 +191,10 @@ const sendMessage = async (req, res) => {
     const populatedMessage = await Message.findById(message._id)
       .populate('sender', 'firstName lastName profilePhoto email role')
       .lean();
+
+    await sendChatMessagePush({ recipientIds: participants, message: populatedMessage, room });
+    const socketManager = req.app.get('socketManager');
+    if (socketManager) socketManager.io.to(`room:${roomId}`).emit('new-message', populatedMessage);
 
     res.status(201).json({ message: populatedMessage, roomId });
   } catch (error) {

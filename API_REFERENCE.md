@@ -21,7 +21,7 @@ Version 6.0 working-copy reference. The source of truth is `src/routes/`; the ex
 | ProjectPatch | Partial `ProjectInput`; owner-only |
 | ApplicationInput | multipart: `role: string`, `message: string`, `portfolioLink?: string(url)`, `cv?: File(PDF|DOC|DOCX|TXT, <=10MB)` |
 | ProfileInput | multipart or JSON: `firstName?: string`, `lastName?: string`, `bio?: string`, `externalLink?: string(url)`, `location?: string`, `availability?: string`, `experienceLevel?: string`, `photo?: File(image)` |
-| PostInput | multipart: `content: string`, `media?: File[]` (up to 10), optional post metadata accepted by the model |
+| PostInput | multipart form-data. Common: `postType: "text"|"code"|"link"|"poll"|"photo"`, `content?: string`, `tags?: string[]` (send arrays as JSON text in multipart). Code: `codeLanguage`, `codeSnippet`. Link: `linkUrl`, `linkTitle?`, `linkDescription?`, `linkPreviewImage?`. Poll: `pollQuestion`, `pollOptions` (2–10 strings), `pollDurationHours` (1–720). Photo/media: `media` file field, at most 10 files, 10 MB per file. |
 | MessageInput | `{ content: string, replyTo?: ObjectId }` |
 
 ## System and authentication
@@ -94,12 +94,21 @@ Accepting an application atomically updates the application, project role capaci
 | GET | `/api/chat/rooms/:roomId/messages` | room member | query `page?:integer, limit?:integer` | object: messages, pagination |
 | POST | `/api/chat/rooms/:roomId/messages` | room member | `MessageInput` | 201 object: message |
 | GET | `/api/chat/rooms/:roomId/call` | room member | none | object: authorized call-room data |
+| POST | `/api/chat/rooms/:roomId/calls` | room member | `{ callType:"audio"|"video" }` | 201 object: persistent ringing call; emits socket and FCM events |
+| GET | `/api/chat/calls/:callId` | call participant | none | object: current call lifecycle state |
+| POST | `/api/chat/calls/:callId/accept` | recipient | none | object: atomically accepted call |
+| POST | `/api/chat/calls/:callId/decline` | recipient | none | object: recipient response/current call |
+| POST | `/api/chat/calls/:callId/cancel` | caller | none | object: cancelled ringing call |
+| POST | `/api/chat/calls/:callId/end` | call participant | none | object: ended accepted call |
+
+Call statuses are `ringing`, `accepted`, `declined`, `missed`, `cancelled`, and `ended`. Ringing invitations expire after 60 seconds. In group rooms, each recipient has an independent `recipientResponses` entry; the first valid acceptance wins. Use these REST endpoints to establish authoritative call state, then use Socket.IO `signal` events for WebRTC negotiation.
 
 ## Community
 
 | Method | Endpoint | Auth | Input | Success response |
 |---|---|---|---|---|
 | POST | `/api/community/posts` | user | multipart `PostInput` | 201 object: post |
+| POST | `/api/community/posts/:postId/poll/vote` | user | `{ optionId:ObjectId }` | object: current poll counts and the caller's selected option |
 | GET | `/api/community/feed` | user | query `page?:integer, limit?:integer` | object: posts, pagination |
 | GET | `/api/community/posts/:id` | user | none | object: post |
 | PUT | `/api/community/posts/:id` | author | partial post JSON | object: post |
@@ -114,11 +123,49 @@ Accepting an application atomically updates the application, project role capaci
 | GET | `/api/community/followers/:userId` | user | optional pagination query | array: follower users |
 | GET | `/api/community/following/:userId` | user | optional pagination query | array: followed users |
 | POST | `/api/community/mute/:postId` | user | none | object: muted:boolean |
-| POST | `/api/community/report/:postId` | user | `{ reason:string, description?:string }` | object: message/report |
-| POST | `/api/community/report/comment/:commentId` | user | `{ reason:string, description?:string }` | object: message/report |
+| POST | `/api/community/report/:postId` | user | `ReportInput` | 201 object: message/report category and optional project |
+| POST | `/api/community/report/comment/:commentId` | user | `ReportInput` | 201 object: message/report category and optional project |
+| POST | `/api/community/report/project/:projectId` | user | `ReportInput` without `projectId` | 201 object: project report |
 | GET | `/api/community/profile/:userId` | user | none | object: public profile/community counts |
 
 Persisted community media is a stable storage path, not an expiring signed URL. Read responses generate fresh signed URLs.
+
+`ReportInput` is `{ offenseType, reason, description?, projectId? }`. `offenseType` is one of `spam`, `harassment`, `hate_speech`, `inappropriate_content`, `misinformation`, `intellectual_property`, `scam`, `violence`, `privacy`, or `other`. For a post or comment report, `projectId` optionally identifies the project concerned; the project-report route derives it from the URL.
+
+### Create-post multipart examples
+
+All post types use the same `POST /api/community/posts` multipart endpoint. Do not manually set the `Content-Type` header; the client must include the generated multipart boundary.
+
+```text
+# Code post
+postType=code
+content=Optional caption
+codeLanguage=JavaScript
+codeSnippet=const connected = true;
+tags=["javascript","backend"]
+
+# Link post
+postType=link
+content=Optional caption
+linkUrl=https://example.com/article
+linkTitle=Article title
+linkDescription=Preview description
+linkPreviewImage=https://example.com/preview.jpg
+
+# Poll post
+postType=poll
+content=Optional caption
+pollQuestion=Which feature should we build next?
+pollOptions=["Chat","Analytics","Code review"]
+pollDurationHours=24
+
+# Photo post
+postType=photo
+content=Optional caption
+media=<binary file>       # repeat the `media` key for each file
+```
+
+The created/read post contains the matching nested `code`, `link`, or `poll` object. Poll responses include option `voteCount`, `totalVotes`, `expiresAt`, `isExpired`, `hasVoted`, and `selectedOptionId`. One vote per user is enforced by a unique database index and an atomic transaction. Counts are current in the vote response and subsequent GET responses; no push/WebSocket poll-count event is emitted.
 
 ### Share links
 
@@ -155,10 +202,16 @@ For `GET /api/projects/:id/applications`, `projectDetails.teamMembers[].profileP
 
 | Method | Endpoint | Auth | Input | Success response |
 |---|---|---|---|---|
+| POST | `/api/notifications/devices` | user | `{ token:string, platform:"android"|"ios"|"web", deviceId:string, appVersion?:string }` | 201 object: registered installation without exposing its token |
+| DELETE | `/api/notifications/devices/:deviceId` | owner | none | object: device deactivated |
 | GET | `/api/notifications` | user | query `page?:integer, limit?:integer, category?:"projects"|"applications"|"system"` | object: notifications, unread count, pagination |
 | PATCH | `/api/notifications/:id/read` | owner | none | object: notification |
 | PATCH | `/api/notifications/read-all` | user | none | object: message/count |
 | PATCH | `/api/notifications/:id/dismiss` | owner | none | object: notification/message |
+
+Each installation registers its FCM token after login and again whenever Firebase invokes token refresh. Unregister the installation during logout. Invalid or unregistered Firebase tokens are automatically deactivated after a failed multicast send. Chat messages use visible notification-plus-data delivery on the `messages` Android channel. Calls use high-priority data-only FCM so Flutter's background handler can display/dismiss the native `incoming_calls` UI; incoming invitations have a 60-second TTL. Push data includes stable `messageId` or `callId`, `roomId`, event `type`, and deep-link `route`, allowing the client to deduplicate socket and push delivery.
+
+The mobile client must configure Firebase Messaging background handling, `getInitialMessage`, `onMessageOpenedApp`, notification permission, the two Android channels, and a native incoming-call UI. FCM wakes/notifies the app; WebRTC or the selected media provider still carries audio/video. A force-stopped Android app cannot generally be awakened until the user opens it again.
 
 ## Administration
 
@@ -182,10 +235,10 @@ All routes below require the Firebase `adminSession` cookie and their assigned M
 | Method | Endpoint | Access | Input | Success response |
 |---|---|---|---|---|
 | GET | `/dashboard` | admin | query `timeRange?:string` | object: totals, trends and chart series |
-| GET | `/users` | admin | pagination/search/filter query | object: users, pagination |
+| GET | `/users` | admin | query `page?, limit?, search?, status?:active|pending|suspended|terminated` | object: users with `status`/`pendingReason`, global `counts`, pagination |
 | GET | `/users/:userId` | admin | none | object: user details |
 | GET | `/projects` | admin | pagination/search/filter query | object: projects, pagination |
-| GET | `/reports` | admin | pagination/status/type query | object: reports, pagination |
+| GET | `/reports` | admin | query `page?, limit?, status?, type?, offenseType?` | object: reports with `targetType`, `offenseType`, populated `target`, populated `project`, reporter/reported user, and pagination |
 | PUT | `/reports/:reportId` | admin | `{ status:string, resolution?:string }` | object: report/message |
 | GET | `/activities` | admin | pagination/type query | object: activities, pagination |
 | GET | `/admins` | `manage_admins` | none | object: dedicated admins |
@@ -198,9 +251,11 @@ All routes below require the Firebase `adminSession` cookie and their assigned M
 | POST | `/action` | admin | `{ action:string, targetType:string, targetId:ObjectId, reason?:string, duration?:number }` | object: action result |
 | GET | `/permissions` | admin | none | object: permission presets |
 
+User status is explicit and mutually exclusive: `terminated` means `isActive === false`; `suspended` means the account is active but `isSuspended === true`; `pending` means the account is neither terminated nor suspended but email verification or onboarding step 3 is incomplete; otherwise it is `active`. `pendingReason` is `email_verification_required`, `onboarding_incomplete`, or `null`. Both `/users` and `/dashboard` expose pending counts using this same definition; `/users.counts` also includes active, suspended, terminated, and total counts.
+
 ## Socket events
 
-Socket.IO uses the same access token during the handshake. Membership is checked before joining a room or sending room-scoped events. Client events include room join/leave, message send, typing and call signaling; server events acknowledge or broadcast only to authorized room members.
+Socket.IO uses the same access token during the handshake. Membership is checked before joining a room or sending room-scoped events. Client events include room join/leave, message send, typing and call signaling; server events acknowledge or broadcast only to authorized room members. Both REST and socket message sends also issue FCM pushes to the other room members. Clients must deduplicate `new-message`/FCM events by `messageId` and call events by `callId`.
 
 ## Verification and migrations
 

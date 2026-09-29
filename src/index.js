@@ -172,6 +172,7 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5050;
 const server = createServer(app);
 const socketManager = new SocketManager(server);
+app.set('socketManager', socketManager);
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

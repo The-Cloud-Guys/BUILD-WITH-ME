@@ -231,8 +231,12 @@ All endpoints require a valid `accessToken` cookie.
 | GET    | /            | Get latest 50 notifications (newest first)   |
 | PATCH  | /:id/read    | Mark a single notification as read           |
 | PATCH  | /read-all    | Mark all unread notifications as read        |
+| POST   | /devices     | Register or refresh this installation's FCM token |
+| DELETE | /devices/:deviceId | Disable push delivery for this installation |
 
 Notification types: PROJECT_MATCH, APPLICATION_STATUS, NEW_APPLICATION, ROLE_FILLED.
+
+Chat messages and persistent incoming-call sessions use Firebase Cloud Messaging when a recipient is not actively viewing the app. The Flutter client must register each FCM installation after login, refresh the token when Firebase rotates it, and unregister the device during logout. See `API_REFERENCE.md` for the call lifecycle endpoints, Android notification channels, deep-link payloads, and response shapes.
 
 ---
 

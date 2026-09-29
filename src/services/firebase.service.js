@@ -21,6 +21,11 @@ const getFirebaseAuth = () => {
   return admin.auth();
 };
 
+const getFirebaseMessaging = () => {
+  getFirebaseAuth();
+  return admin.messaging();
+};
+
 /**
  * Verify Firebase ID token
  * @param {string} idToken - The Firebase ID token from client
@@ -76,6 +81,7 @@ const revokeFirebaseSessions = async (uid) => {
 module.exports = {
   createFirebaseSessionCookie,
   getFirebaseAuth,
+  getFirebaseMessaging,
   revokeFirebaseSessions,
   verifyFirebaseSessionCookie,
   verifyFirebaseToken,

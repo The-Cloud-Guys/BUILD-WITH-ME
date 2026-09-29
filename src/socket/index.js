@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/user.model');
 const { Message, ChatRoom, UnreadMessage } = require('../models/chat.model');
 const { createNotification } = require('../services/notification.service');
+const { sendChatMessagePush } = require('../services/pushNotification.service');
 
 class SocketManager {
   constructor(server) {
@@ -67,6 +68,10 @@ class SocketManager {
           
           this.io.to(`room:${roomId}`).emit('new-message', message);
           const room = await ChatRoom.findById(roomId);
+          const recipients = room.participants.filter(
+            (participant) => participant.toString() !== socket.userId
+          );
+          await sendChatMessagePush({ recipientIds: recipients, message, room });
           for (const participant of room.participants) {
             if (participant.toString() !== socket.userId) {
               const unread = await UnreadMessage.findOne({

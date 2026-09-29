@@ -261,6 +261,31 @@
       "key": "managedAdminId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "pollPostId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pollOptionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "deviceId",
+      "value": "postman-android-device",
+      "type": "string"
+    },
+    {
+      "key": "fcmToken",
+      "value": "replace-with-real-fcm-token",
+      "type": "string"
+    },
+    {
+      "key": "callId",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -2065,6 +2090,12 @@
               "mode": "formdata",
               "formdata": [
                 {
+                  "key": "postType",
+                  "type": "text",
+                  "value": "text",
+                  "description": "text, code, link, poll, or photo"
+                },
+                {
                   "key": "content",
                   "type": "text",
                   "value": "Connexd Postman integration test post"
@@ -2097,7 +2128,119 @@
           "response": []
         },
         {
-          "name": "041. Get Feed",
+          "name": "041. Create Poll Post",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected status\", () => { pm.expect([201]).to.include(pm.response.code) });",
+                  "pm.test(\"Response is JSON\", () => { pm.expect((pm.response.headers.get(\"Content-Type\") || \"\").toLowerCase()).to.include(\"application/json\") });",
+                  "const b=pm.response.json(); pm.collectionVariables.set(\"pollPostId\", b.post._id); pm.collectionVariables.set(\"pollOptionId\", b.post.poll.options[0]._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/community/posts",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "postType",
+                  "value": "poll",
+                  "type": "text"
+                },
+                {
+                  "key": "content",
+                  "value": "Choose the next Connexd feature",
+                  "type": "text"
+                },
+                {
+                  "key": "pollQuestion",
+                  "value": "Which feature should we build next?",
+                  "type": "text"
+                },
+                {
+                  "key": "pollOptions",
+                  "value": "[\"Realtime collaboration\",\"Project analytics\",\"Code review\"]",
+                  "type": "text"
+                },
+                {
+                  "key": "pollDurationHours",
+                  "value": "24",
+                  "type": "text"
+                },
+                {
+                  "key": "tags",
+                  "value": "[\"community\",\"roadmap\"]",
+                  "type": "text"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "042. Vote on Poll",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected status\", () => { pm.expect([200]).to.include(pm.response.code) });",
+                  "pm.test(\"Response is JSON\", () => { pm.expect((pm.response.headers.get(\"Content-Type\") || \"\").toLowerCase()).to.include(\"application/json\") });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/community/posts/{{pollPostId}}/poll/vote",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"optionId\": \"{{pollOptionId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{applicantAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "043. Get Feed",
           "event": [
             {
               "listen": "test",
@@ -2133,7 +2276,7 @@
           "response": []
         },
         {
-          "name": "042. Get Single Post",
+          "name": "044. Get Single Post",
           "event": [
             {
               "listen": "test",
@@ -2169,7 +2312,7 @@
           "response": []
         },
         {
-          "name": "043. Update Post",
+          "name": "045. Update Post",
           "event": [
             {
               "listen": "test",
@@ -2220,7 +2363,7 @@
           "response": []
         },
         {
-          "name": "044. Toggle Like Post",
+          "name": "046. Toggle Like Post",
           "event": [
             {
               "listen": "test",
@@ -2271,7 +2414,7 @@
           "response": []
         },
         {
-          "name": "045. Add Comment",
+          "name": "047. Add Comment",
           "event": [
             {
               "listen": "test",
@@ -2324,7 +2467,7 @@
           "response": []
         },
         {
-          "name": "046. Get Comments",
+          "name": "048. Get Comments",
           "event": [
             {
               "listen": "test",
@@ -2360,7 +2503,7 @@
           "response": []
         },
         {
-          "name": "047. Toggle Save Post",
+          "name": "049. Toggle Save Post",
           "event": [
             {
               "listen": "test",
@@ -2396,7 +2539,7 @@
           "response": []
         },
         {
-          "name": "048. Get Saved Posts",
+          "name": "050. Get Saved Posts",
           "event": [
             {
               "listen": "test",
@@ -2432,7 +2575,7 @@
           "response": []
         },
         {
-          "name": "049. Follow Applicant",
+          "name": "051. Follow Applicant",
           "event": [
             {
               "listen": "test",
@@ -2468,7 +2611,7 @@
           "response": []
         },
         {
-          "name": "050. Get Applicant Followers",
+          "name": "052. Get Applicant Followers",
           "event": [
             {
               "listen": "test",
@@ -2504,7 +2647,7 @@
           "response": []
         },
         {
-          "name": "051. Get Applicant Following",
+          "name": "053. Get Applicant Following",
           "event": [
             {
               "listen": "test",
@@ -2540,7 +2683,7 @@
           "response": []
         },
         {
-          "name": "052. Toggle Mute Post",
+          "name": "054. Toggle Mute Post",
           "event": [
             {
               "listen": "test",
@@ -2576,7 +2719,7 @@
           "response": []
         },
         {
-          "name": "053. Report Post",
+          "name": "055. Report Post",
           "event": [
             {
               "listen": "test",
@@ -2608,7 +2751,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"reason\": \"Postman moderation workflow test\"\n}",
+              "raw": "{\n  \"offenseType\": \"spam\",\n  \"reason\": \"Postman moderation workflow test\",\n  \"projectId\": \"{{projectId}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2629,7 +2772,7 @@
           "response": []
         },
         {
-          "name": "054. Report Comment",
+          "name": "056. Report Comment",
           "event": [
             {
               "listen": "test",
@@ -2659,7 +2802,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"reason\": \"Postman comment report test\"\n}",
+              "raw": "{\n  \"offenseType\": \"harassment\",\n  \"reason\": \"Postman comment report test\",\n  \"projectId\": \"{{projectId}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2680,7 +2823,52 @@
           "response": []
         },
         {
-          "name": "055. Get Applicant Public Profile / Stats",
+          "name": "057. Report Project",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected status\", () => { pm.expect([201,400]).to.include(pm.response.code) });",
+                  "pm.test(\"Response is JSON\", () => { pm.expect((pm.response.headers.get(\"Content-Type\") || \"\").toLowerCase()).to.include(\"application/json\") });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/community/report/project/{{projectId}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"offenseType\": \"inappropriate_content\",\n  \"reason\": \"Postman project report workflow test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{applicantAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "058. Get Applicant Public Profile / Stats",
           "event": [
             {
               "listen": "test",
@@ -2716,7 +2904,7 @@
           "response": []
         },
         {
-          "name": "056. Delete Comment",
+          "name": "059. Delete Comment",
           "event": [
             {
               "listen": "test",
@@ -2757,7 +2945,63 @@
       "name": "08 - Notifications",
       "item": [
         {
-          "name": "057. Get All Notifications",
+          "name": "060. Register Notification Device",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected status\", () => { pm.expect([201]).to.include(pm.response.code) });",
+                  "pm.test(\"Response is JSON\", () => { pm.expect((pm.response.headers.get(\"Content-Type\") || \"\").toLowerCase()).to.include(\"application/json\") });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/notifications/devices",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{fcmToken}}\",\n  \"platform\": \"android\",\n  \"deviceId\": \"{{deviceId}}\",\n  \"appVersion\": \"1.0.0\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "061. Unregister Notification Device",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected status\", () => { pm.expect([200]).to.include(pm.response.code) });",
+                  "pm.test(\"Response is JSON\", () => { pm.expect((pm.response.headers.get(\"Content-Type\") || \"\").toLowerCase()).to.include(\"application/json\") });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/notifications/devices/{{deviceId}}",
+            "header": []
+          },
+          "response": []
+        },
+        {
+          "name": "062. Get All Notifications",
           "event": [
             {
               "listen": "test",
@@ -2796,7 +3040,7 @@
           "response": []
         },
         {
-          "name": "058. Get Project Notifications",
+          "name": "063. Get Project Notifications",
           "event": [
             {
               "listen": "test",
@@ -2832,7 +3076,7 @@
           "response": []
         },
         {
-          "name": "059. Get Application Notifications",
+          "name": "064. Get Application Notifications",
           "event": [
             {
               "listen": "test",
@@ -2868,7 +3112,7 @@
           "response": []
         },
         {
-          "name": "060. Get System Notifications",
+          "name": "065. Get System Notifications",
           "event": [
             {
               "listen": "test",
@@ -2904,7 +3148,7 @@
           "response": []
         },
         {
-          "name": "061. Mark Notification Read",
+          "name": "066. Mark Notification Read",
           "event": [
             {
               "listen": "test",
@@ -2940,7 +3184,7 @@
           "response": []
         },
         {
-          "name": "062. Dismiss Notification",
+          "name": "067. Dismiss Notification",
           "event": [
             {
               "listen": "test",
@@ -2976,7 +3220,7 @@
           "response": []
         },
         {
-          "name": "063. Mark All Notifications Read",
+          "name": "068. Mark All Notifications Read",
           "event": [
             {
               "listen": "test",
@@ -3011,7 +3255,7 @@
       "name": "09 - Chat & Messaging",
       "item": [
         {
-          "name": "064. Get User Rooms",
+          "name": "069. Get User Rooms",
           "event": [
             {
               "listen": "test",
@@ -3047,7 +3291,7 @@
           "response": []
         },
         {
-          "name": "065. Get/Create Direct Room with Applicant",
+          "name": "070. Get/Create Direct Room with Applicant",
           "event": [
             {
               "listen": "test",
@@ -3086,7 +3330,7 @@
           "response": []
         },
         {
-          "name": "066. Create Group",
+          "name": "071. Create Group",
           "event": [
             {
               "listen": "test",
@@ -3140,7 +3384,7 @@
           "response": []
         },
         {
-          "name": "067. Get Room Messages",
+          "name": "072. Get Room Messages",
           "event": [
             {
               "listen": "test",
@@ -3176,7 +3420,7 @@
           "response": []
         },
         {
-          "name": "068. Send Message",
+          "name": "073. Send Message",
           "event": [
             {
               "listen": "test",
@@ -3230,7 +3474,7 @@
           "response": []
         },
         {
-          "name": "069. Get Video Call Room",
+          "name": "074. Get Video Call Room",
           "event": [
             {
               "listen": "test",
@@ -3264,6 +3508,167 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "075. Create Call Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected status\", () => { pm.expect([201,409]).to.include(pm.response.code) });",
+                  "pm.test(\"Response is JSON\", () => { pm.expect((pm.response.headers.get(\"Content-Type\") || \"\").toLowerCase()).to.include(\"application/json\") });",
+                  "if (pm.response.code === 201) { const json = pm.response.json(); if (json.call?._id) pm.collectionVariables.set(\"callId\", json.call._id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/chat/rooms/{{roomId}}/calls",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"callType\": \"audio\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "076. Get Call Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected status\", () => { pm.expect([200,404]).to.include(pm.response.code) });",
+                  "pm.test(\"Response is JSON\", () => { pm.expect((pm.response.headers.get(\"Content-Type\") || \"\").toLowerCase()).to.include(\"application/json\") });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/chat/calls/{{callId}}",
+            "header": []
+          },
+          "response": []
+        },
+        {
+          "name": "077. Accept Call Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected status\", () => { pm.expect([200,404,409]).to.include(pm.response.code) });",
+                  "pm.test(\"Response is JSON\", () => { pm.expect((pm.response.headers.get(\"Content-Type\") || \"\").toLowerCase()).to.include(\"application/json\") });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/chat/calls/{{callId}}/accept",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{applicantAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "078. Decline Call Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected status\", () => { pm.expect([200,404,409]).to.include(pm.response.code) });",
+                  "pm.test(\"Response is JSON\", () => { pm.expect((pm.response.headers.get(\"Content-Type\") || \"\").toLowerCase()).to.include(\"application/json\") });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/chat/calls/{{callId}}/decline",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{applicantAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "079. Cancel Call Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected status\", () => { pm.expect([200,404,409]).to.include(pm.response.code) });",
+                  "pm.test(\"Response is JSON\", () => { pm.expect((pm.response.headers.get(\"Content-Type\") || \"\").toLowerCase()).to.include(\"application/json\") });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/chat/calls/{{callId}}/cancel",
+            "header": []
+          },
+          "response": []
+        },
+        {
+          "name": "080. End Call Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected status\", () => { pm.expect([200,404,409]).to.include(pm.response.code) });",
+                  "pm.test(\"Response is JSON\", () => { pm.expect((pm.response.headers.get(\"Content-Type\") || \"\").toLowerCase()).to.include(\"application/json\") });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/chat/calls/{{callId}}/end",
+            "header": []
+          },
+          "response": []
         }
       ]
     },
@@ -3271,7 +3676,7 @@
       "name": "10 - Admin Authentication",
       "item": [
         {
-          "name": "070. Bootstrap Initial Firebase Super Admin",
+          "name": "081. Bootstrap Initial Firebase Super Admin",
           "request": {
             "method": "POST",
             "header": [
@@ -3309,7 +3714,7 @@
           ]
         },
         {
-          "name": "071. Login Dedicated Admin with Firebase",
+          "name": "082. Login Dedicated Admin with Firebase",
           "request": {
             "method": "POST",
             "header": [
@@ -3343,7 +3748,7 @@
           ]
         },
         {
-          "name": "072. Get Current Firebase Administrator",
+          "name": "083. Get Current Firebase Administrator",
           "request": {
             "method": "GET",
             "header": [],
@@ -3373,7 +3778,7 @@
       "name": "11 - Administration",
       "item": [
         {
-          "name": "073. Get Admin Dashboard",
+          "name": "084. Get Admin Dashboard",
           "event": [
             {
               "listen": "test",
@@ -3403,7 +3808,7 @@
           "response": []
         },
         {
-          "name": "074. Get Users",
+          "name": "085. Get Users",
           "event": [
             {
               "listen": "test",
@@ -3433,7 +3838,7 @@
           "response": []
         },
         {
-          "name": "075. Get Applicant User Details",
+          "name": "086. Get Applicant User Details",
           "event": [
             {
               "listen": "test",
@@ -3463,7 +3868,7 @@
           "response": []
         },
         {
-          "name": "076. Get Admin Project List",
+          "name": "087. Get Admin Project List",
           "event": [
             {
               "listen": "test",
@@ -3493,7 +3898,7 @@
           "response": []
         },
         {
-          "name": "077. Get Reports",
+          "name": "088. Get Reports",
           "event": [
             {
               "listen": "test",
@@ -3523,7 +3928,7 @@
           "response": []
         },
         {
-          "name": "078. Resolve Report - No Violation",
+          "name": "089. Resolve Report - No Violation",
           "event": [
             {
               "listen": "test",
@@ -3568,7 +3973,7 @@
           "response": []
         },
         {
-          "name": "079. Get Admin Activities",
+          "name": "090. Get Admin Activities",
           "event": [
             {
               "listen": "test",
@@ -3598,7 +4003,7 @@
           "response": []
         },
         {
-          "name": "080. List Dedicated Admins",
+          "name": "091. List Dedicated Admins",
           "event": [
             {
               "listen": "test",
@@ -3621,7 +4026,7 @@
           "response": []
         },
         {
-          "name": "081. Create Admin Invitation",
+          "name": "092. Create Admin Invitation",
           "event": [
             {
               "listen": "test",
@@ -3665,7 +4070,7 @@
           "response": []
         },
         {
-          "name": "082. List Admin Invitations",
+          "name": "093. List Admin Invitations",
           "event": [
             {
               "listen": "test",
@@ -3688,7 +4093,7 @@
           "response": []
         },
         {
-          "name": "083. Revoke Admin Invitation",
+          "name": "094. Revoke Admin Invitation",
           "event": [
             {
               "listen": "test",
@@ -3711,7 +4116,7 @@
           "response": []
         },
         {
-          "name": "084. Update Dedicated Admin Access",
+          "name": "095. Update Dedicated Admin Access",
           "event": [
             {
               "listen": "test",
@@ -3750,7 +4155,7 @@
           "response": []
         },
         {
-          "name": "085. Deactivate Dedicated Admin",
+          "name": "096. Deactivate Dedicated Admin",
           "event": [
             {
               "listen": "test",
@@ -3773,7 +4178,7 @@
           "response": []
         },
         {
-          "name": "086. Get Admin Actions",
+          "name": "097. Get Admin Actions",
           "event": [
             {
               "listen": "test",
@@ -3803,7 +4208,7 @@
           "response": []
         },
         {
-          "name": "087. Execute Admin Action",
+          "name": "098. Execute Admin Action",
           "event": [
             {
               "listen": "test",
@@ -3848,7 +4253,7 @@
           "response": []
         },
         {
-          "name": "088. Get Permission Presets",
+          "name": "099. Get Permission Presets",
           "event": [
             {
               "listen": "test",
@@ -3878,7 +4283,7 @@
           "response": []
         },
         {
-          "name": "089. Verify Admin Invitation Token",
+          "name": "100. Verify Admin Invitation Token",
           "request": {
             "method": "POST",
             "header": [
@@ -3912,7 +4317,7 @@
           ]
         },
         {
-          "name": "090. Accept Admin Invitation with Firebase",
+          "name": "101. Accept Admin Invitation with Firebase",
           "request": {
             "method": "POST",
             "header": [
@@ -3951,7 +4356,7 @@
       "name": "12 - Negative & Validation Tests",
       "item": [
         {
-          "name": "091. Login with Invalid Password",
+          "name": "102. Login with Invalid Password",
           "event": [
             {
               "listen": "test",
@@ -3989,7 +4394,7 @@
           "response": []
         },
         {
-          "name": "092. Protected Route with Invalid Token",
+          "name": "103. Protected Route with Invalid Token",
           "event": [
             {
               "listen": "test",
@@ -4022,7 +4427,7 @@
           "response": []
         },
         {
-          "name": "093. Apply to Invalid Project Role",
+          "name": "104. Apply to Invalid Project Role",
           "event": [
             {
               "listen": "test",
@@ -4067,7 +4472,7 @@
           "response": []
         },
         {
-          "name": "094. Create Project Missing Title",
+          "name": "105. Create Project Missing Title",
           "event": [
             {
               "listen": "test",
@@ -4111,7 +4516,37 @@
       "name": "13 - Cleanup & Logout",
       "item": [
         {
-          "name": "095. Remove Applicant from Project Team",
+          "name": "106. Delete Poll Post",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected status\", () => { pm.expect([200,404]).to.include(pm.response.code) });",
+                  "pm.test(\"Response is JSON\", () => { pm.expect((pm.response.headers.get(\"Content-Type\") || \"\").toLowerCase()).to.include(\"application/json\") });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/community/posts/{{pollPostId}}",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "107. Remove Applicant from Project Team",
           "event": [
             {
               "listen": "test",
@@ -4148,7 +4583,7 @@
           "response": []
         },
         {
-          "name": "096. Delete Community Post",
+          "name": "108. Delete Community Post",
           "event": [
             {
               "listen": "test",
@@ -4184,7 +4619,7 @@
           "response": []
         },
         {
-          "name": "097. Delete Project",
+          "name": "109. Delete Project",
           "event": [
             {
               "listen": "test",
@@ -4220,7 +4655,7 @@
           "response": []
         },
         {
-          "name": "098. Logout via Cookie",
+          "name": "110. Logout via Cookie",
           "event": [
             {
               "listen": "test",
@@ -4261,7 +4696,7 @@
           "response": []
         },
         {
-          "name": "099. Logout Dedicated Admin",
+          "name": "111. Logout Dedicated Admin",
           "event": [
             {
               "listen": "test",

@@ -1,4 +1,5 @@
 const Notification = require('../models/notification.model');
+const NotificationDevice = require('../models/notificationDevice.model');
 
 const CATEGORY_TYPES = {
   projects: ['PROJECT_MATCH', 'NEW_APPLICATION', 'ROLE_FILLED', 'TEAM_REMOVED'],
@@ -76,4 +77,62 @@ const dismissNotification = async (req, res) => {
   }
 };
 
-module.exports = { getNotifications, markAsRead, markAllAsRead, dismissNotification };
+const registerDevice = async (req, res) => {
+  try {
+    const { token, platform, deviceId, appVersion } = req.body;
+    if (
+      typeof token !== 'string' || !token.trim() || token.length > 4096 ||
+      typeof deviceId !== 'string' || !deviceId.trim() || deviceId.length > 200 ||
+      (appVersion != null && (typeof appVersion !== 'string' || appVersion.length > 50)) ||
+      !['android', 'ios', 'web'].includes(platform)
+    ) {
+      return res.status(400).json({ message: 'token, deviceId and a valid platform are required' });
+    }
+    await NotificationDevice.deleteMany({
+      $or: [
+        { token: token.trim(), user: { $ne: req.user._id } },
+        { token: token.trim(), deviceId: { $ne: deviceId.trim() } },
+        { user: req.user._id, deviceId: deviceId.trim(), token: { $ne: token.trim() } },
+      ],
+    });
+    const device = await NotificationDevice.findOneAndUpdate(
+      { user: req.user._id, deviceId: deviceId.trim() },
+      { $set: {
+        token: token.trim(),
+        platform,
+        appVersion: appVersion?.trim() || null,
+        isActive: true,
+        lastSeenAt: new Date(),
+      } },
+      { upsert: true, new: true, runValidators: true }
+    ).select('platform deviceId appVersion isActive lastSeenAt');
+    return res.status(201).json({ success: true, message: 'Notification device registered', device });
+  } catch (error) {
+    console.error('Device registration failed:', error.message);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
+
+const unregisterDevice = async (req, res) => {
+  try {
+    const device = await NotificationDevice.findOneAndUpdate(
+      { user: req.user._id, deviceId: req.params.deviceId },
+      { $set: { isActive: false } },
+      { new: true }
+    );
+    if (!device) return res.status(404).json({ message: 'Notification device not found' });
+    return res.json({ success: true, message: 'Notification device unregistered' });
+  } catch (error) {
+    console.error('Device unregistration failed:', error.message);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
+
+module.exports = {
+  getNotifications,
+  markAsRead,
+  markAllAsRead,
+  dismissNotification,
+  registerDevice,
+  unregisterDevice,
+};
