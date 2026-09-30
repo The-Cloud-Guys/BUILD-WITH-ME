@@ -24,4 +24,13 @@ const adminBootstrapLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-module.exports = { adminAuthLimiter, adminBootstrapLimiter, authLimiter };
+const iceServerLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  keyGenerator: (req) => req.user._id.toString(),
+  message: { message: 'Too many ICE credential requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+module.exports = { adminAuthLimiter, adminBootstrapLimiter, authLimiter, iceServerLimiter };

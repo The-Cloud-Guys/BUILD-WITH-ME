@@ -3567,7 +3567,29 @@
           "response": []
         },
         {
-          "name": "077. Accept Call Session",
+          "name": "077. Get Call ICE Servers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected status\", () => { pm.expect([200, 404, 409, 410, 503]).to.include(pm.response.code) });",
+                  "pm.test(\"Response is JSON\", () => { pm.expect((pm.response.headers.get(\"Content-Type\") || \"\").toLowerCase()).to.include(\"application/json\") });",
+                  "if (pm.response.code === 200) { const json = pm.response.json(); pm.test(\"ICE configuration returned\", () => { pm.expect(json.iceServers).to.be.an(\"array\").that.is.not.empty; pm.expect(json.expiresAt).to.be.a(\"string\"); }); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/chat/calls/{{callId}}/ice-servers"
+          },
+          "response": []
+        },
+        {
+          "name": "078. Accept Call Session",
           "event": [
             {
               "listen": "test",
@@ -3598,7 +3620,7 @@
           "response": []
         },
         {
-          "name": "078. Decline Call Session",
+          "name": "079. Decline Call Session",
           "event": [
             {
               "listen": "test",
@@ -3629,7 +3651,7 @@
           "response": []
         },
         {
-          "name": "079. Cancel Call Session",
+          "name": "080. Cancel Call Session",
           "event": [
             {
               "listen": "test",
@@ -3650,7 +3672,7 @@
           "response": []
         },
         {
-          "name": "080. End Call Session",
+          "name": "081. End Call Session",
           "event": [
             {
               "listen": "test",
@@ -3676,7 +3698,7 @@
       "name": "10 - Admin Authentication",
       "item": [
         {
-          "name": "081. Bootstrap Initial Firebase Super Admin",
+          "name": "082. Bootstrap Initial Firebase Super Admin",
           "request": {
             "method": "POST",
             "header": [
@@ -3714,7 +3736,7 @@
           ]
         },
         {
-          "name": "082. Login Dedicated Admin with Firebase",
+          "name": "083. Login Dedicated Admin with Firebase",
           "request": {
             "method": "POST",
             "header": [
@@ -3748,7 +3770,7 @@
           ]
         },
         {
-          "name": "083. Get Current Firebase Administrator",
+          "name": "084. Get Current Firebase Administrator",
           "request": {
             "method": "GET",
             "header": [],
@@ -3778,7 +3800,7 @@
       "name": "11 - Administration",
       "item": [
         {
-          "name": "084. Get Admin Dashboard",
+          "name": "085. Get Admin Dashboard",
           "event": [
             {
               "listen": "test",
@@ -3808,7 +3830,7 @@
           "response": []
         },
         {
-          "name": "085. Get Users",
+          "name": "086. Get Users",
           "event": [
             {
               "listen": "test",
@@ -3838,7 +3860,7 @@
           "response": []
         },
         {
-          "name": "086. Get Applicant User Details",
+          "name": "087. Get Applicant User Details",
           "event": [
             {
               "listen": "test",
@@ -3868,7 +3890,7 @@
           "response": []
         },
         {
-          "name": "087. Get Admin Project List",
+          "name": "088. Get Admin Project List",
           "event": [
             {
               "listen": "test",
@@ -3898,7 +3920,7 @@
           "response": []
         },
         {
-          "name": "088. Get Reports",
+          "name": "089. Get Reports",
           "event": [
             {
               "listen": "test",
@@ -3928,7 +3950,7 @@
           "response": []
         },
         {
-          "name": "089. Resolve Report - No Violation",
+          "name": "090. Resolve Report - No Violation",
           "event": [
             {
               "listen": "test",
@@ -3973,7 +3995,7 @@
           "response": []
         },
         {
-          "name": "090. Get Admin Activities",
+          "name": "091. Get Admin Activities",
           "event": [
             {
               "listen": "test",
@@ -4003,7 +4025,7 @@
           "response": []
         },
         {
-          "name": "091. List Dedicated Admins",
+          "name": "092. List Dedicated Admins",
           "event": [
             {
               "listen": "test",
@@ -4026,7 +4048,7 @@
           "response": []
         },
         {
-          "name": "092. Create Admin Invitation",
+          "name": "093. Create Admin Invitation",
           "event": [
             {
               "listen": "test",
@@ -4070,7 +4092,7 @@
           "response": []
         },
         {
-          "name": "093. List Admin Invitations",
+          "name": "094. List Admin Invitations",
           "event": [
             {
               "listen": "test",
@@ -4093,7 +4115,7 @@
           "response": []
         },
         {
-          "name": "094. Revoke Admin Invitation",
+          "name": "095. Revoke Admin Invitation",
           "event": [
             {
               "listen": "test",
@@ -4116,7 +4138,7 @@
           "response": []
         },
         {
-          "name": "095. Update Dedicated Admin Access",
+          "name": "096. Update Dedicated Admin Access",
           "event": [
             {
               "listen": "test",
@@ -4155,7 +4177,7 @@
           "response": []
         },
         {
-          "name": "096. Deactivate Dedicated Admin",
+          "name": "097. Deactivate Dedicated Admin",
           "event": [
             {
               "listen": "test",
@@ -4178,7 +4200,7 @@
           "response": []
         },
         {
-          "name": "097. Get Admin Actions",
+          "name": "098. Get Admin Actions",
           "event": [
             {
               "listen": "test",
@@ -4208,7 +4230,7 @@
           "response": []
         },
         {
-          "name": "098. Execute Admin Action",
+          "name": "099. Execute Admin Action",
           "event": [
             {
               "listen": "test",
@@ -4253,7 +4275,7 @@
           "response": []
         },
         {
-          "name": "099. Get Permission Presets",
+          "name": "100. Get Permission Presets",
           "event": [
             {
               "listen": "test",
@@ -4283,7 +4305,7 @@
           "response": []
         },
         {
-          "name": "100. Verify Admin Invitation Token",
+          "name": "101. Verify Admin Invitation Token",
           "request": {
             "method": "POST",
             "header": [
@@ -4317,7 +4339,7 @@
           ]
         },
         {
-          "name": "101. Accept Admin Invitation with Firebase",
+          "name": "102. Accept Admin Invitation with Firebase",
           "request": {
             "method": "POST",
             "header": [
@@ -4356,7 +4378,7 @@
       "name": "12 - Negative & Validation Tests",
       "item": [
         {
-          "name": "102. Login with Invalid Password",
+          "name": "103. Login with Invalid Password",
           "event": [
             {
               "listen": "test",
@@ -4394,7 +4416,7 @@
           "response": []
         },
         {
-          "name": "103. Protected Route with Invalid Token",
+          "name": "104. Protected Route with Invalid Token",
           "event": [
             {
               "listen": "test",
@@ -4427,7 +4449,7 @@
           "response": []
         },
         {
-          "name": "104. Apply to Invalid Project Role",
+          "name": "105. Apply to Invalid Project Role",
           "event": [
             {
               "listen": "test",
@@ -4472,7 +4494,7 @@
           "response": []
         },
         {
-          "name": "105. Create Project Missing Title",
+          "name": "106. Create Project Missing Title",
           "event": [
             {
               "listen": "test",
@@ -4516,7 +4538,7 @@
       "name": "13 - Cleanup & Logout",
       "item": [
         {
-          "name": "106. Delete Poll Post",
+          "name": "107. Delete Poll Post",
           "event": [
             {
               "listen": "test",
@@ -4546,7 +4568,7 @@
           "response": []
         },
         {
-          "name": "107. Remove Applicant from Project Team",
+          "name": "108. Remove Applicant from Project Team",
           "event": [
             {
               "listen": "test",
@@ -4583,7 +4605,7 @@
           "response": []
         },
         {
-          "name": "108. Delete Community Post",
+          "name": "109. Delete Community Post",
           "event": [
             {
               "listen": "test",
@@ -4619,7 +4641,7 @@
           "response": []
         },
         {
-          "name": "109. Delete Project",
+          "name": "110. Delete Project",
           "event": [
             {
               "listen": "test",
@@ -4655,7 +4677,7 @@
           "response": []
         },
         {
-          "name": "110. Logout via Cookie",
+          "name": "111. Logout via Cookie",
           "event": [
             {
               "listen": "test",
@@ -4696,7 +4718,7 @@
           "response": []
         },
         {
-          "name": "111. Logout Dedicated Admin",
+          "name": "112. Logout Dedicated Admin",
           "event": [
             {
               "listen": "test",

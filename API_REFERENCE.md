@@ -96,12 +96,17 @@ Accepting an application atomically updates the application, project role capaci
 | GET | `/api/chat/rooms/:roomId/call` | room member | none | object: authorized call-room data |
 | POST | `/api/chat/rooms/:roomId/calls` | room member | `{ callType:"audio"|"video" }` | 201 object: persistent ringing call; emits socket and FCM events |
 | GET | `/api/chat/calls/:callId` | call participant | none | object: current call lifecycle state |
+| GET | `/api/chat/calls/:callId/ice-servers` | active call participant; rate limited | none | object: short-lived Cloudflare STUN/TURN configuration and expiry |
 | POST | `/api/chat/calls/:callId/accept` | recipient | none | object: atomically accepted call |
 | POST | `/api/chat/calls/:callId/decline` | recipient | none | object: recipient response/current call |
 | POST | `/api/chat/calls/:callId/cancel` | caller | none | object: cancelled ringing call |
 | POST | `/api/chat/calls/:callId/end` | call participant | none | object: ended accepted call |
 
 Call statuses are `ringing`, `accepted`, `declined`, `missed`, `cancelled`, and `ended`. Ringing invitations expire after 60 seconds. In group rooms, each recipient has an independent `recipientResponses` entry; the first valid acceptance wins. Use these REST endpoints to establish authoritative call state, then use Socket.IO `signal` events for WebRTC negotiation.
+
+`GET /api/chat/calls/:callId/ice-servers` accepts only the caller, a ringing recipient, or the accepted recipient. It returns `410` for an expired ringing call, `409` for a completed/inactive call, `429` after 10 requests in five minutes, and `503` when TURN is unconfigured or unavailable. Cloudflare credentials are cached per call/user while valid and are never written to logs or MongoDB.
+
+Required server configuration names are `WEBRTC_ICE_PROVIDER=cloudflare`, `CLOUDFLARE_TURN_KEY_ID`, `CLOUDFLARE_TURN_API_TOKEN`, and optional `WEBRTC_ICE_TTL_SECONDS` (default 3600; constrained to 300–86400). The API token and TURN key ID remain server-side; only temporary `username`/`credential` values returned by Cloudflare reach authenticated call clients.
 
 ## Community
 
@@ -255,7 +260,9 @@ User status is explicit and mutually exclusive: `terminated` means `isActive ===
 
 ## Socket events
 
-Socket.IO uses the same access token during the handshake. Membership is checked before joining a room or sending room-scoped events. Client events include room join/leave, message send, typing and call signaling; server events acknowledge or broadcast only to authorized room members. Both REST and socket message sends also issue FCM pushes to the other room members. Clients must deduplicate `new-message`/FCM events by `messageId` and call events by `callId`.
+Socket.IO uses the same access token during the handshake. Membership is checked before joining a room or sending room-scoped events. Both REST and socket message sends also issue FCM pushes to the other room members. Clients must deduplicate `new-message`/FCM events by `messageId` and call events by `callId`.
+
+WebRTC signaling is targeted rather than room-broadcast. After a call is accepted, send `signal` with `{ callId, roomId, targetUserId, signal }`. The backend verifies that the call is persisted and accepted and that sender/target are precisely its caller and accepted recipient. The recipient receives `{ callId, roomId, fromUserId, signal }` on their user-specific socket channel. Legacy `call-initiate`, `call-response`, and `leave-call` events now return `PERSISTENT_CALL_REQUIRED`; use the REST lifecycle endpoints instead.
 
 ## Verification and migrations
 

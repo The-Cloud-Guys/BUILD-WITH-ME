@@ -1,7 +1,9 @@
 const socketIO = require('socket.io');
+const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const User = require('../models/user.model');
 const { Message, ChatRoom, UnreadMessage } = require('../models/chat.model');
+const CallSession = require('../models/callSession.model');
 const { createNotification } = require('../services/notification.service');
 const { sendChatMessagePush } = require('../services/pushNotification.service');
 
@@ -14,7 +16,6 @@ class SocketManager {
       }
     });
     
-    this.activeCalls = new Map(); 
     this.setupMiddleware();
     this.setupHandlers();
   }
@@ -105,88 +106,70 @@ class SocketManager {
       // ==============================
 
       socket.on('call-initiate', async (data) => {
-        const { roomId, callType } = data;
+        const { roomId } = data;
         if (!(await this.isRoomMember(socket.userId, roomId))) {
           return socket.emit('call-error', { error: 'Not a member of this room' });
         }
-        
-        console.log(` Call initiated by ${socket.userId} in room ${roomId} (${callType})`);
-        
-        if (!this.activeCalls.has(roomId)) {
-          this.activeCalls.set(roomId, {
-            participants: new Set([socket.userId]),
-            callType: callType,
-            startedAt: new Date()
-          });
-        } else {
-          this.activeCalls.get(roomId).participants.add(socket.userId);
-        }
-
-        socket.to(`room:${roomId}`).emit('call-incoming', {
-          callerId: socket.userId,
-          callerName: `${socket.user.firstName} ${socket.user.lastName}`,
-          callType: callType
-        });
-
-        this.io.to(`room:${roomId}`).emit('call-state', {
-          participants: Array.from(this.activeCalls.get(roomId).participants),
-          callType: callType,
-          active: true,
-          startedAt: this.activeCalls.get(roomId).startedAt
+        return socket.emit('call-error', {
+          code: 'PERSISTENT_CALL_REQUIRED',
+          error: 'Create calls with POST /api/chat/rooms/:roomId/calls',
         });
       });
 
       socket.on('call-response', async (data) => {
-        const { roomId, accepted } = data;
+        const { roomId } = data;
         if (!(await this.isRoomMember(socket.userId, roomId))) return;
-        
-        console.log(` Call response from ${socket.userId}: ${accepted ? 'ACCEPTED' : 'REJECTED'}`);
-        
-        if (accepted) {
-          if (this.activeCalls.has(roomId)) {
-            this.activeCalls.get(roomId).participants.add(socket.userId);
-          }
-          
-          socket.to(`room:${roomId}`).emit('call-response', {
-            userId: socket.userId,
-            userName: `${socket.user.firstName} ${socket.user.lastName}`,
-            accepted: true
-          });
-          
-          this.broadcastCallState(roomId);
-        } else {
-          socket.to(`room:${roomId}`).emit('call-response', {
-            userId: socket.userId,
-            userName: `${socket.user.firstName} ${socket.user.lastName}`,
-            accepted: false
-          });
-        }
+        return socket.emit('call-error', {
+          code: 'PERSISTENT_CALL_REQUIRED',
+          error: 'Accept or decline calls through the call lifecycle API',
+        });
       });
 
       socket.on('leave-call', async (data) => {
         const { roomId } = data;
         if (!(await this.isRoomMember(socket.userId, roomId))) return;
-        this.handleLeaveCall(socket.userId, roomId);
+        return socket.emit('call-error', {
+          code: 'PERSISTENT_CALL_REQUIRED',
+          error: 'End accepted calls through POST /api/chat/calls/:callId/end',
+        });
       });
 
       socket.on('signal', async (data) => {
-        const { roomId, signal } = data;
+        const { callId, roomId, targetUserId, signal } = data;
         if (!(await this.isRoomMember(socket.userId, roomId))) return;
-        socket.to(`room:${roomId}`).emit('signal', {
-          userId: socket.userId,
-          signal
+        if (!callId || !targetUserId || !signal) {
+          return socket.emit('signal-error', { error: 'callId, roomId, targetUserId and signal are required' });
+        }
+        if (!mongoose.isValidObjectId(callId) || !mongoose.isValidObjectId(targetUserId)) {
+          return socket.emit('signal-error', { error: 'Invalid call or target user ID' });
+        }
+        const call = await CallSession.findOne({
+          _id: callId,
+          room: roomId,
+          status: 'accepted',
+        }).select('caller answeredBy').lean();
+        if (!call?.answeredBy) {
+          return socket.emit('signal-error', { error: 'Accepted call not found' });
+        }
+        const participants = [call.caller.toString(), call.answeredBy.toString()];
+        if (
+          !participants.includes(socket.userId) ||
+          !participants.includes(targetUserId.toString()) ||
+          targetUserId.toString() === socket.userId
+        ) {
+          return socket.emit('signal-error', { error: 'Invalid call signaling participants' });
+        }
+        this.io.to(`user:${targetUserId}`).emit('signal', {
+          callId,
+          roomId,
+          fromUserId: socket.userId,
+          signal,
         });
       });
 
       socket.on('disconnect', () => {
         console.log(`User disconnected: ${socket.userId}`);
-        
-        for (const [roomId, call] of this.activeCalls) {
-          if (call.participants.has(socket.userId)) {
-            this.handleLeaveCall(socket.userId, roomId);
-          }
-        }
-        
+
         socket.rooms.forEach(room => {
           if (room.startsWith('room:')) {
             socket.to(room).emit('user-disconnected', socket.userId);
@@ -249,75 +232,14 @@ class SocketManager {
   }
 
   async isRoomMember(userId, roomId) {
-    if (!roomId) return false;
-    return Boolean(await ChatRoom.exists({ _id: roomId, participants: userId }));
-  }
-
-  // ==============================
-  // CALL MANAGEMENT HELPERS
-  // ==============================
-
-  handleLeaveCall(userId, roomId) {
-    const call = this.activeCalls.get(roomId);
-    if (!call) {
-      console.log(` No active call found in room ${roomId}`);
-      return;
-    }
-
-    // Remove user from participants
-    call.participants.delete(userId);
-    const participantCount = call.participants.size;
-
-    console.log(`User ${userId} left call in room ${roomId} - ${participantCount} participant(s) remaining`);
-
-    this.io.to(`room:${roomId}`).emit('user-left-call', {
-      userId: userId,
-      remainingParticipants: Array.from(call.participants),
-      participantCount: participantCount
-    });
-
-    if (participantCount === 0) {
-      this.activeCalls.delete(roomId);
-      
-      this.io.to(`room:${roomId}`).emit('call-ended', {
-        reason: 'All participants have left the call',
-        endedAt: new Date()
-      });
-      
-      console.log(`📞 Call ended in room: ${roomId} - All participants left`);
-    } else {
-      this.io.to(`room:${roomId}`).emit('call-state', {
-        participants: Array.from(call.participants),
-        participantCount: participantCount,
-        callType: call.callType,
-        active: true,
-        startedAt: call.startedAt
-      });
+    if (!mongoose.isValidObjectId(roomId)) return false;
+    try {
+      return Boolean(await ChatRoom.exists({ _id: roomId, participants: userId }));
+    } catch {
+      return false;
     }
   }
 
-  broadcastCallState(roomId) {
-    const call = this.activeCalls.get(roomId);
-    if (!call) return;
-
-    this.io.to(`room:${roomId}`).emit('call-state', {
-      participants: Array.from(call.participants),
-      participantCount: call.participants.size,
-      callType: call.callType,
-      active: true,
-      startedAt: call.startedAt
-    });
-  }
-
-  getCallParticipants(roomId) {
-    const call = this.activeCalls.get(roomId);
-    return call ? Array.from(call.participants) : [];
-  }
-
-  isUserInCall(userId, roomId) {
-    const call = this.activeCalls.get(roomId);
-    return call ? call.participants.has(userId) : false;
-  }
 }
 
 module.exports = SocketManager;

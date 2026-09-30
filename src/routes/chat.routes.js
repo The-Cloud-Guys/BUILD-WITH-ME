@@ -1,6 +1,8 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const { protect } = require('../middleware/auth.middleware');
+const { iceServerLimiter } = require('../middleware/rateLimiter');
+const { getCallIceServers } = require('../controllers/iceServer.controller');
 const {
   getUserRooms,
   getRoomMessages,
@@ -45,6 +47,7 @@ router.post('/rooms/:roomId/messages', sendMessage);
 router.get('/rooms/:roomId/call', getCallRoom);
 router.post('/rooms/:roomId/calls', createCall);
 router.get('/calls/:callId', getCall);
+router.get('/calls/:callId/ice-servers', iceServerLimiter, getCallIceServers);
 router.post('/calls/:callId/accept', acceptCall);
 router.post('/calls/:callId/decline', declineCall);
 router.post('/calls/:callId/cancel', cancelCall);
