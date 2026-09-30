@@ -43,3 +43,43 @@ test('legacy socket call state no longer creates an in-memory source of truth', 
   assert.doesNotMatch(socket, /activeCalls\s*=\s*new Map/);
   assert.match(socket, /PERSISTENT_CALL_REQUIRED/);
 });
+
+test('TURN startup status confirms presence without exposing credential values', () => {
+  const {
+    getIceConfigurationStatus,
+    logIceConfigurationStatus,
+  } = require('../src/services/iceServer.service');
+  const previous = {
+    provider: process.env.WEBRTC_ICE_PROVIDER,
+    keyId: process.env.CLOUDFLARE_TURN_KEY_ID,
+    token: process.env.CLOUDFLARE_TURN_API_TOKEN,
+  };
+  const messages = [];
+  const originalLog = console.log;
+  const originalWarn = console.warn;
+  try {
+    process.env.WEBRTC_ICE_PROVIDER = 'cloudflare';
+    process.env.CLOUDFLARE_TURN_KEY_ID = 'test-key-id-not-a-secret';
+    process.env.CLOUDFLARE_TURN_API_TOKEN = 'test-token-must-not-be-logged';
+    console.log = (...args) => messages.push(args.join(' '));
+    console.warn = (...args) => messages.push(args.join(' '));
+
+    assert.deepEqual(getIceConfigurationStatus(), {
+      provider: 'cloudflare',
+      supported: true,
+      configured: true,
+    });
+    logIceConfigurationStatus();
+    assert.match(messages.join('\n'), /Cloudflare configuration detected/);
+    assert.doesNotMatch(messages.join('\n'), /test-key-id|test-token/);
+  } finally {
+    console.log = originalLog;
+    console.warn = originalWarn;
+    if (previous.provider === undefined) delete process.env.WEBRTC_ICE_PROVIDER;
+    else process.env.WEBRTC_ICE_PROVIDER = previous.provider;
+    if (previous.keyId === undefined) delete process.env.CLOUDFLARE_TURN_KEY_ID;
+    else process.env.CLOUDFLARE_TURN_KEY_ID = previous.keyId;
+    if (previous.token === undefined) delete process.env.CLOUDFLARE_TURN_API_TOKEN;
+    else process.env.CLOUDFLARE_TURN_API_TOKEN = previous.token;
+  }
+});

@@ -4,6 +4,32 @@ const credentialCache = new Map();
 const MIN_TTL_SECONDS = 300;
 const MAX_TTL_SECONDS = 86400;
 
+const getIceConfigurationStatus = () => {
+  const provider = (process.env.WEBRTC_ICE_PROVIDER || 'cloudflare').toLowerCase();
+  return {
+    provider,
+    supported: provider === 'cloudflare',
+    configured: Boolean(
+      process.env.CLOUDFLARE_TURN_KEY_ID &&
+      process.env.CLOUDFLARE_TURN_API_TOKEN
+    ),
+  };
+};
+
+const logIceConfigurationStatus = () => {
+  const status = getIceConfigurationStatus();
+  if (!status.supported) {
+    console.warn('[TURN] Unsupported ICE provider configured; ICE requests will return 503');
+    return status;
+  }
+  if (status.configured) {
+    console.log('[TURN] Cloudflare configuration detected');
+  } else {
+    console.warn('[TURN] Cloudflare configuration missing; ICE requests will return 503');
+  }
+  return status;
+};
+
 const getTtlSeconds = () => {
   const configured = Number.parseInt(process.env.WEBRTC_ICE_TTL_SECONDS || '3600', 10);
   if (!Number.isFinite(configured)) return 3600;
@@ -77,6 +103,8 @@ const clearIceCredentialCache = () => credentialCache.clear();
 
 module.exports = {
   clearIceCredentialCache,
+  getIceConfigurationStatus,
   getIceServers,
   getTtlSeconds,
+  logIceConfigurationStatus,
 };

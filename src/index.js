@@ -25,8 +25,10 @@ const adminRoutes = require('./routes/admin.routes');
 const shareRoutes = require('./routes/share.routes');
 
 const SocketManager = require('./socket');
+const { logIceConfigurationStatus } = require('./services/iceServer.service');
 
 // Connect to database
+logIceConfigurationStatus();
 connectDB();
 
 const app = express();
