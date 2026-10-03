@@ -52,6 +52,16 @@ const chatRoomSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  description: {
+    type: String,
+    trim: true,
+    maxlength: 500,
+    default: '',
+  },
+  roomIcon: {
+    type: String,
+    default: null,
+  },
   type: {
     type: String,
     enum: ['direct', 'team_room', 'open_group', 'project_group'],

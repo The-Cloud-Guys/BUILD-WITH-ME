@@ -9,7 +9,9 @@ const {
   sendMessage,
   getOrCreateDirectRoom,
   createGroup,
-  getCallRoom
+  getCallRoom,
+  getGroupCandidates,
+  handleGroupIconUpload,
 } = require('../controllers/chat.controller');
 const {
   acceptCall,
@@ -35,9 +37,11 @@ router.get('/rooms', getUserRooms);
 
 // Direct message routes
 router.get('/direct/:userId', getOrCreateDirectRoom);
+router.post('/direct/:userId', getOrCreateDirectRoom);
 
 // Group routes
-router.post('/groups', createGroup);
+router.get('/group-candidates', getGroupCandidates);
+router.post('/groups', handleGroupIconUpload, createGroup);
 
 // Room routes
 router.get('/rooms/:roomId/messages', getRoomMessages);

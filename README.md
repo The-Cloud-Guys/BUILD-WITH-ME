@@ -238,6 +238,8 @@ Notification types: PROJECT_MATCH, APPLICATION_STATUS, NEW_APPLICATION, ROLE_FIL
 
 Chat messages and persistent incoming-call sessions use Firebase Cloud Messaging when a recipient is not actively viewing the app. The Flutter client must register each FCM installation after login, refresh the token when Firebase rotates it, and unregister the device during logout. See `API_REFERENCE.md` for the call lifecycle endpoints, Android notification channels, deep-link payloads, and response shapes.
 
+The existing Messages screen needs one list request: `GET /api/chat/rooms` returns direct messages and all team/group rooms with display-ready names, photos, member previews, last-message data, unread counts, and live single-instance presence. Creating a room uses one multipart request to `POST /api/chat/groups`; the optional room-image field is `icon` (JPG, PNG, WEBP, or GIF, maximum 5 MB). See `API_REFERENCE.md` for the exact New Room fields, candidate search, direct-room creation, and response contract.
+
 Production WebRTC calls fetch short-lived Cloudflare STUN/TURN credentials from `GET /api/chat/calls/:callId/ice-servers`. Configure `WEBRTC_ICE_PROVIDER`, `CLOUDFLARE_TURN_KEY_ID`, `CLOUDFLARE_TURN_API_TOKEN`, and optionally `WEBRTC_ICE_TTL_SECONDS` in the deployment environment. WebRTC signaling must include `callId`, `roomId`, and `targetUserId`; signaling is delivered only between the caller and accepted recipient.
 
 ---

@@ -3291,7 +3291,7 @@
           "response": []
         },
         {
-          "name": "070. Get/Create Direct Room with Applicant",
+          "name": "070. Get or Create Direct Room (GET compatibility)",
           "event": [
             {
               "listen": "test",
@@ -3330,7 +3330,80 @@
           "response": []
         },
         {
-          "name": "071. Create Group",
+          "name": "071. Create or Get Direct Room",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is JSON', () => {",
+                  "  const ct = pm.response.headers.get('Content-Type') || '';",
+                  "  pm.expect(ct.toLowerCase()).to.include('application/json');",
+                  "});",
+                  "const b=pm.response.json();",
+                  "if (b._id || b.id) pm.collectionVariables.set('roomId', b._id || b.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/chat/direct/{{applicantId}}",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "072. Search Open Group Candidates",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is JSON', () => {",
+                  "  const ct = pm.response.headers.get('Content-Type') || '';",
+                  "  pm.expect(ct.toLowerCase()).to.include('application/json');",
+                  "});",
+                  "const b=pm.response.json();",
+                  "pm.test('Candidate response has users and pagination', () => {",
+                  "  pm.expect(b.users).to.be.an('array');",
+                  "  pm.expect(b.pagination).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/chat/group-candidates?groupType=open_group&search=&page=1&limit=20",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "073. Create Open Group (Multipart)",
           "event": [
             {
               "listen": "test",
@@ -3342,12 +3415,9 @@
                   "  const ct = pm.response.headers.get('Content-Type') || '';",
                   "  pm.expect(ct.toLowerCase()).to.include('application/json');",
                   "});",
-                  "pm.test('Cookie session is available', () => {",
-                  "  pm.expect(pm.cookies.has('accessToken')).to.eql(true);",
-                  "});",
                   "const b=pm.response.json();",
-                  "const id = b._id || b.id || (b.group && (b.group._id || b.group.id));",
-                  "if (id) pm.collectionVariables.set('groupId', id);"
+                  "const room = b.room || b;",
+                  "if (room._id || room.id) pm.collectionVariables.set('groupId', room._id || room.id);"
                 ]
               }
             }
@@ -3355,20 +3425,37 @@
           "request": {
             "method": "POST",
             "url": "{{baseUrl}}/api/chat/groups",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Connexd Postman Group\",\n  \"participantIds\": [\n    \"{{applicantId}}\"\n  ],\n  \"isPrivate\": false\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "Connexd Postman Group",
+                  "type": "text"
+                },
+                {
+                  "key": "groupType",
+                  "value": "open_group",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Created by the complete Connexd Postman workflow.",
+                  "type": "text"
+                },
+                {
+                  "key": "participantIds",
+                  "value": "[\"{{applicantId}}\"]",
+                  "type": "text"
+                },
+                {
+                  "key": "icon",
+                  "type": "file",
+                  "src": [],
+                  "disabled": true
                 }
-              }
+              ]
             },
             "auth": {
               "type": "bearer",
@@ -3384,7 +3471,7 @@
           "response": []
         },
         {
-          "name": "072. Get Room Messages",
+          "name": "074. Get Room Messages",
           "event": [
             {
               "listen": "test",
@@ -3420,7 +3507,7 @@
           "response": []
         },
         {
-          "name": "073. Send Message",
+          "name": "075. Send Message",
           "event": [
             {
               "listen": "test",
@@ -3474,7 +3561,7 @@
           "response": []
         },
         {
-          "name": "074. Get Video Call Room",
+          "name": "076. Get Video Call Room",
           "event": [
             {
               "listen": "test",
@@ -3510,7 +3597,7 @@
           "response": []
         },
         {
-          "name": "075. Create Call Session",
+          "name": "077. Create Call Session",
           "event": [
             {
               "listen": "test",
@@ -3546,7 +3633,7 @@
           "response": []
         },
         {
-          "name": "076. Get Call Session",
+          "name": "078. Get Call Session",
           "event": [
             {
               "listen": "test",
@@ -3567,7 +3654,7 @@
           "response": []
         },
         {
-          "name": "077. Get Call ICE Servers",
+          "name": "079. Get Call ICE Servers",
           "event": [
             {
               "listen": "test",
@@ -3589,7 +3676,7 @@
           "response": []
         },
         {
-          "name": "078. Accept Call Session",
+          "name": "080. Accept Call Session",
           "event": [
             {
               "listen": "test",
@@ -3620,7 +3707,7 @@
           "response": []
         },
         {
-          "name": "079. Decline Call Session",
+          "name": "081. Decline Call Session",
           "event": [
             {
               "listen": "test",
@@ -3651,7 +3738,7 @@
           "response": []
         },
         {
-          "name": "080. Cancel Call Session",
+          "name": "082. Cancel Call Session",
           "event": [
             {
               "listen": "test",
@@ -3672,7 +3759,7 @@
           "response": []
         },
         {
-          "name": "081. End Call Session",
+          "name": "083. End Call Session",
           "event": [
             {
               "listen": "test",
@@ -3698,7 +3785,7 @@
       "name": "10 - Admin Authentication",
       "item": [
         {
-          "name": "082. Bootstrap Initial Firebase Super Admin",
+          "name": "084. Bootstrap Initial Firebase Super Admin",
           "request": {
             "method": "POST",
             "header": [
@@ -3736,7 +3823,7 @@
           ]
         },
         {
-          "name": "083. Login Dedicated Admin with Firebase",
+          "name": "085. Login Dedicated Admin with Firebase",
           "request": {
             "method": "POST",
             "header": [
@@ -3770,7 +3857,7 @@
           ]
         },
         {
-          "name": "084. Get Current Firebase Administrator",
+          "name": "086. Get Current Firebase Administrator",
           "request": {
             "method": "GET",
             "header": [],
@@ -3800,7 +3887,7 @@
       "name": "11 - Administration",
       "item": [
         {
-          "name": "085. Get Admin Dashboard",
+          "name": "087. Get Admin Dashboard",
           "event": [
             {
               "listen": "test",
@@ -3830,7 +3917,7 @@
           "response": []
         },
         {
-          "name": "086. Get Users",
+          "name": "088. Get Users",
           "event": [
             {
               "listen": "test",
@@ -3860,7 +3947,7 @@
           "response": []
         },
         {
-          "name": "087. Get Applicant User Details",
+          "name": "089. Get Applicant User Details",
           "event": [
             {
               "listen": "test",
@@ -3890,7 +3977,7 @@
           "response": []
         },
         {
-          "name": "088. Get Admin Project List",
+          "name": "090. Get Admin Project List",
           "event": [
             {
               "listen": "test",
@@ -3920,7 +4007,7 @@
           "response": []
         },
         {
-          "name": "089. Get Reports",
+          "name": "091. Get Reports",
           "event": [
             {
               "listen": "test",
@@ -3950,7 +4037,7 @@
           "response": []
         },
         {
-          "name": "090. Resolve Report - No Violation",
+          "name": "092. Resolve Report - No Violation",
           "event": [
             {
               "listen": "test",
@@ -3995,7 +4082,7 @@
           "response": []
         },
         {
-          "name": "091. Get Admin Activities",
+          "name": "093. Get Admin Activities",
           "event": [
             {
               "listen": "test",
@@ -4025,7 +4112,7 @@
           "response": []
         },
         {
-          "name": "092. List Dedicated Admins",
+          "name": "094. List Dedicated Admins",
           "event": [
             {
               "listen": "test",
@@ -4048,7 +4135,7 @@
           "response": []
         },
         {
-          "name": "093. Create Admin Invitation",
+          "name": "095. Create Admin Invitation",
           "event": [
             {
               "listen": "test",
@@ -4092,7 +4179,7 @@
           "response": []
         },
         {
-          "name": "094. List Admin Invitations",
+          "name": "096. List Admin Invitations",
           "event": [
             {
               "listen": "test",
@@ -4115,7 +4202,7 @@
           "response": []
         },
         {
-          "name": "095. Revoke Admin Invitation",
+          "name": "097. Revoke Admin Invitation",
           "event": [
             {
               "listen": "test",
@@ -4138,7 +4225,7 @@
           "response": []
         },
         {
-          "name": "096. Update Dedicated Admin Access",
+          "name": "098. Update Dedicated Admin Access",
           "event": [
             {
               "listen": "test",
@@ -4177,7 +4264,7 @@
           "response": []
         },
         {
-          "name": "097. Deactivate Dedicated Admin",
+          "name": "099. Deactivate Dedicated Admin",
           "event": [
             {
               "listen": "test",
@@ -4200,7 +4287,7 @@
           "response": []
         },
         {
-          "name": "098. Get Admin Actions",
+          "name": "100. Get Admin Actions",
           "event": [
             {
               "listen": "test",
@@ -4230,7 +4317,7 @@
           "response": []
         },
         {
-          "name": "099. Execute Admin Action",
+          "name": "101. Execute Admin Action",
           "event": [
             {
               "listen": "test",
@@ -4275,7 +4362,7 @@
           "response": []
         },
         {
-          "name": "100. Get Permission Presets",
+          "name": "102. Get Permission Presets",
           "event": [
             {
               "listen": "test",
@@ -4305,7 +4392,7 @@
           "response": []
         },
         {
-          "name": "101. Verify Admin Invitation Token",
+          "name": "103. Verify Admin Invitation Token",
           "request": {
             "method": "POST",
             "header": [
@@ -4339,7 +4426,7 @@
           ]
         },
         {
-          "name": "102. Accept Admin Invitation with Firebase",
+          "name": "104. Accept Admin Invitation with Firebase",
           "request": {
             "method": "POST",
             "header": [
@@ -4378,7 +4465,7 @@
       "name": "12 - Negative & Validation Tests",
       "item": [
         {
-          "name": "103. Login with Invalid Password",
+          "name": "105. Login with Invalid Password",
           "event": [
             {
               "listen": "test",
@@ -4416,7 +4503,7 @@
           "response": []
         },
         {
-          "name": "104. Protected Route with Invalid Token",
+          "name": "106. Protected Route with Invalid Token",
           "event": [
             {
               "listen": "test",
@@ -4449,7 +4536,7 @@
           "response": []
         },
         {
-          "name": "105. Apply to Invalid Project Role",
+          "name": "107. Apply to Invalid Project Role",
           "event": [
             {
               "listen": "test",
@@ -4494,7 +4581,7 @@
           "response": []
         },
         {
-          "name": "106. Create Project Missing Title",
+          "name": "108. Create Project Missing Title",
           "event": [
             {
               "listen": "test",
@@ -4538,7 +4625,7 @@
       "name": "13 - Cleanup & Logout",
       "item": [
         {
-          "name": "107. Delete Poll Post",
+          "name": "109. Delete Poll Post",
           "event": [
             {
               "listen": "test",
@@ -4568,7 +4655,7 @@
           "response": []
         },
         {
-          "name": "108. Remove Applicant from Project Team",
+          "name": "110. Remove Applicant from Project Team",
           "event": [
             {
               "listen": "test",
@@ -4605,7 +4692,7 @@
           "response": []
         },
         {
-          "name": "109. Delete Community Post",
+          "name": "111. Delete Community Post",
           "event": [
             {
               "listen": "test",
@@ -4641,7 +4728,7 @@
           "response": []
         },
         {
-          "name": "110. Delete Project",
+          "name": "112. Delete Project",
           "event": [
             {
               "listen": "test",
@@ -4677,7 +4764,7 @@
           "response": []
         },
         {
-          "name": "111. Logout via Cookie",
+          "name": "113. Logout via Cookie",
           "event": [
             {
               "listen": "test",
@@ -4718,7 +4805,7 @@
           "response": []
         },
         {
-          "name": "112. Logout Dedicated Admin",
+          "name": "114. Logout Dedicated Admin",
           "event": [
             {
               "listen": "test",

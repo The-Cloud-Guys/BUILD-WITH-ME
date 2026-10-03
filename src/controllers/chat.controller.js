@@ -2,9 +2,117 @@ const { Message, ChatRoom, UnreadMessage } = require('../models/chat.model');
 const Project = require('../models/project.model');
 const Application = require('../models/application.model');
 const User = require('../models/user.model');
-const { getSignedUrl } = require('../services/supabase.service');
-const CallSession = require('../models/callSession.model');
-const { sendCallPush, sendChatMessagePush } = require('../services/pushNotification.service');
+const { getSignedUrl, uploadFile, deleteFile } = require('../services/supabase.service');
+const { createAvatarResolver } = require('../services/avatar.service');
+const { sendChatMessagePush } = require('../services/pushNotification.service');
+const mongoose = require('mongoose');
+const multer = require('multer');
+const path = require('path');
+
+const groupIconUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedExtensions = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
+    const allowedMimes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+    const extensionAllowed = allowedExtensions.has(path.extname(file.originalname).toLowerCase());
+    const mimeAllowed = allowedMimes.has(file.mimetype) || file.mimetype === 'application/octet-stream';
+    if (extensionAllowed && mimeAllowed) {
+      return cb(null, true);
+    }
+    const error = new Error('Room icon must be a JPG, PNG, WEBP, or GIF image');
+    error.statusCode = 400;
+    return cb(error);
+  },
+});
+
+const handleGroupIconUpload = (req, res, next) => {
+  groupIconUpload.single('icon')(req, res, (error) => {
+    if (!error) return next();
+    return res.status(400).json({ message: error.message });
+  });
+};
+
+const parseIdArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return String(value).split(',').map((item) => item.trim()).filter(Boolean);
+  }
+};
+
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const imageMimeByExtension = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+};
+
+const resolveRoomIcon = async (roomIcon) => {
+  if (!roomIcon) return null;
+  if (/^https?:\/\//i.test(roomIcon)) return roomIcon;
+  try {
+    return await getSignedUrl(
+      process.env.SUPABASE_BUCKET_CHAT || process.env.SUPABASE_BUCKET_COMMUNITY,
+      roomIcon
+    );
+  } catch (error) {
+    console.error('Room icon signing failed:', error.message);
+    return null;
+  }
+};
+
+const serializeRoom = async ({ room, userId, unreadCount = 0, socketManager, resolveAvatar }) => {
+  const participants = await Promise.all((room.participants || []).map(async (participant) => ({
+    ...participant,
+    profilePhoto: await resolveAvatar(participant.profilePhoto),
+    isOnline: Boolean(socketManager?.isUserOnline(participant._id)),
+  })));
+  let lastMessage = room.lastMessage || null;
+  if (lastMessage?.sender?.firstName !== undefined) {
+    lastMessage = {
+      ...lastMessage,
+      sender: {
+        ...lastMessage.sender,
+        profilePhoto: await resolveAvatar(lastMessage.sender.profilePhoto),
+      },
+    };
+  }
+  const otherParticipant = room.type === 'direct'
+    ? participants.find((participant) => participant._id.toString() !== userId.toString()) || null
+    : null;
+  const project = room.projectId && typeof room.projectId === 'object'
+    ? { _id: room.projectId._id, title: room.projectId.title, stage: room.projectId.stage }
+    : null;
+  const displayName = room.type === 'direct'
+    ? [otherParticipant?.firstName, otherParticipant?.lastName].filter(Boolean).join(' ') || 'Direct message'
+    : room.name;
+
+  return {
+    ...room,
+    roomIcon: undefined,
+    projectId: project?._id || room.projectId || null,
+    project,
+    participants,
+    lastMessage,
+    displayName,
+    displayPhoto: room.type === 'direct'
+      ? otherParticipant?.profilePhoto || null
+      : await resolveRoomIcon(room.roomIcon),
+    otherParticipant,
+    unreadCount,
+    memberCount: participants.length,
+    memberPreview: participants.slice(0, 3),
+    firstMembers: participants.slice(0, 3),
+    memberNames: participants.slice(0, 3).map((participant) => participant.firstName).filter(Boolean),
+  };
+};
 
 const isParticipant = (room, userId) =>
   room.participants.some((participant) => participant.toString() === userId.toString());
@@ -17,20 +125,28 @@ const getUserRooms = async (req, res) => {
       participants: userId
     })
     .populate('participants', 'firstName lastName profilePhoto email role')
-    .populate('lastMessage')
+    .populate({
+      path: 'lastMessage',
+      populate: { path: 'sender', select: 'firstName lastName profilePhoto email role' },
+    })
+    .populate('projectId', 'title stage')
     .sort('-lastMessageAt')
     .lean();
 
-    const roomsWithUnread = await Promise.all(rooms.map(async (room) => {
-      const unread = await UnreadMessage.findOne({
-        room: room._id,
-        user: userId
-      });
-      room.unreadCount = unread ? unread.count : 0;
-      room.memberCount = room.participants.length;
-      room.firstMembers = room.participants.slice(0, 3);
-      return room;
-    }));
+    const unreadRows = await UnreadMessage.find({
+      room: { $in: rooms.map((room) => room._id) },
+      user: userId,
+    }).select('room count').lean();
+    const unreadByRoom = new Map(unreadRows.map((row) => [row.room.toString(), row.count]));
+    const resolveAvatar = createAvatarResolver();
+    const socketManager = req.app.get('socketManager');
+    const roomsWithUnread = await Promise.all(rooms.map((room) => serializeRoom({
+      room,
+      userId,
+      unreadCount: unreadByRoom.get(room._id.toString()) || 0,
+      socketManager,
+      resolveAvatar,
+    })));
 
     res.json(roomsWithUnread);
   } catch (error) {
@@ -45,6 +161,9 @@ const getOrCreateDirectRoom = async (req, res) => {
     const { userId } = req.params;
     const currentUserId = req.user.id;
 
+    if (!mongoose.isValidObjectId(userId)) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
     if (userId === currentUserId) {
       return res.status(400).json({ message: 'Cannot create a direct room with yourself' });
     }
@@ -74,7 +193,20 @@ const getOrCreateDirectRoom = async (req, res) => {
       });
     }
 
-    res.json(room);
+    const populatedRoom = await ChatRoom.findById(room._id)
+      .populate('participants', 'firstName lastName profilePhoto email role')
+      .populate({
+        path: 'lastMessage',
+        populate: { path: 'sender', select: 'firstName lastName profilePhoto email role' },
+      })
+      .lean();
+    const response = await serializeRoom({
+      room: populatedRoom,
+      userId: currentUserId,
+      socketManager: req.app.get('socketManager'),
+      resolveAvatar: createAvatarResolver(),
+    });
+    res.json(response);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -87,6 +219,10 @@ const getRoomMessages = async (req, res) => {
     const { roomId } = req.params;
     const { page = 1, limit = 50 } = req.query;
     const userId = req.user.id;
+
+    if (!mongoose.isValidObjectId(roomId)) {
+      return res.status(400).json({ message: 'Invalid room ID' });
+    }
 
     const room = await ChatRoom.findById(roomId);
     if (!room) return res.status(404).json({ message: 'Room not found' });
@@ -122,18 +258,32 @@ const getRoomMessages = async (req, res) => {
       'firstName lastName profilePhoto email role'
     ).lean();
 
-    const participantWithRoles = participants.map(p => ({
-      ...p,
-      roleInProject: room.participantRoles.get(p._id.toString()) || 'Member'
-    }));
+    const resolveAvatar = createAvatarResolver();
+    const socketManager = req.app.get('socketManager');
+    const resolvedMessages = await Promise.all(messages.reverse().map(async (message) => ({
+      ...message,
+      sender: message.sender ? {
+        ...message.sender,
+        profilePhoto: await resolveAvatar(message.sender.profilePhoto),
+      } : null,
+    })));
+    const participantWithRoles = await Promise.all(participants.map(async (participant) => ({
+      ...participant,
+      profilePhoto: await resolveAvatar(participant.profilePhoto),
+      roleInProject: room.participantRoles.get(participant._id.toString()) || participant.role || 'Member',
+      isOnline: Boolean(socketManager?.isUserOnline(participant._id)),
+    })));
 
     res.json({
-      messages: messages.reverse(),
+      messages: resolvedMessages,
       participants: participantWithRoles,
       roomDetails: {
         name: room.name,
+        description: room.description,
         type: room.type,
-        projectId: room.projectId
+        projectId: room.projectId,
+        displayPhoto: await resolveRoomIcon(room.roomIcon),
+        memberCount: participantWithRoles.length,
       },
       pagination: {
         page: parseInt(page),
@@ -188,9 +338,19 @@ const sendMessage = async (req, res) => {
       );
     }
 
-    const populatedMessage = await Message.findById(message._id)
+    let populatedMessage = await Message.findById(message._id)
       .populate('sender', 'firstName lastName profilePhoto email role')
       .lean();
+
+    if (populatedMessage.sender) {
+      populatedMessage = {
+        ...populatedMessage,
+        sender: {
+          ...populatedMessage.sender,
+          profilePhoto: await createAvatarResolver()(populatedMessage.sender.profilePhoto),
+        },
+      };
+    }
 
     await sendChatMessagePush({ recipientIds: participants, message: populatedMessage, room });
     const socketManager = req.app.get('socketManager');
@@ -205,51 +365,181 @@ const sendMessage = async (req, res) => {
 
 // @desc Create group
 const createGroup = async (req, res) => {
+  let uploadedIcon = null;
+  let uploadedBucket = null;
   try {
-    const { name, projectId, participantIds, isPrivate = false } = req.body;
+    const { name, projectId, description = '' } = req.body;
+    const groupType = req.body.groupType || (projectId ? 'project_group' : 'open_group');
+    const participantIds = parseIdArray(req.body.participantIds);
     const userId = req.user.id;
+    if (!name?.trim() || name.trim().length > 100) {
+      return res.status(400).json({ message: 'Room name is required and must not exceed 100 characters' });
+    }
+    if (description.length > 500) return res.status(400).json({ message: 'Description must not exceed 500 characters' });
+    if (!['open_group', 'project_group'].includes(groupType)) {
+      return res.status(400).json({ message: 'groupType must be open_group or project_group' });
+    }
+    if (participantIds.some((id) => !mongoose.isValidObjectId(id))) {
+      return res.status(400).json({ message: 'participantIds contains an invalid user ID' });
+    }
 
-    let participants = [userId];
     const participantRoles = new Map();
-    participantRoles.set(userId.toString(), 'Owner');
-
-    if (projectId) {
-      const project = await Project.findById(projectId);
+    if (groupType === 'project_group') {
+      if (!mongoose.isValidObjectId(projectId)) {
+        return res.status(400).json({ message: 'A valid projectId is required for a project group' });
+      }
+      const project = await Project.findById(projectId).lean();
       if (!project) return res.status(404).json({ message: 'Project not found' });
-      const isMember = project.owner.toString() === userId ||
-                       project.teamMembers.some((member) => member.toString() === userId);
-      if (!isMember) {
+      const projectMemberIds = [project.owner, ...project.teamMembers].map(String);
+      if (!projectMemberIds.includes(userId.toString())) {
         return res.status(403).json({ message: 'You must be a member of this project' });
       }
-      
-      participants = [userId, ...project.teamMembers.map(m => m._id)];
-      for (const member of project.teamMembers) {
-        const app = await Application.findOne({
-          project: projectId,
-          applicant: member._id,
-          status: 'ACCEPTED'
-        });
-        participantRoles.set(member._id.toString(), app?.role || 'Member');
+      if (participantIds.some((id) => !projectMemberIds.includes(String(id)))) {
+        return res.status(400).json({ message: 'Project groups can include only project team members' });
       }
-    } else if (participantIds && participantIds.length > 0) {
-      participants = [userId, ...participantIds];
+      const applications = await Application.find({
+        project: projectId,
+        applicant: { $in: [...participantIds, userId] },
+        status: 'ACCEPTED',
+      }).select('applicant role').lean();
+      applications.forEach((application) => {
+        participantRoles.set(application.applicant.toString(), application.role);
+      });
+      participantRoles.set(project.owner.toString(), req.user.role || 'Owner');
+    } else if (projectId) {
+      return res.status(400).json({ message: 'projectId is only valid for a project group' });
+    }
+
+    const participants = [...new Set([userId.toString(), ...participantIds.map(String)])];
+    if (participants.length < 2) return res.status(400).json({ message: 'Select at least one other member' });
+    const validUsers = await User.find({
+      _id: { $in: participants },
+      isActive: { $ne: false },
+      isSuspended: { $ne: true },
+    }).select('_id').lean();
+    if (validUsers.length !== participants.length) {
+      return res.status(400).json({ message: 'One or more selected users are unavailable' });
+    }
+
+    const roomId = new mongoose.Types.ObjectId();
+    let roomIcon = null;
+    if (req.file) {
+      uploadedBucket = process.env.SUPABASE_BUCKET_CHAT || process.env.SUPABASE_BUCKET_COMMUNITY;
+      if (!uploadedBucket) return res.status(503).json({ message: 'Chat media storage is not configured' });
+      const extension = path.extname(req.file.originalname).toLowerCase();
+      roomIcon = `rooms/${roomId}/icon_${Date.now()}${extension}`;
+      await uploadFile(uploadedBucket, roomIcon, req.file.buffer, imageMimeByExtension[extension]);
+      uploadedIcon = roomIcon;
     }
 
     const room = await ChatRoom.create({
-      name,
-      type: projectId ? 'project_group' : 'open_group',
+      _id: roomId,
+      name: name.trim(),
+      description: description.trim(),
+      roomIcon,
+      type: groupType,
       participants,
       admins: [userId],
-      projectId: projectId || null,
+      projectId: groupType === 'project_group' ? projectId : null,
       participantRoles,
-      isPrivate,
+      isPrivate: groupType === 'project_group',
       lastMessageAt: new Date()
     });
-
-    res.status(201).json({ message: 'Group created successfully', room });
+    const populatedRoom = await ChatRoom.findById(room._id)
+      .populate('participants', 'firstName lastName profilePhoto email role')
+      .populate('projectId', 'title stage')
+      .lean();
+    const response = await serializeRoom({
+      room: populatedRoom,
+      userId,
+      socketManager: req.app.get('socketManager'),
+      resolveAvatar: createAvatarResolver(),
+    });
+    res.status(201).json({ message: 'Group created successfully', room: response });
   } catch (error) {
+    if (uploadedIcon && uploadedBucket) {
+      await deleteFile(uploadedBucket, uploadedIcon).catch((cleanupError) => {
+        console.error('Room icon cleanup failed:', cleanupError.message);
+      });
+    }
     console.error(error);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc Search eligible users for the existing New Room screen
+const getGroupCandidates = async (req, res) => {
+  try {
+    const { groupType = 'open_group', projectId, search = '', page = 1, limit = 20 } = req.query;
+    if (!['open_group', 'project_group'].includes(groupType)) {
+      return res.status(400).json({ message: 'groupType must be open_group or project_group' });
+    }
+    const parsedPage = Math.max(1, Number.parseInt(page, 10) || 1);
+    const parsedLimit = Math.min(50, Math.max(1, Number.parseInt(limit, 10) || 20));
+    const filter = {
+      _id: { $ne: req.user._id },
+      isActive: { $ne: false },
+      isSuspended: { $ne: true },
+      onboardingStep: { $gte: 3 },
+    };
+    let project = null;
+    if (groupType === 'project_group') {
+      if (!mongoose.isValidObjectId(projectId)) {
+        return res.status(400).json({ message: 'A valid projectId is required for project candidates' });
+      }
+      project = await Project.findById(projectId).select('owner teamMembers').lean();
+      if (!project) return res.status(404).json({ message: 'Project not found' });
+      const projectMembers = [project.owner, ...project.teamMembers].map(String);
+      if (!projectMembers.includes(req.user._id.toString())) {
+        return res.status(403).json({ message: 'You must be a member of this project' });
+      }
+      filter._id = { $in: projectMembers.filter((id) => id !== req.user._id.toString()) };
+    }
+    if (search.trim()) {
+      const query = new RegExp(escapeRegex(search.trim()), 'i');
+      filter.$or = [{ firstName: query }, { lastName: query }, { role: query }];
+    }
+    const [users, total] = await Promise.all([
+      User.find(filter)
+        .select('firstName lastName profilePhoto role')
+        .sort('firstName lastName')
+        .skip((parsedPage - 1) * parsedLimit)
+        .limit(parsedLimit)
+        .lean(),
+      User.countDocuments(filter),
+    ]);
+    if (groupType === 'project_group' && users.length) {
+      const roles = await Application.find({
+        project: projectId,
+        applicant: { $in: users.map((user) => user._id) },
+        status: 'ACCEPTED',
+      }).select('applicant role').lean();
+      const roleByUser = new Map(roles.map((item) => [item.applicant.toString(), item.role]));
+      users.forEach((user) => {
+        if (user._id.toString() !== project.owner.toString()) {
+          user.role = roleByUser.get(user._id.toString()) || null;
+        }
+      });
+    }
+    const resolveAvatar = createAvatarResolver();
+    const socketManager = req.app.get('socketManager');
+    const resolvedUsers = await Promise.all(users.map(async (user) => ({
+      ...user,
+      profilePhoto: await resolveAvatar(user.profilePhoto),
+      isOnline: Boolean(socketManager?.isUserOnline(user._id)),
+    })));
+    return res.json({
+      users: resolvedUsers,
+      pagination: {
+        page: parsedPage,
+        limit: parsedLimit,
+        total,
+        pages: Math.ceil(total / parsedLimit),
+      },
+    });
+  } catch (error) {
+    console.error('Get group candidates failed:', error.message);
+    return res.status(500).json({ message: 'Server error' });
   }
 };
 
@@ -282,5 +572,7 @@ module.exports = {
   sendMessage,
   getOrCreateDirectRoom,
   createGroup,
-  getCallRoom
+  getCallRoom,
+  getGroupCandidates,
+  handleGroupIconUpload,
 };

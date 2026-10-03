@@ -15,7 +15,8 @@ class SocketManager {
         credentials: true
       }
     });
-    
+
+    this.onlineUsers = new Map();
     this.setupMiddleware();
     this.setupHandlers();
   }
@@ -49,8 +50,14 @@ class SocketManager {
   setupHandlers() {
     this.io.on('connection', (socket) => {
       console.log(`User connected: ${socket.userId}`);
-      
-      this.joinUserRooms(socket);
+
+      this.onlineUsers.set(socket.userId, (this.onlineUsers.get(socket.userId) || 0) + 1);
+      this.joinUserRooms(socket).then(() => {
+        socket.to([...socket.rooms]).emit('presence-update', {
+          userId: socket.userId,
+          isOnline: true,
+        });
+      });
 
       socket.on('join-room', async (roomId) => {
         if (!(await this.isRoomMember(socket.userId, roomId))) {
@@ -167,6 +174,18 @@ class SocketManager {
         });
       });
 
+      socket.on('disconnecting', () => {
+        const remaining = Math.max(0, (this.onlineUsers.get(socket.userId) || 1) - 1);
+        if (remaining === 0) this.onlineUsers.delete(socket.userId);
+        else this.onlineUsers.set(socket.userId, remaining);
+        if (remaining === 0) {
+          socket.to([...socket.rooms]).emit('presence-update', {
+            userId: socket.userId,
+            isOnline: false,
+          });
+        }
+      });
+
       socket.on('disconnect', () => {
         console.log(`User disconnected: ${socket.userId}`);
 
@@ -238,6 +257,10 @@ class SocketManager {
     } catch {
       return false;
     }
+  }
+
+  isUserOnline(userId) {
+    return this.onlineUsers.has(String(userId));
   }
 
 }

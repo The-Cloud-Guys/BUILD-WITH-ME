@@ -88,9 +88,11 @@ Accepting an application atomically updates the application, project role capaci
 
 | Method | Endpoint | Auth | Input | Success response |
 |---|---|---|---|---|
-| GET | `/api/chat/rooms` | user | none | object/array: rooms visible to user |
-| GET | `/api/chat/direct/:userId` | user | none | object: existing or newly created direct room |
-| POST | `/api/chat/groups` | user | `{ name:string, memberIds:ObjectId[], description?:string }` | 201 object: group room |
+| GET | `/api/chat/rooms` | user | none | array: every direct, team, project-group, and open-group room visible to the user |
+| POST | `/api/chat/direct/:userId` | user | none | object: idempotently create or return the direct room with that user |
+| GET | `/api/chat/direct/:userId` | user | none | compatibility alias for the same create-or-return operation |
+| GET | `/api/chat/group-candidates` | user | query `groupType:"open_group"|"project_group", projectId?:ObjectId, search?:string, page?:integer, limit?:integer` | object: selectable `users`, pagination |
+| POST | `/api/chat/groups` | user | multipart fields `name`, `groupType`, `description?`, `participantIds` (JSON array or comma-separated IDs), `projectId?`, `icon?` | 201 object: normalized group room |
 | GET | `/api/chat/rooms/:roomId/messages` | room member | query `page?:integer, limit?:integer` | object: messages, pagination |
 | POST | `/api/chat/rooms/:roomId/messages` | room member | `MessageInput` | 201 object: message |
 | GET | `/api/chat/rooms/:roomId/call` | room member | none | object: authorized call-room data |
@@ -101,6 +103,12 @@ Accepting an application atomically updates the application, project role capaci
 | POST | `/api/chat/calls/:callId/decline` | recipient | none | object: recipient response/current call |
 | POST | `/api/chat/calls/:callId/cancel` | caller | none | object: cancelled ringing call |
 | POST | `/api/chat/calls/:callId/end` | call participant | none | object: ended accepted call |
+
+`GET /api/chat/rooms` is the only list request needed by the Messages screen. Split the returned array locally: `type === "direct"` belongs under Direct Messages; `team_room`, `project_group`, and `open_group` belong under Team Rooms. Each room includes `_id`, `type`, `displayName`, `displayPhoto`, `participants`, `otherParticipant` (direct rooms only), `memberCount`, `memberNames`, `memberPreview`, `lastMessage`, `lastMessageAt`, `unreadCount`, and participant `isOnline` values. `type` is `direct`, not `direct_messages`.
+
+The New Room screen uses the existing `GET /api/projects/my` request for its linked-project selector. After the user chooses the room type, call `GET /api/chat/group-candidates`: project groups require `projectId` and return only that project's owner/team members; open groups return active, onboarded users. Submit the whole screen once to `POST /api/chat/groups` as `multipart/form-data`. The optional file field is named `icon`, accepts JPG/JPEG, PNG, WEBP, or GIF, and is limited to 5 MB. `groupType=project_group` requires `projectId`; `groupType=open_group` must omit it. `participantIds` may be sent as a JSON-array string such as `["USER_ID_1","USER_ID_2"]`. The authenticated creator is included automatically, so the array contains only selected additional members.
+
+Project-group membership is restricted to existing project members and its member roles come from accepted project applications. Open-group candidate search currently means active Connexd users; the backend does not yet have a separate mutual-connections relationship. Socket.IO emits `presence-update` with `{ userId, isOnline }`; this presence is instance-local and should be treated as an indicator rather than permanent account status.
 
 Call statuses are `ringing`, `accepted`, `declined`, `missed`, `cancelled`, and `ended`. Ringing invitations expire after 60 seconds. In group rooms, each recipient has an independent `recipientResponses` entry; the first valid acceptance wins. Use these REST endpoints to establish authoritative call state, then use Socket.IO `signal` events for WebRTC negotiation.
 
