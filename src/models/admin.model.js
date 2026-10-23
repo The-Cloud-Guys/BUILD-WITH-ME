@@ -66,6 +66,22 @@ const reportSchema = new mongoose.Schema({
     required: true,
     maxlength: 500
   },
+  offenseType: {
+    type: String,
+    enum: [
+      'spam', 'harassment', 'hate_speech', 'inappropriate_content',
+      'misinformation', 'intellectual_property', 'scam', 'violence',
+      'privacy', 'other'
+    ],
+    default: 'other',
+    index: true
+  },
+  relatedProject: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Project',
+    default: null,
+    index: true
+  },
   reportId: {
     type: String,
     unique: true

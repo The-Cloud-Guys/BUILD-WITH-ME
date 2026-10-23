@@ -18,6 +18,8 @@ const {
   mutePost,
   reportPost,
   reportComment,
+  reportProject,
+  voteOnPoll,
   getUserProfile,
   mediaUpload,
 } = require('../controllers/community.controller');
@@ -29,6 +31,7 @@ router.use(protect);
 
 // Posts
 router.post('/posts', mediaUpload.array('media', 10), createPost);
+router.post('/posts/:postId/poll/vote', voteOnPoll);
 router.get('/feed', getFeed);
 router.get('/posts/:id', getPostById);
 router.put('/posts/:id', updatePost);
@@ -55,6 +58,7 @@ router.get('/following/:userId', getFollowing);
 router.post('/mute/:postId', mutePost);
 router.post('/report/:postId', reportPost);
 router.post('/report/comment/:commentId', reportComment); 
+router.post('/report/project/:projectId', reportProject);
 
 // Profile
 router.get('/profile/:userId', getUserProfile);
