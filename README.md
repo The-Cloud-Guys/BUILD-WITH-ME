@@ -132,6 +132,8 @@ Important:
 - Both Supabase buckets (avatars, resumes) must be set to private
 - `EMAIL_FROM` must be a verified sender in Brevo under Settings → Senders
 - Do not log OTPs, cookies, JWTs, reset tokens, signed storage URLs, or Firebase credentials.
+- Admin browser requests must use `credentials: "include"`; the 12-hour `adminSession` cookie is `HttpOnly`, `Secure`, and `SameSite=None` for the configured admin-dashboard origin.
+- API responses resolve private avatar/community-media storage paths to signed URLs. External HTTP(S) link-preview images are preserved as external URLs.
 
 ---
 

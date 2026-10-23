@@ -57,11 +57,15 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
+const normalizeOrigin = (value) => typeof value === 'string'
+  ? value.trim().replace(/\/$/, '')
+  : value;
+
 const allowedOrigins = new Set(
   [
     process.env.FRONTEND_URL || 'http://localhost:3000',
-    process.env.ADMIN_DASHBOARD_URL,
-  ].filter(Boolean)
+    process.env.ADMIN_DASHBOARD_URL || 'https://conexd-admin.onrender.com',
+  ].filter(Boolean).map(normalizeOrigin)
 );
 
 app.use(
@@ -69,7 +73,7 @@ app.use(
     origin(origin, callback) {
       // Requests without an Origin header include trusted server-to-server,
       // mobile, Postman, and same-origin traffic.
-      callback(null, !origin || allowedOrigins.has(origin));
+      callback(null, !origin || allowedOrigins.has(normalizeOrigin(origin)));
     },
     credentials: true,
   })

@@ -25,14 +25,36 @@ const createAvatarResolver = ({
 
 const attachResolvedAvatar = async (user, resolveAvatar) => {
   if (!user) return null;
+  const plainUser = typeof user.toObject === 'function' ? user.toObject() : user;
   return {
-    ...user,
-    profilePhoto: await resolveAvatar(user.profilePhoto),
+    ...plainUser,
+    profilePhoto: await resolveAvatar(plainUser.profilePhoto),
   };
+};
+
+const resolveProfilePhotos = async (value, resolveAvatar = createAvatarResolver()) => {
+  if (value == null) return value;
+  if (Array.isArray(value)) {
+    return Promise.all(value.map((item) => resolveProfilePhotos(item, resolveAvatar)));
+  }
+  if (typeof value !== 'object') return value;
+
+  const plainValue = typeof value.toObject === 'function' ? value.toObject() : value;
+  const prototype = Object.getPrototypeOf(plainValue);
+  if (prototype !== Object.prototype && prototype !== null) return plainValue;
+
+  const result = {};
+  for (const [key, item] of Object.entries(plainValue)) {
+    result[key] = key === 'profilePhoto'
+      ? await resolveAvatar(item)
+      : await resolveProfilePhotos(item, resolveAvatar);
+  }
+  return result;
 };
 
 module.exports = {
   isResolvedUrl,
   createAvatarResolver,
   attachResolvedAvatar,
+  resolveProfilePhotos,
 };

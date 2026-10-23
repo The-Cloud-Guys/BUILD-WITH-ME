@@ -462,6 +462,7 @@ const getMe = async (req, res) => {
         userObj.profilePhoto = signedUrl;
       } catch (err) {
         console.error('Signed URL generation failed:', err.message);
+        userObj.profilePhoto = null;
       }
     }
 

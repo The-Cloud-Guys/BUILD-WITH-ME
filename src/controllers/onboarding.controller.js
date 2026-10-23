@@ -1,6 +1,7 @@
 const User = require('../models/user.model');
 const { roleValidation, skillsValidation, profileCompletionValidation } = require('../validation/onboarding.validation');
 const { getOnboardingStatus } = require('../utils/onboardingStatus');
+const { resolveProfilePhotos } = require('../services/avatar.service');
 
 // @desc    Save user's role (Step 1)
 // @route   POST /api/onboarding/role
@@ -20,11 +21,12 @@ const setRole = async (req, res) => {
     if (user.onboardingStep === 0) user.onboardingStep = 1;
     await user.save();
 
+    const responseUser = await resolveProfilePhotos(user);
     res.json({
       message: 'Role saved successfully',
       nextStep: 'skills',
       user: {
-        ...user.toObject(),
+        ...responseUser,
         onboardingCompleted: user.onboardingCompleted,
       },
       onboardingCompleted: user.onboardingCompleted,
@@ -54,11 +56,12 @@ const setSkills = async (req, res) => {
     user.onboardingStep = 2;
     await user.save();
 
+    const responseUser = await resolveProfilePhotos(user);
     res.json({
       message: 'Skills saved successfully',
       nextStep: 'profile',
       user: {
-        ...user.toObject(),
+        ...responseUser,
         onboardingCompleted: user.onboardingCompleted,
       },
       onboardingCompleted: user.onboardingCompleted,
@@ -99,11 +102,12 @@ const completeProfile = async (req, res) => {
     delete userObj.resetPasswordToken;
     delete userObj.resetPasswordExpires;
 
+    const responseUser = await resolveProfilePhotos(userObj);
     res.json({
       message: 'Profile completed successfully',
       onboardingComplete: true,
       user: {
-        ...userObj,
+        ...responseUser,
         onboardingCompleted: user.onboardingCompleted,
       },
       onboardingCompleted: user.onboardingCompleted,
@@ -121,11 +125,12 @@ const completeProfile = async (req, res) => {
 const getOnboardingStatusHandler = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('onboardingStep role skills firstName lastName bio externalLink profilePhoto');
+    const responseUser = await resolveProfilePhotos(user);
     res.json({
       onboardingStep: user.onboardingStep,
       onboardingCompleted: user.onboardingCompleted,
       onboardingStatus: getOnboardingStatus(user.onboardingStep),
-      user,
+      user: responseUser,
     });
   } catch (error) {
     console.error(error);

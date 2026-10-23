@@ -8,7 +8,9 @@ const Mute = require('../models/mute.model');
 const { Report } = require('../models/admin.model');
 const User = require('../models/user.model');
 const Project = require('../models/project.model');
+const PollVote = require('../models/pollVote.model');
 const { uploadFile, deleteFile, getSignedUrl } = require('../services/supabase.service');
+const { createAvatarResolver, resolveProfilePhotos } = require('../services/avatar.service');
 const {
   buildPostShare,
   buildCommentShare,
@@ -16,6 +18,7 @@ const {
 } = require('../services/shareLink.service');
 const multer = require('multer');
 const path = require('path');
+const mongoose = require('mongoose');
 
 // Configure multer for media upload (memory storage)
 const mediaUpload = multer({
@@ -51,6 +54,39 @@ const uploadMedia = async (files, userId, postId) => {
   return paths;
 };
 
+const resolveCommunityMedia = async (mediaPaths = []) => {
+  const resolved = await Promise.all(mediaPaths.map(async (mediaPath) => {
+    if (!mediaPath) return null;
+    if (/^https?:\/\//i.test(mediaPath)) return mediaPath;
+    try {
+      return await getSignedUrl(process.env.SUPABASE_BUCKET_COMMUNITY, mediaPath, 3600);
+    } catch (error) {
+      console.error('Community media signed URL generation failed:', error.message);
+      return null;
+    }
+  }));
+  return resolved.filter(Boolean);
+};
+
+const parseMultipartArray = (value) => {
+  if (!value || Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : value;
+  } catch (_) {
+    return String(value).split(',').map((item) => item.trim()).filter(Boolean);
+  }
+};
+
+const attachPollViewerState = async (post, userId) => {
+  if (post.postType !== 'poll' || !post.poll) return post;
+  const vote = await PollVote.findOne({ post: post._id, user: userId }).select('optionId').lean();
+  post.poll.hasVoted = Boolean(vote);
+  post.poll.selectedOptionId = vote?.optionId || null;
+  post.poll.isExpired = new Date(post.poll.expiresAt) <= new Date();
+  return post;
+};
+
 // ==============================
 // POSTS
 // ==============================
@@ -64,14 +100,36 @@ const createPost = async (req, res) => {
       req.body.tags = req.body.tags.split(',').map(tag => tag.trim()).filter(Boolean);
     }
 
-    const { content, tags } = req.body;
-    const { error } = require('../validation/community.validation').createPostValidation({ content, tags });
+    req.body.pollOptions = parseMultipartArray(req.body.pollOptions);
+    if (!req.body.postType && req.files?.length) req.body.postType = 'photo';
+    const { error, value } = require('../validation/community.validation').createPostValidation({
+      ...req.body,
+      mediaCount: req.files?.length || 0,
+    });
     if (error) return res.status(400).json({ message: error.details[0].message });
+
+    const {
+      content, tags, postType, codeLanguage, codeSnippet, linkUrl, linkTitle,
+      linkDescription, linkPreviewImage, pollQuestion, pollOptions, pollDurationHours,
+    } = value;
 
     const post = await Post.create({
       author: req.user.id,
       content,
       tags: tags || [],
+      postType,
+      code: postType === 'code' ? { language: codeLanguage, snippet: codeSnippet } : null,
+      link: postType === 'link' ? {
+        url: linkUrl,
+        title: linkTitle || '',
+        description: linkDescription || '',
+        previewImage: linkPreviewImage || '',
+      } : null,
+      poll: postType === 'poll' ? {
+        question: pollQuestion,
+        options: pollOptions.map((text) => ({ text })),
+        expiresAt: new Date(Date.now() + pollDurationHours * 60 * 60 * 1000),
+      } : null,
     });
 
     let mediaUrls = [];
@@ -85,18 +143,10 @@ const createPost = async (req, res) => {
       .populate('author', 'firstName lastName profilePhoto email role')
       .lean();
 
-    if (populatedPost.author.profilePhoto && populatedPost.author.profilePhoto.startsWith('users/')) {
-      populatedPost.author.profilePhoto = await getSignedUrl(
-        process.env.SUPABASE_BUCKET_AVATAR,
-        populatedPost.author.profilePhoto
-      );
-    }
-    populatedPost.media = await Promise.all(
-      (populatedPost.media || []).map((mediaPath) =>
-        getSignedUrl(process.env.SUPABASE_BUCKET_COMMUNITY, mediaPath, 3600)
-      )
-    );
+    populatedPost.author = await resolveProfilePhotos(populatedPost.author);
+    populatedPost.media = await resolveCommunityMedia(populatedPost.media);
     populatedPost.share = buildPostShare(populatedPost);
+    await attachPollViewerState(populatedPost, req.user.id);
 
     res.status(201).json({ 
       message: 'Post created successfully', 
@@ -129,6 +179,7 @@ const getFeed = async (req, res) => {
 
     const validPosts = posts.filter(post => post.author !== null);
 
+    const resolveAvatar = createAvatarResolver();
     for (let post of validPosts) {
       const liked = await Like.findOne({ user: userId, targetType: 'Post', targetId: post._id });
       post.isLiked = !!liked;
@@ -136,36 +187,11 @@ const getFeed = async (req, res) => {
       const saved = await Save.findOne({ user: userId, post: post._id });
       post.isSaved = !!saved;
 
-      if (post.author && post.author.profilePhoto && post.author.profilePhoto.startsWith('users/')) {
-        try {
-          post.author.profilePhoto = await getSignedUrl(
-            process.env.SUPABASE_BUCKET_AVATAR,
-            post.author.profilePhoto
-          );
-        } catch (err) {
-          console.error('Failed to generate signed URL for profile photo:', err.message);
-          // Keep the original value if signed URL fails
-        }
-      }
+      post.author = await resolveProfilePhotos(post.author, resolveAvatar);
 
-      if (post.media && post.media.length > 0) {
-        const signedMedia = [];
-        for (const mediaItem of post.media) {
-          if (mediaItem.startsWith('http://') || mediaItem.startsWith('https://')) {
-            signedMedia.push(mediaItem);
-          } else {
-            try {
-              const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_COMMUNITY, mediaItem, 3600);
-              signedMedia.push(signedUrl);
-            } catch (err) {
-              console.error('Failed to generate signed URL for media:', mediaItem, err.message);
-              signedMedia.push(mediaItem);
-            }
-          }
-        }
-        post.media = signedMedia;
-      }
+      post.media = await resolveCommunityMedia(post.media);
       post.share = buildPostShare(post);
+      await attachPollViewerState(post, userId);
     }
 
     const total = await Post.countDocuments({ isHidden: { $ne: true } });
@@ -199,18 +225,11 @@ const getPostById = async (req, res) => {
     post.isLiked = !!(await Like.findOne({ user: userId, targetType: 'Post', targetId: post._id }));
     post.isSaved = !!(await Save.findOne({ user: userId, post: post._id }));
 
-    if (post.author.profilePhoto && post.author.profilePhoto.startsWith('users/')) {
-      post.author.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, post.author.profilePhoto);
-    }
+    post.author = await resolveProfilePhotos(post.author);
 
-    post.media = await Promise.all(
-      (post.media || []).map((mediaPath) =>
-        mediaPath.startsWith('http://') || mediaPath.startsWith('https://')
-          ? mediaPath
-          : getSignedUrl(process.env.SUPABASE_BUCKET_COMMUNITY, mediaPath, 3600)
-      )
-    );
+    post.media = await resolveCommunityMedia(post.media);
     post.share = buildPostShare(post);
+    await attachPollViewerState(post, userId);
 
     res.json(post);
   } catch (error) {
@@ -234,9 +253,14 @@ const updatePost = async (req, res) => {
     if (content) post.content = content;
     if (tags) post.tags = tags;
     await post.save();
-    post._doc.share = buildPostShare(post);
+    const updatedPost = await Post.findById(post._id)
+      .populate('author', 'firstName lastName profilePhoto email role')
+      .lean();
+    updatedPost.author = await resolveProfilePhotos(updatedPost.author);
+    updatedPost.media = await resolveCommunityMedia(updatedPost.media);
+    updatedPost.share = buildPostShare(updatedPost);
 
-    res.json({ message: 'Post updated successfully', post });
+    res.json({ message: 'Post updated successfully', post: updatedPost });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -266,6 +290,7 @@ const deletePost = async (req, res) => {
     await Save.deleteMany({ post: post._id });
     await Mute.deleteMany({ post: post._id });
     await Report.deleteMany({ targetType: 'post', targetId: post._id });
+    await PollVote.deleteMany({ post: post._id });
 
     await post.deleteOne();
     res.json({ message: 'Post deleted successfully' });
@@ -357,16 +382,16 @@ const createComment = async (req, res) => {
     // Increment post's comment count
     await Post.findByIdAndUpdate(postId, { $inc: { commentCount: 1 } });
 
-    const populatedComment = await Comment.findById(comment._id).populate('author', 'firstName lastName profilePhoto email role');
-    if (populatedComment.author.profilePhoto && populatedComment.author.profilePhoto.startsWith('users/')) {
-      populatedComment.author.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, populatedComment.author.profilePhoto);
-    }
+    const populatedComment = await Comment.findById(comment._id)
+      .populate('author', 'firstName lastName profilePhoto email role')
+      .lean();
+    const responseComment = await resolveProfilePhotos(populatedComment);
     // Mark if author is also post author
     const isPostAuthor = post.author.toString() === req.user.id;
-    populatedComment._doc.isAuthor = isPostAuthor;
-    populatedComment._doc.share = buildCommentShare(populatedComment);
+    responseComment.isAuthor = isPostAuthor;
+    responseComment.share = buildCommentShare(responseComment);
 
-    res.status(201).json({ message: 'Comment added', comment: populatedComment });
+    res.status(201).json({ message: 'Comment added', comment: responseComment });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -393,6 +418,7 @@ const getComments = async (req, res) => {
     const post = await Post.findById(postId);
     const userId = req.user.id;
 
+    const resolveAvatar = createAvatarResolver();
     for (let comment of comments) {
       // Check if user liked this comment
       const liked = await Like.findOne({ user: userId, targetType: 'Comment', targetId: comment._id });
@@ -408,15 +434,11 @@ const getComments = async (req, res) => {
         const replyLiked = await Like.findOne({ user: userId, targetType: 'Comment', targetId: reply._id });
         reply.isLiked = !!replyLiked;
         reply.isAuthor = post.author.toString() === reply.author._id.toString();
-        if (reply.author.profilePhoto && reply.author.profilePhoto.startsWith('users/')) {
-          reply.author.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, reply.author.profilePhoto);
-        }
+        reply.author = await resolveProfilePhotos(reply.author, resolveAvatar);
         reply.share = buildCommentShare(reply);
       }
       comment.replies = replies;
-      if (comment.author.profilePhoto && comment.author.profilePhoto.startsWith('users/')) {
-        comment.author.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, comment.author.profilePhoto);
-      }
+      comment.author = await resolveProfilePhotos(comment.author, resolveAvatar);
       comment.share = buildCommentShare(comment);
     }
 
@@ -496,11 +518,17 @@ const getSavedPosts = async (req, res) => {
     const saves = await Save.find({ user: req.user.id }).populate({
       path: 'post',
       populate: { path: 'author', select: 'firstName lastName profilePhoto email role' }
-    }).sort('-createdAt');
-    const posts = saves.map(s => s.post).filter(p => p && p.isHidden !== true);
-    for (const post of posts) {
-      post._doc.share = buildPostShare(post);
-    }
+    }).sort('-createdAt').lean();
+    const resolveAvatar = createAvatarResolver();
+    const posts = await Promise.all(saves
+      .map((save) => save.post)
+      .filter((post) => post && post.isHidden !== true)
+      .map(async (post) => {
+        const resolvedPost = await resolveProfilePhotos(post, resolveAvatar);
+        resolvedPost.media = await resolveCommunityMedia(resolvedPost.media);
+        resolvedPost.share = buildPostShare(resolvedPost);
+        return resolvedPost;
+      }));
     res.json(posts);
   } catch (error) {
     console.error(error);
@@ -540,8 +568,10 @@ const followUser = async (req, res) => {
 const getFollowers = async (req, res) => {
   try {
     const userId = req.params.userId;
-    const followers = await Follow.find({ following: userId }).populate('follower', 'firstName lastName profilePhoto email role');
-    res.json(followers.map(f => f.follower));
+    const followers = await Follow.find({ following: userId })
+      .populate('follower', 'firstName lastName profilePhoto email role')
+      .lean();
+    res.json(await resolveProfilePhotos(followers.map((follow) => follow.follower)));
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -554,8 +584,10 @@ const getFollowers = async (req, res) => {
 const getFollowing = async (req, res) => {
   try {
     const userId = req.params.userId;
-    const following = await Follow.find({ follower: userId }).populate('following', 'firstName lastName profilePhoto email role');
-    res.json(following.map(f => f.following));
+    const following = await Follow.find({ follower: userId })
+      .populate('following', 'firstName lastName profilePhoto email role')
+      .lean();
+    res.json(await resolveProfilePhotos(following.map((follow) => follow.following)));
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -597,15 +629,16 @@ const mutePost = async (req, res) => {
 const reportPost = async (req, res) => {
   try {
     const postId = req.params.postId;
-    const { reason } = req.body;
-    
-    if (!reason || reason.trim().length === 0) {
-      return res.status(400).json({ message: 'Reason is required' });
-    }
+    const { error, value } = require('../validation/community.validation').reportValidation(req.body);
+    if (error) return res.status(400).json({ message: error.details[0].message });
+    const { reason, offenseType, projectId } = value;
 
     const post = await Post.findById(postId);
     if (!post) {
       return res.status(404).json({ message: 'Post not found' });
+    }
+    if (projectId && !(await Project.exists({ _id: projectId }))) {
+      return res.status(404).json({ message: 'Related project not found' });
     }
 
     const existing = await Report.findOne({ 
@@ -624,6 +657,8 @@ const reportPost = async (req, res) => {
       targetType: 'post',
       targetId: postId,
       reason: reason.trim(),
+      offenseType,
+      relatedProject: projectId || null,
       status: 'pending',
       severity: 'medium'
     });
@@ -633,7 +668,10 @@ const reportPost = async (req, res) => {
       report: {
         id: report._id,
         reportId: report.reportId,
-        status: report.status
+        status: report.status,
+        offenseType: report.offenseType,
+        targetType: report.targetType,
+        projectId: report.relatedProject
       }
     });
   } catch (error) {
@@ -649,15 +687,16 @@ const reportPost = async (req, res) => {
 const reportComment = async (req, res) => {
   try {
     const commentId = req.params.commentId;
-    const { reason } = req.body;
-    
-    if (!reason || reason.trim().length === 0) {
-      return res.status(400).json({ message: 'Reason is required' });
-    }
+    const { error, value } = require('../validation/community.validation').reportValidation(req.body);
+    if (error) return res.status(400).json({ message: error.details[0].message });
+    const { reason, offenseType, projectId } = value;
 
     const comment = await Comment.findById(commentId);
     if (!comment) {
       return res.status(404).json({ message: 'Comment not found' });
+    }
+    if (projectId && !(await Project.exists({ _id: projectId }))) {
+      return res.status(404).json({ message: 'Related project not found' });
     }
 
     const existing = await Report.findOne({ 
@@ -676,6 +715,8 @@ const reportComment = async (req, res) => {
       targetType: 'comment',
       targetId: commentId,
       reason: reason.trim(),
+      offenseType,
+      relatedProject: projectId || null,
       status: 'pending',
       severity: 'medium'
     });
@@ -685,12 +726,67 @@ const reportComment = async (req, res) => {
       report: {
         id: report._id,
         reportId: report.reportId,
-        status: report.status
+        status: report.status,
+        offenseType: report.offenseType,
+        targetType: report.targetType,
+        projectId: report.relatedProject
       }
     });
   } catch (error) {
     console.error('Error in reportComment:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// @desc Report a project
+// @route POST /api/community/report/project/:projectId
+// @access Private
+const reportProject = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { error, value } = require('../validation/community.validation').reportValidation({
+      ...req.body,
+      projectId,
+    });
+    if (error) return res.status(400).json({ message: error.details[0].message });
+
+    const project = await Project.findById(projectId).select('owner title');
+    if (!project) return res.status(404).json({ message: 'Project not found' });
+    const existing = await Report.findOne({
+      reporter: req.user.id,
+      targetId: projectId,
+      targetType: 'project',
+    });
+    if (existing) {
+      return res.status(400).json({ message: 'You have already reported this project' });
+    }
+
+    const report = await Report.create({
+      reporter: req.user.id,
+      reportedUser: project.owner,
+      targetType: 'project',
+      targetId: project._id,
+      relatedProject: project._id,
+      offenseType: value.offenseType,
+      reason: value.reason,
+      status: 'pending',
+      severity: 'medium',
+    });
+
+    return res.status(201).json({
+      message: 'Project reported. Our team will review it.',
+      report: {
+        id: report._id,
+        reportId: report.reportId,
+        status: report.status,
+        offenseType: report.offenseType,
+        targetType: report.targetType,
+        projectId: report.relatedProject,
+      },
+    });
+  } catch (error) {
+    console.error('Error in reportProject:', error);
+    return res.status(500).json({ message: 'Server error' });
   }
 };
 
@@ -739,15 +835,15 @@ const getUserProfile = async (req, res) => {
   .sort('-createdAt')
   .lean();
 
-    const profileObj = user.toObject();
-    if (profileObj.profilePhoto && profileObj.profilePhoto.startsWith('users/')) {
-      profileObj.profilePhoto = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, profileObj.profilePhoto);
-    }
+    const resolveAvatar = createAvatarResolver();
+    const profileObj = await resolveProfilePhotos(user, resolveAvatar);
     profileObj.share = buildProfileShare(profileObj);
-    for (const post of posts) {
-      post.share = buildPostShare(post);
-    }
-
+    const resolvedPosts = await Promise.all(posts.map(async (post) => {
+      const resolvedPost = await resolveProfilePhotos(post, resolveAvatar);
+      resolvedPost.media = await resolveCommunityMedia(resolvedPost.media);
+      resolvedPost.share = buildPostShare(resolvedPost);
+      return resolvedPost;
+    }));
     res.json({
       user: profileObj,
       stats: {
@@ -756,11 +852,74 @@ const getUserProfile = async (req, res) => {
         posts: postsCount,
       },
       projects: projectsWithRole,
-      posts,
+      posts: resolvedPosts,
     });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc Vote once on an active poll
+// @route POST /api/community/posts/:postId/poll/vote
+// @access Private
+const voteOnPoll = async (req, res) => {
+  const { postId } = req.params;
+  const { optionId } = req.body;
+  if (!mongoose.isValidObjectId(postId) || !mongoose.isValidObjectId(optionId)) {
+    return res.status(400).json({ message: 'Valid postId and optionId are required' });
+  }
+
+  let session;
+  try {
+    session = await mongoose.startSession();
+    await session.withTransaction(async () => {
+      const post = await Post.findOne({
+        _id: postId,
+        postType: 'poll',
+        isHidden: { $ne: true },
+      }).session(session);
+      if (!post?.poll) {
+        const error = new Error('Poll not found');
+        error.statusCode = 404;
+        throw error;
+      }
+      if (post.poll.expiresAt <= new Date()) {
+        const error = new Error('Poll has ended');
+        error.statusCode = 409;
+        throw error;
+      }
+      if (!post.poll.options.id(optionId)) {
+        const error = new Error('Poll option not found');
+        error.statusCode = 400;
+        throw error;
+      }
+      const existingVote = await PollVote.exists({ post: postId, user: req.user.id }).session(session);
+      if (existingVote) {
+        const error = new Error('You have already voted on this poll');
+        error.statusCode = 409;
+        throw error;
+      }
+      await PollVote.create([{ post: postId, user: req.user.id, optionId }], { session });
+      await Post.updateOne(
+        { _id: postId, 'poll.options._id': optionId },
+        { $inc: { 'poll.options.$.voteCount': 1, 'poll.totalVotes': 1 } },
+        { session }
+      );
+    });
+
+    const updatedPost = await Post.findById(postId).select('postType poll').lean();
+    await attachPollViewerState(updatedPost, req.user.id);
+    return res.json({ message: 'Vote recorded successfully', poll: updatedPost.poll });
+  } catch (error) {
+    const status = error.code === 11000 ? 409 : (error.statusCode || 500);
+    return res.status(status).json({
+      message: error.code === 11000
+        ? 'You have already voted on this poll'
+        : status === 500 ? 'Unable to record vote' : error.message,
+    });
+  } finally {
+    if (session) await session.endSession();
   }
 };
 
@@ -782,6 +941,8 @@ module.exports = {
   mutePost,
   reportPost,
   reportComment,
+  reportProject,
+  voteOnPoll,
   getUserProfile,
   mediaUpload,
 };

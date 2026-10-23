@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const {
   createAvatarResolver,
   attachResolvedAvatar,
+  resolveProfilePhotos,
 } = require('../src/services/avatar.service');
 
 test('avatar paths resolve through the existing signed URL mechanism', async () => {
@@ -54,4 +55,22 @@ test('multiple members with the same avatar path share one signing operation', a
   ]);
   assert.equal(calls, 1);
   assert.equal(members[0].profilePhoto, members[1].profilePhoto);
+});
+
+test('nested API user objects never expose raw avatar storage paths', async () => {
+  const resolveAvatar = createAvatarResolver({
+    bucket: 'avatars',
+    signUrl: async (bucket, value) => `https://storage.example/${bucket}/${value}?signed=1`,
+  });
+  const response = await resolveProfilePhotos({
+    author: { profilePhoto: 'users/author/photo.jpg' },
+    members: [
+      { profilePhoto: 'users/member/photo.jpg' },
+      { profilePhoto: 'https://cdn.example/existing.jpg' },
+    ],
+  }, resolveAvatar);
+
+  assert.match(response.author.profilePhoto, /^https:\/\/storage\.example\/avatars\//);
+  assert.match(response.members[0].profilePhoto, /^https:\/\/storage\.example\/avatars\//);
+  assert.equal(response.members[1].profilePhoto, 'https://cdn.example/existing.jpg');
 });

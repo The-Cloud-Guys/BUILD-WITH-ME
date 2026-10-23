@@ -47,6 +47,22 @@ test('Firebase sessions require recent authentication and revocation checks', ()
   assert.match(source, /nowSeconds - decoded\.auth_time > 5 \* 60/);
 });
 
+test('admin session cookie is cross-site secure and limited to twelve hours', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'controllers', 'adminAuth.controller.js'), 'utf8');
+  assert.match(source, /ADMIN_SESSION_MAX_AGE_MS = 12 \* 60 \* 60 \* 1000/);
+  assert.match(source, /httpOnly: true/);
+  assert.match(source, /secure: true/);
+  assert.match(source, /sameSite: 'none'/);
+  assert.match(source, /path: '\/api\/admin'/);
+});
+
+test('Express trusts the Render proxy and permits credentialed admin-origin CORS', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'index.js'), 'utf8');
+  assert.match(source, /app\.set\('trust proxy', 1\)/);
+  assert.match(source, /ADMIN_DASHBOARD_URL \|\| 'https:\/\/conexd-admin\.onrender\.com'/);
+  assert.match(source, /credentials: true/);
+});
+
 test('direct Google and Microsoft admin SSO implementation is removed', () => {
   assert.equal(fs.existsSync(path.join(__dirname, '..', 'src', 'services', 'adminSso.service.js')), false);
   const envExample = fs.readFileSync(path.join(__dirname, '..', '.env.example'), 'utf8');

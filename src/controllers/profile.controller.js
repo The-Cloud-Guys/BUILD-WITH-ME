@@ -2,6 +2,7 @@ const User = require('../models/user.model');
 const { uploadFile, deleteFile, getSignedUrl } = require('../services/supabase.service');
 const sharp = require('sharp');
 const { getOnboardingStatus } = require('../utils/onboardingStatus');
+const { resolveProfilePhotos } = require('../services/avatar.service');
 
 // ==============================
 // HELPERS
@@ -47,15 +48,7 @@ const getMyProfile = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    const userObj = user.toObject();
-    if (userObj.profilePhoto && typeof userObj.profilePhoto === 'string' && userObj.profilePhoto.startsWith('users/')) {
-      try {
-        const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, userObj.profilePhoto);
-        userObj.profilePhoto = signedUrl;
-      } catch (err) {
-        console.error('Signed URL generation failed:', err.message);
-      }
-    }
+    const userObj = await resolveProfilePhotos(user);
     res.json({
       ...userObj,
       onboardingCompleted: user.onboardingCompleted,
@@ -130,11 +123,7 @@ const createUserProfile = async (req, res) => {
     }
 
     // Generate signed URL for photo if needed
-    const userObj = updatedUser.toObject();
-    if (userObj.profilePhoto && userObj.profilePhoto.startsWith('users/')) {
-      const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, userObj.profilePhoto);
-      userObj.profilePhoto = signedUrl;
-    }
+    const userObj = await resolveProfilePhotos(updatedUser);
 
     res.json({
       message: 'Profile created successfully',
@@ -198,11 +187,7 @@ const updateUserProfile = async (req, res) => {
       await deleteFile(process.env.SUPABASE_BUCKET_AVATAR, oldPhotoToDelete);
     }
 
-    const userObj = updatedUser.toObject();
-    if (userObj.profilePhoto && userObj.profilePhoto.startsWith('users/')) {
-      const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, userObj.profilePhoto);
-      userObj.profilePhoto = signedUrl;
-    }
+    const userObj = await resolveProfilePhotos(updatedUser);
 
     res.json({
       message: 'Profile updated successfully',
@@ -247,15 +232,7 @@ const updateProfile = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    const userObj = user.toObject();
-    if (userObj.profilePhoto && typeof userObj.profilePhoto === 'string' && userObj.profilePhoto.startsWith('users/')) {
-      try {
-        const signedUrl = await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, userObj.profilePhoto);
-        userObj.profilePhoto = signedUrl;
-      } catch (err) {
-        console.error('Signed URL generation failed:', err.message);
-      }
-    }
+    const userObj = await resolveProfilePhotos(user);
 
     res.json({ message: 'Profile updated successfully', user: userObj });
   } catch (error) {

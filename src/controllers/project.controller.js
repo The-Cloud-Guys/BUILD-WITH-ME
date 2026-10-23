@@ -83,6 +83,7 @@ const generateCVPath = (userId, projectId, originalName) => {
 const getSignedUrlForFile = async (bucket, filePath) => {
   try {
     if (!filePath) return null;
+    if (/^https?:\/\//i.test(filePath)) return filePath;
     return await getSignedUrl(bucket, filePath);
   } catch (error) {
     console.error('Signed URL generation failed:', error.message);

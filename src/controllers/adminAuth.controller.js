@@ -6,7 +6,6 @@ const AdminInvite = require('../models/adminInvite.model');
 const { AuditLog } = require('../models/admin.model');
 const { DEFAULT_ADMIN_PERMISSIONS } = require('../constants/admin.constants');
 const { hashInvitationToken } = require('../services/adminInvitation.service');
-const { getDurationMs } = require('../services/duration.service');
 const {
   createFirebaseSessionCookie,
   revokeFirebaseSessions,
@@ -20,21 +19,22 @@ const {
   acceptFirebaseInvitationValidation,
 } = require('../validation/adminAuth.validation');
 
+const ADMIN_SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
 const getSessionDuration = () => {
-  const duration = getDurationMs(process.env.ADMIN_SESSION_EXPIRES_IN, '12h');
-  return Math.min(Math.max(duration, 5 * 60 * 1000), 14 * 24 * 60 * 60 * 1000);
+  return ADMIN_SESSION_MAX_AGE_MS;
 };
 
 const adminCookieOptions = () => ({
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+  secure: true,
+  sameSite: 'none',
   path: '/api/admin',
 });
 
 const setAdminSessionCookie = (res, sessionCookie) => res.cookie('adminSession', sessionCookie, {
   ...adminCookieOptions(),
-  maxAge: getSessionDuration(),
+  maxAge: ADMIN_SESSION_MAX_AGE_MS,
 });
 
 const clearAdminCookies = (res) => res.clearCookie('adminSession', adminCookieOptions());

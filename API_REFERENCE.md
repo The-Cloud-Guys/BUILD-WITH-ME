@@ -230,6 +230,8 @@ The mobile client must configure Firebase Messaging background handling, `getIni
 
 Admin identity is Firebase-only. The backend exchanges a recently issued Firebase ID token for an HttpOnly `adminSession` Firebase session cookie. MongoDB `AdminAccount` records remain the authority for activation, roles and permissions. There is no public admin registration or password-login endpoint.
 
+The `adminSession` cookie is valid for 12 hours and is always issued with `HttpOnly`, `Secure`, `SameSite=None`, and `Path=/api/admin`. The server trusts one Render proxy hop and permits credentialed CORS requests from `ADMIN_DASHBOARD_URL` (falling back to `https://conexd-admin.onrender.com`). Every browser admin request must use `credentials: "include"`.
+
 ### Admin authentication (`/api/admin/auth`)
 
 | Method | Endpoint | Access | Input | Success response |
@@ -265,6 +267,8 @@ All routes below require the Firebase `adminSession` cookie and their assigned M
 | GET | `/permissions` | admin | none | object: permission presets |
 
 User status is explicit and mutually exclusive: `terminated` means `isActive === false`; `suspended` means the account is active but `isSuspended === true`; `pending` means the account is neither terminated nor suspended but email verification or onboarding step 3 is incomplete; otherwise it is `active`. `pendingReason` is `email_verification_required`, `onboarding_incomplete`, or `null`. Both `/users` and `/dashboard` expose pending counts using this same definition; `/users.counts` also includes active, suspended, terminated, and total counts.
+
+User `profilePhoto` values in API responses are resolved URLs, never internal values such as `users/<id>/profile.jpg`. Private Supabase avatar and community-media paths are converted to short-lived signed URLs. If signing fails, the field becomes `null` (or the failed media item is omitted) rather than leaking an unusable internal path. Already absolute HTTP(S) URLs are preserved; this includes externally hosted link-preview images such as `link.previewImage`.
 
 ## Socket events
 

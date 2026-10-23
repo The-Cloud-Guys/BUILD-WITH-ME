@@ -6,6 +6,7 @@ const { Message, ChatRoom, UnreadMessage } = require('../models/chat.model');
 const CallSession = require('../models/callSession.model');
 const { createNotification } = require('../services/notification.service');
 const { sendChatMessagePush } = require('../services/pushNotification.service');
+const { resolveProfilePhotos } = require('../services/avatar.service');
 
 class SocketManager {
   constructor(server) {
@@ -242,7 +243,7 @@ class SocketManager {
         )
     );
 
-    return populatedMessage;
+    return resolveProfilePhotos(populatedMessage);
   }
 
   async getRoomParticipants(roomId) {

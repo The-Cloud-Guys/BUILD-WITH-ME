@@ -7,10 +7,16 @@ const Notification = require('../models/notification.model');
 const Comment = require('../models/comment.model'); 
 const { createNotification } = require('../services/notification.service');
 const { getSignedUrl } = require('../services/supabase.service');
+const { createAvatarResolver, resolveProfilePhotos } = require('../services/avatar.service');
 const {
   buildProjectMemberRoleMap,
   attachAppliedProjectRoles,
 } = require('../services/projectMemberRole.service');
+const {
+  USER_STATUS_FILTERS,
+  getPendingReason,
+  getUserStatus,
+} = require('../utils/userStatus');
 
 // ==============================
 // HELPER FUNCTIONS
@@ -220,12 +226,14 @@ const getDashboardStats = async (req, res) => {
     oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
 
     // Get counts
-    const [totalUsers, totalProjects, totalReports, activeUsers, pendingUsers] = await Promise.all([
+    const [totalUsers, totalProjects, totalReports, activeUsers, pendingUsers, suspendedUsers, terminatedUsers] = await Promise.all([
       User.countDocuments(),
       Project.countDocuments(),
       Report.countDocuments(),
-      User.countDocuments({ isActive: true, isSuspended: false }),
-      User.countDocuments({ emailVerified: true, onboardingStep: { $lt: 3 } })
+      User.countDocuments(USER_STATUS_FILTERS.active),
+      User.countDocuments(USER_STATUS_FILTERS.pending),
+      User.countDocuments(USER_STATUS_FILTERS.suspended),
+      User.countDocuments(USER_STATUS_FILTERS.terminated),
     ]);
 
     // 24-hour changes
@@ -281,7 +289,8 @@ const getDashboardStats = async (req, res) => {
         totalUsers,
         activeUsers,
         pendingUsers,
-        suspendedUsers: totalUsers - activeUsers - pendingUsers,
+        suspendedUsers,
+        terminatedUsers,
         totalProjects,
         totalReports,
         newRegistrations24h: registrationsLast24h,
@@ -337,24 +346,10 @@ const getUsers = async (req, res) => {
 
     // Status filter - FIX B
     if (status !== 'all') {
-      switch (status) {
-        case 'active':
-          filter.isActive = true;
-          filter.isSuspended = false;
-          break;
-        case 'suspended':
-          filter.isSuspended = true;
-          break;
-        case 'terminated':
-          filter.isActive = false;
-          break;
-        case 'pending':
-          filter.emailVerified = true;
-          filter.onboardingStep = { $lt: 3 };
-          break;
-        default:
-          return res.status(400).json({ message: 'Invalid user status filter' });
+      if (!USER_STATUS_FILTERS[status]) {
+        return res.status(400).json({ message: 'Invalid user status filter' });
       }
+      filter.$and = [...(filter.$and || []), USER_STATUS_FILTERS[status]];
     }
 
     // Role filter
@@ -379,6 +374,8 @@ const getUsers = async (req, res) => {
 
       return {
         ...user,
+        status: getUserStatus(user),
+        pendingReason: getPendingReason(user),
         projectCount,
         reportCount,
         lastLogin,
@@ -389,11 +386,13 @@ const getUsers = async (req, res) => {
     }));
 
     // Counts - FIX B (updated conditions)
-    const [total, active, suspended, pending] = await Promise.all([
+    const [filteredTotal, total, active, suspended, pending, terminated] = await Promise.all([
       User.countDocuments(filter),
-      User.countDocuments({ isActive: true, isSuspended: false }),
-      User.countDocuments({ isSuspended: true }),
-      User.countDocuments({ emailVerified: true, onboardingStep: { $lt: 3 } }),
+      User.countDocuments(),
+      User.countDocuments(USER_STATUS_FILTERS.active),
+      User.countDocuments(USER_STATUS_FILTERS.suspended),
+      User.countDocuments(USER_STATUS_FILTERS.pending),
+      User.countDocuments(USER_STATUS_FILTERS.terminated),
     ]);
 
     res.json({
@@ -402,12 +401,13 @@ const getUsers = async (req, res) => {
         total,
         active,
         suspended,
-        pending
+        pending,
+        terminated
       },
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        total
+        total: filteredTotal
       }
     });
   } catch (error) {
@@ -450,6 +450,8 @@ const getUserDetails = async (req, res) => {
     res.json({
       user: {
         ...user,
+        status: getUserStatus(user),
+        pendingReason: getPendingReason(user),
         profilePhoto: user.profilePhoto ? 
           await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, user.profilePhoto) : 
           null
@@ -639,7 +641,8 @@ const getAdminReports = async (req, res) => {
       search = '', 
       status = 'all', 
       type = 'all',
-      role = 'all'
+      role = 'all',
+      offenseType = 'all'
     } = req.query;
 
     const filter = {};
@@ -657,6 +660,7 @@ const getAdminReports = async (req, res) => {
 
     // Type filter - FIX C: use targetType instead of type
     if (type !== 'all') filter.targetType = type;
+    if (offenseType !== 'all') filter.offenseType = offenseType;
 
     // Role filter on reported user
     if (role !== 'all') {
@@ -667,6 +671,7 @@ const getAdminReports = async (req, res) => {
     const reports = await Report.find(filter)
       .populate('reporter', 'firstName lastName profilePhoto email role')
       .populate('reportedUser', 'firstName lastName profilePhoto email role')
+      .populate('relatedProject', 'title description stage status owner')
       .sort('-createdAt')
       .skip((page - 1) * limit)
       .limit(parseInt(limit))
@@ -674,22 +679,31 @@ const getAdminReports = async (req, res) => {
 
     // Process reports with async operations using Promise.all
     const reportsWithSignedUrls = await Promise.all(
-      reports.map(async (r) => ({
-        ...r,
-        timeAgo: getTimeAgo(r.createdAt),
-        reporter: {
-          ...r.reporter,
-          profilePhoto: r.reporter?.profilePhoto ? 
-            await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, r.reporter.profilePhoto) : 
-            null
-        },
-        reportedUser: {
-          ...r.reportedUser,
-          profilePhoto: r.reportedUser?.profilePhoto ? 
-            await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, r.reportedUser.profilePhoto) : 
-            null
-        }
-      }))
+      reports.map(async (r) => {
+        const targetModel = getTargetModel(r.targetType);
+        const target = targetModel
+          ? await targetModel.findById(r.targetId).lean()
+          : r.targetType === 'user' ? r.reportedUser : null;
+        return {
+          ...r,
+          offenseType: r.offenseType || 'other',
+          target,
+          project: r.relatedProject || (r.targetType === 'project' ? target : null),
+          timeAgo: getTimeAgo(r.createdAt),
+          reporter: {
+            ...r.reporter,
+            profilePhoto: r.reporter?.profilePhoto
+              ? await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, r.reporter.profilePhoto)
+              : null,
+          },
+          reportedUser: {
+            ...r.reportedUser,
+            profilePhoto: r.reportedUser?.profilePhoto
+              ? await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, r.reportedUser.profilePhoto)
+              : null,
+          },
+        };
+      })
     );
 
     // Get counts for dashboard
@@ -826,7 +840,7 @@ const getAdminUsers = async (req, res) => {
       .sort('-createdAt')
       .lean();
 
-    res.json(admins);
+    res.json(await resolveProfilePhotos(admins));
   } catch (error) {
     console.error('Error getting admin users:', error);
     res.status(500).json({ message: 'Server error' });
@@ -906,7 +920,7 @@ const addAdmin = async (req, res) => {
 
     res.json({ 
       message: 'Admin added successfully', 
-      admin: populatedAdmin 
+      admin: await resolveProfilePhotos(populatedAdmin),
     });
   } catch (error) {
     console.error('Error adding admin:', error);
@@ -1479,7 +1493,7 @@ const getActivities = async (req, res) => {
     };
 
     res.json({
-      activities,
+      activities: await resolveProfilePhotos(activities),
       counts,
       pagination: {
         page: parseInt(page),
@@ -1525,6 +1539,7 @@ const getAdminActivities = async (req, res) => {
       .limit(parseInt(limit))
       .lean();
 
+    const resolveAvatar = createAvatarResolver();
     const activitiesWithDetails = await Promise.all(
       activities.map(async (activity) => {
         const actor = activity.adminAccount || activity.admin;
@@ -1534,9 +1549,7 @@ const getAdminActivities = async (req, res) => {
           timeAgo: getTimeAgo(activity.createdAt),
           admin: actor ? {
             ...actor,
-            profilePhoto: actor.profilePhoto
-              ? await getSignedUrl(process.env.SUPABASE_BUCKET_AVATAR, actor.profilePhoto)
-              : null,
+            profilePhoto: await resolveAvatar(actor.profilePhoto),
           } : null,
         };
       })

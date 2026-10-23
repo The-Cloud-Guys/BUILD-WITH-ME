@@ -1,6 +1,7 @@
 const CallSession = require('../models/callSession.model');
 const { ChatRoom } = require('../models/chat.model');
 const { sendCallPush } = require('../services/pushNotification.service');
+const { resolveProfilePhotos } = require('../services/avatar.service');
 
 const isParticipant = (room, userId) =>
   room.participants.some((id) => id.toString() === userId.toString());
@@ -10,7 +11,7 @@ const emit = (req, roomId, event, payload) => {
   if (sockets) sockets.io.to(`room:${roomId}`).emit(event, payload);
 };
 
-const serialize = (call) => ({
+const serialize = (call) => resolveProfilePhotos({
   _id: call._id,
   roomId: call.room?._id || call.room,
   caller: call.caller,
@@ -64,7 +65,7 @@ const createCall = async (req, res) => {
     const populated = await CallSession.findById(call._id)
       .populate('caller', 'firstName lastName profilePhoto role')
       .lean();
-    const payload = serialize(populated);
+    const payload = await serialize(populated);
     emit(req, roomId, 'call-incoming', payload);
     await sendCallPush({ recipientIds: recipients, call: populated, caller: populated.caller });
     return res.status(201).json({ success: true, call: payload });
@@ -89,7 +90,7 @@ const getCall = async (req, res) => {
       call.status = 'missed';
       call.endedAt = endedAt;
     }
-    return res.json({ call: serialize(call) });
+    return res.json({ call: await serialize(call) });
   } catch (error) {
     console.error('Get call failed:', error.message);
     return res.status(500).json({ message: 'Server error' });
@@ -109,7 +110,7 @@ const acceptCall = async (req, res) => {
       { new: true, arrayFilters: [{ 'recipient.user': req.user._id }] }
     ).populate('caller', 'firstName lastName profilePhoto role');
     if (!call) return res.status(409).json({ message: 'Call is unavailable, expired, or already answered' });
-    const payload = serialize(call);
+    const payload = await serialize(call);
     emit(req, call.room, 'call-accepted', payload);
     await sendCallPush({ recipientIds: [call.caller._id || call.caller], call, caller: req.user, eventType: 'call_accepted' });
     return res.json({ success: true, call: payload });
@@ -141,7 +142,7 @@ const declineCall = async (req, res) => {
       call.endedAt = now;
       await call.save();
     }
-    const payload = serialize(call);
+    const payload = await serialize(call);
     emit(req, call.room, 'call-declined', { ...payload, declinedBy: req.user._id });
     await sendCallPush({ recipientIds: [call.caller._id || call.caller], call, caller: req.user, eventType: 'call_declined' });
     return res.json({ success: true, call: payload });
@@ -169,7 +170,7 @@ const finishCall = (status) => async (req, res) => {
     call.status = status;
     call.endedAt = new Date();
     await call.save();
-    const payload = serialize(call);
+    const payload = await serialize(call);
     emit(req, call.room, `call-${status}`, payload);
     const recipients = [callerId, ...call.recipients.map(String)].filter((id) => id !== userId);
     await sendCallPush({ recipientIds: recipients, call, caller: req.user, eventType: `call_${status}` });
