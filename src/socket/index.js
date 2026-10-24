@@ -7,6 +7,11 @@ const CallSession = require('../models/callSession.model');
 const { createNotification } = require('../services/notification.service');
 const { sendChatMessagePush } = require('../services/pushNotification.service');
 const { resolveProfilePhotos } = require('../services/avatar.service');
+const {
+  populateReplyTo,
+  serializeReplyTo,
+  validateReplyTarget,
+} = require('../services/chatReply.service');
 
 class SocketManager {
   constructor(server) {
@@ -69,11 +74,11 @@ class SocketManager {
 
       socket.on('send-message', async (data) => {
         try {
-          const { roomId, content } = data;
+          const { roomId, content, replyTo } = data;
           if (!(await this.isRoomMember(socket.userId, roomId))) {
             throw new Error('Not a member of this room');
           }
-          const message = await this.handleSendMessage(socket.userId, roomId, content);
+          const message = await this.handleSendMessage(socket.userId, roomId, content, replyTo);
           
           this.io.to(`room:${roomId}`).emit('new-message', message);
           const room = await ChatRoom.findById(roomId);
@@ -212,19 +217,23 @@ class SocketManager {
     console.log(`User ${socket.userId} joined ${rooms.length} rooms`);
   }
 
-  async handleSendMessage(userId, roomId, content) {
+  async handleSendMessage(userId, roomId, content, replyTo = null) {
     const participants = await this.getRoomParticipants(roomId);
+    const replyTargetId = await validateReplyTarget({ replyTo, roomId });
     const message = await Message.create({
       room: roomId,
       sender: userId,
       content: content || '',
       media: [],
+      replyTo: replyTargetId,
       deliveredTo: participants
     });
 
-    const populatedMessage = await Message.findById(message._id)
-      .populate('sender', 'firstName lastName profilePhoto email role')
-      .lean();
+    const populatedMessageQuery = Message.findById(message._id)
+      .populate('sender', 'firstName lastName profilePhoto email role');
+    const populatedMessage = serializeReplyTo(
+      await populateReplyTo(populatedMessageQuery).lean()
+    );
 
     await ChatRoom.findByIdAndUpdate(roomId, {
       lastMessage: message._id,

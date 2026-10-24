@@ -27,6 +27,11 @@ const messageSchema = new mongoose.Schema({
     enum: ['image', 'video', 'audio', 'file', null],
     default: null
   },
+  replyTo: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Message',
+    default: null
+  },
   readBy: [{
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     readAt: { type: Date, default: Date.now }

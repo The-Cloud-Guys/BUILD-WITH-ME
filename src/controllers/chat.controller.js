@@ -5,6 +5,12 @@ const User = require('../models/user.model');
 const { getSignedUrl, uploadFile, deleteFile } = require('../services/supabase.service');
 const { createAvatarResolver } = require('../services/avatar.service');
 const { sendChatMessagePush } = require('../services/pushNotification.service');
+const {
+  populateReplyTo,
+  replyPopulate,
+  serializeReplyTo,
+  validateReplyTarget,
+} = require('../services/chatReply.service');
 const mongoose = require('mongoose');
 const multer = require('multer');
 const path = require('path');
@@ -84,6 +90,7 @@ const serializeRoom = async ({ room, userId, unreadCount = 0, socketManager, res
       },
     };
   }
+  lastMessage = serializeReplyTo(lastMessage);
   const otherParticipant = room.type === 'direct'
     ? participants.find((participant) => participant._id.toString() !== userId.toString()) || null
     : null;
@@ -127,7 +134,10 @@ const getUserRooms = async (req, res) => {
     .populate('participants', 'firstName lastName profilePhoto email role')
     .populate({
       path: 'lastMessage',
-      populate: { path: 'sender', select: 'firstName lastName profilePhoto email role' },
+      populate: [
+        { path: 'sender', select: 'firstName lastName profilePhoto email role' },
+        replyPopulate,
+      ],
     })
     .populate('projectId', 'title stage')
     .sort('-lastMessageAt')
@@ -197,7 +207,10 @@ const getOrCreateDirectRoom = async (req, res) => {
       .populate('participants', 'firstName lastName profilePhoto email role')
       .populate({
         path: 'lastMessage',
-        populate: { path: 'sender', select: 'firstName lastName profilePhoto email role' },
+        populate: [
+          { path: 'sender', select: 'firstName lastName profilePhoto email role' },
+          replyPopulate,
+        ],
       })
       .lean();
     const response = await serializeRoom({
@@ -230,7 +243,7 @@ const getRoomMessages = async (req, res) => {
       return res.status(403).json({ message: 'Not a member of this room' });
     }
 
-    const messages = await Message.find({
+    const messagesQuery = Message.find({
       room: roomId,
       isDeleted: false,
       deletedFor: { $nin: [userId] }
@@ -238,8 +251,8 @@ const getRoomMessages = async (req, res) => {
     .populate('sender', 'firstName lastName profilePhoto email role')
     .sort('-createdAt')
     .skip((page - 1) * limit)
-    .limit(limit)
-    .lean();
+    .limit(limit);
+    const messages = await populateReplyTo(messagesQuery).lean();
 
     // Mark messages as read
     const messageIds = messages.map(m => m._id);
@@ -260,13 +273,15 @@ const getRoomMessages = async (req, res) => {
 
     const resolveAvatar = createAvatarResolver();
     const socketManager = req.app.get('socketManager');
-    const resolvedMessages = await Promise.all(messages.reverse().map(async (message) => ({
-      ...message,
-      sender: message.sender ? {
-        ...message.sender,
-        profilePhoto: await resolveAvatar(message.sender.profilePhoto),
-      } : null,
-    })));
+    const resolvedMessages = await Promise.all(messages.reverse().map(async (message) =>
+      serializeReplyTo({
+        ...message,
+        sender: message.sender ? {
+          ...message.sender,
+          profilePhoto: await resolveAvatar(message.sender.profilePhoto),
+        } : null,
+      })
+    ));
     const participantWithRoles = await Promise.all(participants.map(async (participant) => ({
       ...participant,
       profilePhoto: await resolveAvatar(participant.profilePhoto),
@@ -300,14 +315,19 @@ const getRoomMessages = async (req, res) => {
 const sendMessage = async (req, res) => {
   try {
     const { roomId } = req.params;
-    const { content } = req.body;
+    const { content, replyTo } = req.body;
     const userId = req.user.id;
+
+    if (!mongoose.isValidObjectId(roomId)) {
+      return res.status(400).json({ message: 'Invalid room ID' });
+    }
 
     const room = await ChatRoom.findById(roomId);
     if (!room) return res.status(404).json({ message: 'Room not found' });
     if (!isParticipant(room, userId)) {
       return res.status(403).json({ message: 'Not a member of this room' });
     }
+    const replyTargetId = await validateReplyTarget({ replyTo, roomId });
 
     let media = [];
     let mediaType = null;
@@ -321,6 +341,7 @@ const sendMessage = async (req, res) => {
       content: content || '',
       media,
       mediaType,
+      replyTo: replyTargetId,
       deliveredTo: room.participants
     });
 
@@ -338,9 +359,11 @@ const sendMessage = async (req, res) => {
       );
     }
 
-    let populatedMessage = await Message.findById(message._id)
-      .populate('sender', 'firstName lastName profilePhoto email role')
-      .lean();
+    const populatedMessageQuery = Message.findById(message._id)
+      .populate('sender', 'firstName lastName profilePhoto email role');
+    let populatedMessage = serializeReplyTo(
+      await populateReplyTo(populatedMessageQuery).lean()
+    );
 
     if (populatedMessage.sender) {
       populatedMessage = {
@@ -359,7 +382,9 @@ const sendMessage = async (req, res) => {
     res.status(201).json({ message: populatedMessage, roomId });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(error.statusCode || 500).json({
+      message: error.statusCode ? error.message : 'Server error',
+    });
   }
 };
 

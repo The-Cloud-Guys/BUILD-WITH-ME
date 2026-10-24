@@ -13,7 +13,8 @@ test('room list exposes the existing Messages screen contract', () => {
   assert.match(controller, /memberPreview/);
   assert.match(controller, /unreadCount/);
   assert.match(controller, /isUserOnline/);
-  assert.match(controller, /populate:\s*\{ path: 'sender'/);
+  assert.match(controller, /\{ path: 'sender', select:/);
+  assert.match(controller, /replyPopulate/);
   assert.match(controller, /createAvatarResolver/);
   assert.match(controller, /roomIcon:\s*undefined/);
 });
