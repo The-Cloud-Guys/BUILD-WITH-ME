@@ -8,6 +8,7 @@ const AdminInvite = require('../src/models/adminInvite.model');
 const {
   mayGrant,
 } = require('../src/controllers/adminManagement.controller');
+const { getAdminDuplicateMessage } = require('../src/controllers/adminAuth.controller');
 const { hashInvitationToken } = require('../src/services/adminInvitation.service');
 
 test('admin invitation tokens are stored as hashes and expire through TTL', () => {
@@ -81,4 +82,21 @@ test('admin management validates object IDs before database operations', () => {
   );
   assert.match(source, /isValidObjectId\(req\.params\.inviteId\)/);
   assert.match(source, /isValidObjectId\(req\.params\.adminId\)/);
+});
+
+test('admin duplicate errors identify the conflicting unique field', () => {
+  assert.equal(
+    getAdminDuplicateMessage({ keyPattern: { email: 1 } }),
+    'An administrator with this email already exists'
+  );
+  assert.equal(
+    getAdminDuplicateMessage({ keyPattern: { firebaseUid: 1 } }),
+    'This Firebase identity is already linked to another administrator'
+  );
+  assert.equal(
+    getAdminDuplicateMessage({
+      message: 'E11000 duplicate key index: legacyUser_1 dup key: { legacyUser: null }',
+    }),
+    'Administrator legacy account linkage conflicts with another record'
+  );
 });

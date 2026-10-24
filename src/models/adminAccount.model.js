@@ -43,7 +43,7 @@ const adminAccountSchema = new mongoose.Schema(
       unique: true,
       sparse: true,
       trim: true,
-      default: null,
+      default: undefined,
     },
     isActive: {
       type: Boolean,
@@ -73,7 +73,7 @@ const adminAccountSchema = new mongoose.Schema(
       ref: 'User',
       unique: true,
       sparse: true,
-      default: null,
+      default: undefined,
     },
     lastLoginAt: {
       type: Date,

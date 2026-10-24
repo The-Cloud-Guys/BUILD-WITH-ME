@@ -5,10 +5,17 @@ const { ADMIN_AUTH_METHODS, ADMIN_PERMISSIONS, DEFAULT_ADMIN_PERMISSIONS } = req
 
 test('dedicated admins use Firebase identity without a normal user account', () => {
   const admin = new AdminAccount({ email: 'ADMIN@EXAMPLE.COM', firebaseUid: 'firebase-admin-uid', firstName: 'System', lastName: 'Administrator', role: 'super_admin', permissions: DEFAULT_ADMIN_PERMISSIONS.super_admin, authMethods: ['firebase'] });
-  assert.equal(admin.legacyUser, null);
+  assert.equal(admin.legacyUser, undefined);
   assert.equal(admin.email, 'admin@example.com');
   assert.equal(admin.fullName, 'System Administrator');
   assert.deepEqual(admin.permissions, ADMIN_PERMISSIONS);
+});
+
+test('optional unique admin identities are omitted instead of stored as null', () => {
+  const admin = new AdminAccount({ email: 'pending@example.com' });
+  const storedShape = admin.toObject();
+  assert.equal(Object.hasOwn(storedShape, 'firebaseUid'), false);
+  assert.equal(Object.hasOwn(storedShape, 'legacyUser'), false);
 });
 
 test('Firebase is the only dedicated admin authentication method', () => {

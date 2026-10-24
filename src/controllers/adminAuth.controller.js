@@ -51,6 +51,17 @@ const serializeAdmin = (admin) => ({
   lastLoginAt: admin.lastLoginAt,
 });
 
+const getAdminDuplicateMessage = (error) => {
+  const message = String(error?.message || '');
+  const matchesKey = (key) => Boolean(error?.keyPattern?.[key]) ||
+    new RegExp(`index:\\s+${key}_1\\b`).test(message);
+
+  if (matchesKey('email')) return 'An administrator with this email already exists';
+  if (matchesKey('firebaseUid')) return 'This Firebase identity is already linked to another administrator';
+  if (matchesKey('legacyUser')) return 'Administrator legacy account linkage conflicts with another record';
+  return 'Administrator identity conflicts with another account';
+};
+
 const verifyBootstrapSecret = (provided) => {
   const configured = process.env.ADMIN_SECRET_KEY;
   if (!configured || typeof provided !== 'string' || !provided) return false;
@@ -154,7 +165,7 @@ const loginAdminWithFirebase = async (req, res) => {
       message: loginError.statusCode === 503
         ? 'Firebase authentication is unavailable'
         : loginError.code === 11000
-          ? 'Firebase identity is already linked to another administrator'
+          ? getAdminDuplicateMessage(loginError)
           : 'Unable to authenticate administrator with Firebase',
     });
   }
@@ -268,7 +279,7 @@ const acceptFirebaseInvitation = async (req, res) => {
     console.error('Accept Firebase admin invitation failed:', acceptError.message);
     return res.status(status).json({
       message: acceptError.code === 11000
-        ? 'Firebase identity or email is already linked to another administrator'
+        ? getAdminDuplicateMessage(acceptError)
         : status === 500
           ? 'Unable to accept admin invitation'
           : acceptError.message,
@@ -296,6 +307,7 @@ module.exports = {
   bootstrapFirebaseAdmin,
   clearAdminCookies,
   getCurrentAdmin,
+  getAdminDuplicateMessage,
   loginAdminWithFirebase,
   logoutAdmin,
   serializeAdmin,
