@@ -29,6 +29,10 @@ const adminCookieOptions = () => ({
   httpOnly: true,
   secure: true,
   sameSite: 'none',
+  // The dashboard and API currently live on different onrender.com sites.
+  // Partitioning allows supporting browsers to retain this third-party
+  // session cookie without exposing it to frontend JavaScript.
+  partitioned: true,
   path: '/api/admin',
 });
 
