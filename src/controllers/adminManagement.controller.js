@@ -21,6 +21,7 @@ const serializeManagedAdmin = (admin) => ({
   firstName: admin.firstName,
   lastName: admin.lastName,
   fullName: admin.fullName,
+  profilePhoto: admin.profilePhoto,
   role: admin.role,
   permissions: admin.permissions,
   authMethods: admin.authMethods,
@@ -74,8 +75,6 @@ const createAdminInvitation = async (req, res) => {
     );
     const invitation = await AdminInvite.create({
       email: value.email,
-      firstName: value.firstName,
-      lastName: value.lastName,
       role: value.role,
       permissions,
       tokenHash: hashInvitationToken(token),
@@ -92,7 +91,6 @@ const createAdminInvitation = async (req, res) => {
     }
     const acceptUrl = `${dashboardUrl}/accept-invitation?token=${encodeURIComponent(token)}`;
     const emailMessage = buildAdminInvitationEmail({
-      firstName: invitation.firstName,
       invitedByName: req.adminAccount.fullName,
       role: invitation.role,
       invitedEmail: invitation.email,

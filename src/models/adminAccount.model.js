@@ -25,6 +25,11 @@ const adminAccountSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    profilePhoto: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     role: {
       type: String,
       enum: ADMIN_ROLES,

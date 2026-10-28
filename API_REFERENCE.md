@@ -259,7 +259,7 @@ All routes below require the Firebase `adminSession` cookie and their assigned M
 | PUT | `/reports/:reportId` | admin | `{ status:string, resolution?:string }` | object: report/message |
 | GET | `/activities` | admin | pagination/type query | object: activities, pagination |
 | GET | `/admins` | `manage_admins` | none | object: dedicated admins |
-| POST | `/admins/invitations` | `manage_admins` | `{ email:string, firstName:string, lastName:string, role:string, permissions?:string[] }` | 201 object: emailed invitation metadata |
+| POST | `/admins/invitations` | `manage_admins` | `{ email:string, role?:string, permissions?:string[] }`; `role` defaults to `admin` and permissions default to that role's preset | 201 object: emailed invitation metadata; verified Firebase name/photo are inherited only when the invitee accepts |
 | GET | `/admins/invitations` | `manage_admins` | none | object: invitations |
 | DELETE | `/admins/invitations/:inviteId` | `manage_admins` | none | object: message |
 | PATCH | `/admins/:adminId` | `manage_admins` | `{ role?:string, permissions?:string[], isActive?:boolean }` | object: admin |

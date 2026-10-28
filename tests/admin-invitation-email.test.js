@@ -7,7 +7,6 @@ const { buildAdminInvitationEmail } = require('../src/services/adminInvitationEm
 
 test('admin invitation email includes activation details and escapes HTML', () => {
   const result = buildAdminInvitationEmail({
-    firstName: '<Admin>',
     invitedByName: 'Owner & Team',
     role: 'content_admin',
     invitedEmail: 'invite@example.com',
@@ -15,9 +14,9 @@ test('admin invitation email includes activation details and escapes HTML', () =
     expiresAt: new Date('2026-09-15T12:00:00.000Z'),
   });
   assert.match(result.subject, /invited/);
-  assert.match(result.html, /&lt;Admin&gt;/);
   assert.match(result.html, /Owner &amp; Team/);
   assert.match(result.html, /Activate Admin Access/);
+  assert.match(result.html, /verified Google name and profile picture/);
   assert.match(result.text, /one-time-token/);
 });
 

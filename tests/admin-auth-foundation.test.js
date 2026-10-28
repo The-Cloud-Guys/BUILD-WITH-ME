@@ -4,10 +4,11 @@ const AdminAccount = require('../src/models/adminAccount.model');
 const { ADMIN_AUTH_METHODS, ADMIN_PERMISSIONS, DEFAULT_ADMIN_PERMISSIONS } = require('../src/constants/admin.constants');
 
 test('dedicated admins use Firebase identity without a normal user account', () => {
-  const admin = new AdminAccount({ email: 'ADMIN@EXAMPLE.COM', firebaseUid: 'firebase-admin-uid', firstName: 'System', lastName: 'Administrator', role: 'super_admin', permissions: DEFAULT_ADMIN_PERMISSIONS.super_admin, authMethods: ['firebase'] });
+  const admin = new AdminAccount({ email: 'ADMIN@EXAMPLE.COM', firebaseUid: 'firebase-admin-uid', firstName: 'System', lastName: 'Administrator', profilePhoto: 'https://example.com/admin.jpg', role: 'super_admin', permissions: DEFAULT_ADMIN_PERMISSIONS.super_admin, authMethods: ['firebase'] });
   assert.equal(admin.legacyUser, undefined);
   assert.equal(admin.email, 'admin@example.com');
   assert.equal(admin.fullName, 'System Administrator');
+  assert.equal(admin.profilePhoto, 'https://example.com/admin.jpg');
   assert.deepEqual(admin.permissions, ADMIN_PERMISSIONS);
 });
 

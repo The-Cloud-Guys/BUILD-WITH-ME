@@ -49,6 +49,7 @@ const serializeAdmin = (admin) => ({
   firstName: admin.firstName,
   lastName: admin.lastName,
   fullName: admin.fullName,
+  profilePhoto: admin.profilePhoto,
   role: admin.role,
   permissions: admin.permissions,
   authMethods: admin.authMethods,
@@ -74,6 +75,20 @@ const verifyBootstrapSecret = (provided) => {
   return crypto.timingSafeEqual(expected, actual);
 };
 
+const getFirebaseProfile = (decoded, email) => {
+  const displayName = typeof decoded?.name === 'string' ? decoded.name.trim() : '';
+  const nameParts = displayName.split(/\s+/).filter(Boolean);
+  const fallbackName = String(email || '').split('@')[0];
+  const profilePhoto = typeof decoded?.picture === 'string' && /^https:\/\//i.test(decoded.picture)
+    ? decoded.picture.trim()
+    : null;
+  return {
+    firstName: nameParts.shift() || fallbackName,
+    lastName: nameParts.join(' '),
+    profilePhoto,
+  };
+};
+
 const getVerifiedFirebaseIdentity = async (idToken) => {
   const decoded = await verifyFirebaseToken(idToken, { checkRevoked: true });
   const uid = typeof decoded.uid === 'string' ? decoded.uid.trim() : '';
@@ -83,7 +98,19 @@ const getVerifiedFirebaseIdentity = async (idToken) => {
     error.statusCode = 401;
     throw error;
   }
-  return { decoded, email, uid };
+  const profile = getFirebaseProfile(decoded, email);
+  return {
+    decoded,
+    email,
+    uid,
+    ...profile,
+  };
+};
+
+const applyFirebaseProfile = (admin, identity) => {
+  admin.firstName = identity.firstName;
+  admin.lastName = identity.lastName;
+  admin.profilePhoto = identity.profilePhoto;
 };
 
 const establishFirebaseSession = async (admin, idToken, res) => {
@@ -157,6 +184,7 @@ const loginAdminWithFirebase = async (req, res) => {
       return res.status(409).json({ message: 'Admin account is linked to another Firebase identity' });
     }
     admin.firebaseUid = identity.uid;
+    applyFirebaseProfile(admin, identity);
     admin.authMethods = ['firebase'];
     admin.emailVerified = true;
     await admin.save();
@@ -184,14 +212,12 @@ const verifyAdminInvitation = async (req, res) => {
       acceptedAt: null,
       revokedAt: null,
       expiresAt: { $gt: new Date() },
-    }).select('email firstName lastName role expiresAt');
+    }).select('email role expiresAt');
     if (!invitation) return res.status(404).json({ valid: false, message: 'Invitation is invalid or expired' });
     return res.json({
       valid: true,
       invitation: {
         email: invitation.email,
-        firstName: invitation.firstName,
-        lastName: invitation.lastName,
         role: invitation.role,
         expiresAt: invitation.expiresAt,
       },
@@ -240,8 +266,9 @@ const acceptFirebaseInvitation = async (req, res) => {
         Object.assign(admin, {
           email: invitation.email,
           firebaseUid: identity.uid,
-          firstName: invitation.firstName,
-          lastName: invitation.lastName,
+          firstName: identity.firstName,
+          lastName: identity.lastName,
+          profilePhoto: identity.profilePhoto,
           role: invitation.role,
           permissions: invitation.permissions,
           authMethods: ['firebase'],
@@ -255,8 +282,9 @@ const acceptFirebaseInvitation = async (req, res) => {
         [admin] = await AdminAccount.create([{
           email: invitation.email,
           firebaseUid: identity.uid,
-          firstName: invitation.firstName,
-          lastName: invitation.lastName,
+          firstName: identity.firstName,
+          lastName: identity.lastName,
+          profilePhoto: identity.profilePhoto,
           role: invitation.role,
           permissions: invitation.permissions,
           authMethods: ['firebase'],
@@ -308,10 +336,12 @@ const getCurrentAdmin = async (req, res) => res.json({ admin: serializeAdmin(req
 
 module.exports = {
   acceptFirebaseInvitation,
+  applyFirebaseProfile,
   bootstrapFirebaseAdmin,
   clearAdminCookies,
   getCurrentAdmin,
   getAdminDuplicateMessage,
+  getFirebaseProfile,
   loginAdminWithFirebase,
   logoutAdmin,
   serializeAdmin,

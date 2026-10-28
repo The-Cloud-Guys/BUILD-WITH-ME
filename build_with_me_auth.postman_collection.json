@@ -4167,14 +4167,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"{{invitedAdminEmail}}\",\n  \"firstName\": \"Invited\",\n  \"lastName\": \"Administrator\",\n  \"role\": \"admin\",\n  \"permissions\": [\n    \"manage_users\",\n    \"manage_projects\",\n    \"manage_reports\",\n    \"view_analytics\"\n  ]\n}",
+              "raw": "{\n  \"email\": \"{{invitedAdminEmail}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Requires the Firebase adminSession HttpOnly cookie and the documented admin permission."
+            "description": "Requires the Firebase adminSession HttpOnly cookie and manage_admins permission. Only email is required; role and permissions are optional. The accepted administrator inherits the verified Firebase display name and profile picture."
           },
           "response": []
         },

@@ -6,10 +6,13 @@ const path = require('node:path');
 const AdminAccount = require('../src/models/adminAccount.model');
 const AdminInvite = require('../src/models/adminInvite.model');
 const {
-  mayGrant,
-} = require('../src/controllers/adminManagement.controller');
+  applyFirebaseProfile,
+  getFirebaseProfile,
+} = require('../src/controllers/adminAuth.controller');
+const { mayGrant: mayGrantAccess } = require('../src/controllers/adminManagement.controller');
 const { getAdminDuplicateMessage } = require('../src/controllers/adminAuth.controller');
 const { hashInvitationToken } = require('../src/services/adminInvitation.service');
+const { createAdminInvitationValidation } = require('../src/validation/adminManagement.validation');
 
 test('admin invitation tokens are stored as hashes and expire through TTL', () => {
   assert.equal(AdminInvite.schema.path('tokenHash').options.select, false);
@@ -19,22 +22,63 @@ test('admin invitation tokens are stored as hashes and expire through TTL', () =
   )));
 });
 
+test('admin invitation accepts email alone and applies safe access defaults', () => {
+  const { error, value } = createAdminInvitationValidation({
+    email: 'INVITEE@EXAMPLE.COM',
+  });
+  assert.equal(error, undefined);
+  assert.equal(value.email, 'invitee@example.com');
+  assert.equal(value.role, 'admin');
+  assert.equal(value.firstName, undefined);
+  assert.equal(value.lastName, undefined);
+});
+
+test('verified Firebase claims provide administrator name and profile picture', () => {
+  assert.deepEqual(
+    getFirebaseProfile({
+      name: 'Ada King Lovelace',
+      picture: 'https://example.com/ada.jpg',
+    }, 'ada@example.com'),
+    {
+      firstName: 'Ada',
+      lastName: 'King Lovelace',
+      profilePhoto: 'https://example.com/ada.jpg',
+    }
+  );
+});
+
 test('only super admins can grant privileges they do not hold', () => {
-  assert.equal(mayGrant(
+  assert.equal(mayGrantAccess(
     { role: 'admin', permissions: ['manage_users'] },
     'admin',
     ['manage_users']
   ), true);
-  assert.equal(mayGrant(
+  assert.equal(mayGrantAccess(
     { role: 'admin', permissions: ['manage_users'] },
     'super_admin',
     ['manage_users']
   ), false);
-  assert.equal(mayGrant(
+  assert.equal(mayGrantAccess(
     { role: 'super_admin', permissions: [] },
     'super_admin',
     []
   ), true);
+});
+
+test('Firebase profile data replaces inviter-supplied administrator identity data', () => {
+  const admin = new AdminAccount({
+    email: 'invitee@example.com',
+    firstName: 'Typed',
+    lastName: 'By Inviter',
+  });
+  applyFirebaseProfile(admin, {
+    firstName: 'Verified',
+    lastName: 'Google User',
+    profilePhoto: 'https://example.com/google-photo.jpg',
+  });
+  assert.equal(admin.firstName, 'Verified');
+  assert.equal(admin.lastName, 'Google User');
+  assert.equal(admin.profilePhoto, 'https://example.com/google-photo.jpg');
 });
 
 test('migrated admin accounts require invitation activation', () => {
