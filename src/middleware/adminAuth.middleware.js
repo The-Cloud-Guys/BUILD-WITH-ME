@@ -1,5 +1,6 @@
 const AdminAccount = require('../models/adminAccount.model');
 const { verifyFirebaseSessionCookie } = require('../services/firebase.service');
+const { getAdminDashboardOrigins, normalizeOrigin } = require('../utils/origin.util');
 
 const authenticateAdmin = async (req, res, next) => {
   try {
@@ -38,18 +39,11 @@ const requireAdminPermission = (permission) => (req, res, next) => {
   return next();
 };
 
-const normalizeOrigin = (value) => {
-  if (typeof value !== 'string') return null;
-  return value.trim().replace(/\/$/, '') || null;
-};
-
 const verifyAdminRequestOrigin = (req, res, next) => {
   const origin = normalizeOrigin(req.get('origin'));
   if (!origin) return next();
-  const configuredOrigins = new Set([
-    normalizeOrigin(process.env.ADMIN_DASHBOARD_URL),
-    normalizeOrigin(`${req.protocol}://${req.get('host')}`),
-  ].filter(Boolean));
+  const configuredOrigins = getAdminDashboardOrigins();
+  configuredOrigins.add(normalizeOrigin(`${req.protocol}://${req.get('host')}`));
   if (!configuredOrigins.has(origin)) {
     return res.status(403).json({ message: 'Admin request origin is not allowed' });
   }

@@ -60,7 +60,7 @@ test('admin session cookie is cross-site secure, partitioned, and limited to twe
 test('Express trusts the Render proxy and permits credentialed admin-origin CORS', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'index.js'), 'utf8');
   assert.match(source, /app\.set\('trust proxy', 1\)/);
-  assert.match(source, /ADMIN_DASHBOARD_URL \|\| 'https:\/\/conexd-admin\.onrender\.com'/);
+  assert.match(source, /getCorsAllowedOrigins/);
   assert.match(source, /credentials: true/);
 });
 

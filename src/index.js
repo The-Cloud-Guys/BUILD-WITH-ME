@@ -26,6 +26,7 @@ const shareRoutes = require('./routes/share.routes');
 
 const SocketManager = require('./socket');
 const { logIceConfigurationStatus } = require('./services/iceServer.service');
+const { getCorsAllowedOrigins, normalizeOrigin } = require('./utils/origin.util');
 
 // Connect to database
 logIceConfigurationStatus();
@@ -57,16 +58,7 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-const normalizeOrigin = (value) => typeof value === 'string'
-  ? value.trim().replace(/\/$/, '')
-  : value;
-
-const allowedOrigins = new Set(
-  [
-    process.env.FRONTEND_URL || 'http://localhost:3000',
-    process.env.ADMIN_DASHBOARD_URL || 'https://conexd-admin.onrender.com',
-  ].filter(Boolean).map(normalizeOrigin)
-);
+const allowedOrigins = getCorsAllowedOrigins();
 
 app.use(
   cors({

@@ -47,7 +47,9 @@ test('admin permission middleware denies missing privileges', () => {
 
 test('cookie-authenticated admin mutations require an allowed browser origin', () => {
   const previous = process.env.ADMIN_DASHBOARD_URL;
+  const previousList = process.env.ADMIN_DASHBOARD_URLS;
   process.env.ADMIN_DASHBOARD_URL = 'https://admin.example.com';
+  process.env.ADMIN_DASHBOARD_URLS = 'http://localhost:3000, http://localhost:5173/';
   try {
     const request = (origin) => ({
       method: 'POST',
@@ -64,12 +66,45 @@ test('cookie-authenticated admin mutations require an allowed browser origin', (
       true
     );
     assert.equal(
+      invokeMiddleware(verifyAdminRequestOrigin, request('http://localhost:3000')).nextCalled,
+      true
+    );
+    assert.equal(
+      invokeMiddleware(verifyAdminRequestOrigin, request('http://localhost:5173')).nextCalled,
+      true
+    );
+    assert.equal(
       invokeMiddleware(verifyAdminRequestOrigin, request('https://attacker.example')).statusCode,
       403
     );
   } finally {
     if (previous === undefined) delete process.env.ADMIN_DASHBOARD_URL;
     else process.env.ADMIN_DASHBOARD_URL = previous;
+    if (previousList === undefined) delete process.env.ADMIN_DASHBOARD_URLS;
+    else process.env.ADMIN_DASHBOARD_URLS = previousList;
+  }
+});
+
+test('legacy singular admin dashboard setting also accepts comma-separated origins', () => {
+  const previous = process.env.ADMIN_DASHBOARD_URL;
+  const previousList = process.env.ADMIN_DASHBOARD_URLS;
+  process.env.ADMIN_DASHBOARD_URL = 'https://admin.example.com,http://localhost:3000';
+  delete process.env.ADMIN_DASHBOARD_URLS;
+  try {
+    const result = invokeMiddleware(verifyAdminRequestOrigin, {
+      protocol: 'https',
+      get(name) {
+        if (name === 'origin') return 'http://localhost:3000';
+        if (name === 'host') return 'api.example.com';
+        return undefined;
+      },
+    });
+    assert.equal(result.nextCalled, true);
+  } finally {
+    if (previous === undefined) delete process.env.ADMIN_DASHBOARD_URL;
+    else process.env.ADMIN_DASHBOARD_URL = previous;
+    if (previousList === undefined) delete process.env.ADMIN_DASHBOARD_URLS;
+    else process.env.ADMIN_DASHBOARD_URLS = previousList;
   }
 });
 
