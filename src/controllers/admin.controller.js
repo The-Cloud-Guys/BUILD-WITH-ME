@@ -1,4 +1,5 @@
 const { Admin, Report, AuditLog } = require('../models/admin.model');
+const mongoose = require('mongoose');
 const User = require('../models/user.model');
 const Project = require('../models/project.model');
 const Post = require('../models/post.model');
@@ -17,6 +18,8 @@ const {
   getPendingReason,
   getUserStatus,
 } = require('../utils/userStatus');
+
+const ADMIN_PUBLIC_USER_FIELDS = 'firstName lastName profilePhoto email role skills bio externalLink';
 
 // ==============================
 // HELPER FUNCTIONS
@@ -586,6 +589,78 @@ const getAdminProjects = async (req, res) => {
   }
 };
 
+const getAdminProjectDetails = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    if (!mongoose.isValidObjectId(projectId)) {
+      return res.status(400).json({ message: 'Invalid project ID' });
+    }
+
+    const project = await Project.findById(projectId)
+      .populate('owner', ADMIN_PUBLIC_USER_FIELDS)
+      .populate('teamMembers', ADMIN_PUBLIC_USER_FIELDS)
+      .lean();
+    if (!project) return res.status(404).json({ message: 'Project not found' });
+
+    const applications = await Application.find({ project: project._id })
+      .select('project applicant role status createdAt updatedAt')
+      .lean();
+    const memberRoleMap = buildProjectMemberRoleMap(
+      applications.filter(({ status }) => status === 'ACCEPTED')
+    );
+    const applicationCounts = applications.reduce((counts, application) => {
+      const status = String(application.status || '').toLowerCase();
+      if (Object.hasOwn(counts, status)) counts[status] += 1;
+      return counts;
+    }, { total: applications.length, pending: 0, accepted: 0, rejected: 0 });
+    const openRoleSlots = project.roles.reduce(
+      (total, role) => total + Math.max(
+        0,
+        (Number(role.requiredCount) || 0) - (Number(role.currentCount) || 0)
+      ),
+      0
+    );
+    const filledRoleSlots = project.roles.reduce(
+      (total, role) => total + (Number(role.currentCount) || 0),
+      0
+    );
+    const teamMembers = (project.teamMembers || []).filter(Boolean);
+
+    const details = {
+      ...project,
+      teamMembers: attachAppliedProjectRoles(
+        project._id,
+        teamMembers,
+        memberRoleMap
+      ),
+      metadata: {
+        stage: project.stage,
+        status: project.status,
+        openRoleSlots,
+        filledRoleSlots,
+        applications: applicationCounts.total,
+        teamMembers: teamMembers.length,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+      },
+      applicationCounts,
+      moderation: {
+        isHidden: project.isHidden,
+        isFlagged: project.isFlagged,
+        reviewed: project.reviewed,
+        reviewStatus: project.reviewStatus,
+        reviewNotes: project.reviewNotes,
+        reviewedAt: project.reviewedAt,
+      },
+    };
+
+    return res.json({ project: await resolveProfilePhotos(details) });
+  } catch (error) {
+    console.error('Get admin project details error:', error);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
+
 // ==============================
 // REPORT MANAGEMENT (ADMIN)
 // ==============================
@@ -732,10 +807,103 @@ const getAdminReports = async (req, res) => {
   }
 };
 
+const resolveAdminReportTarget = async (report) => {
+  if (report.targetType === 'user') return report.reportedUser || null;
+  const targetModel = getTargetModel(report.targetType);
+  if (!targetModel) return null;
+
+  let query = targetModel.findById(report.targetId);
+  if (report.targetType === 'project') {
+    query = query
+      .populate('owner', ADMIN_PUBLIC_USER_FIELDS)
+      .populate('teamMembers', ADMIN_PUBLIC_USER_FIELDS);
+  } else if (report.targetType === 'post') {
+    query = query.populate('author', ADMIN_PUBLIC_USER_FIELDS);
+  } else if (report.targetType === 'comment') {
+    query = query
+      .populate('author', ADMIN_PUBLIC_USER_FIELDS)
+      .populate('post', 'content postType author createdAt');
+  }
+  const target = await query.lean();
+  if (!target || report.targetType !== 'post' || !Array.isArray(target.media)) return target;
+
+  target.media = (await Promise.all(target.media.map(async (mediaPath) => {
+    if (!mediaPath) return null;
+    if (/^https?:\/\//i.test(mediaPath)) return mediaPath;
+    try {
+      return await getSignedUrl(process.env.SUPABASE_BUCKET_COMMUNITY, mediaPath, 3600);
+    } catch (error) {
+      console.error('Admin report media URL generation failed:', error.message);
+      return null;
+    }
+  }))).filter(Boolean);
+  return target;
+};
+
+const getReportIdentifierFilter = (value) => {
+  const identifier = String(value || '').trim();
+  if (mongoose.isValidObjectId(identifier)) return { _id: identifier };
+  if (/^RPT-[A-Z0-9]+$/i.test(identifier)) {
+    return { reportId: identifier.toUpperCase() };
+  }
+  return null;
+};
+
+const getAdminReportDetails = async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    const filter = getReportIdentifierFilter(reportId);
+    if (!filter) return res.status(400).json({ message: 'Invalid report ID' });
+
+    const report = await Report.findOne(filter)
+      .populate('reporter', ADMIN_PUBLIC_USER_FIELDS)
+      .populate('reportedUser', ADMIN_PUBLIC_USER_FIELDS)
+      .populate({
+        path: 'relatedProject',
+        select: 'title description requiredSkills techStack stage status owner createdAt updatedAt',
+        populate: { path: 'owner', select: ADMIN_PUBLIC_USER_FIELDS },
+      })
+      .populate('reviewedByAdmin', 'firstName lastName email role profilePhoto')
+      .populate('notes.author', ADMIN_PUBLIC_USER_FIELDS)
+      .lean();
+    if (!report) return res.status(404).json({ message: 'Report not found' });
+
+    const target = await resolveAdminReportTarget(report);
+    const details = {
+      ...report,
+      reportType: report.targetType,
+      description: report.reason,
+      evidence: [],
+      evidenceCount: 0,
+      target,
+      reportedContent: target,
+      project: report.relatedProject || (report.targetType === 'project' ? target : null),
+      timeAgo: getTimeAgo(report.createdAt),
+      moderation: {
+        status: report.status,
+        severity: report.severity,
+        escalated: report.escalated,
+        actionTaken: report.actionTaken,
+        resolution: report.resolution || null,
+        reviewedAt: report.reviewedAt || null,
+        reviewedByAdmin: report.reviewedByAdmin || null,
+      },
+    };
+
+    return res.json({ report: await resolveProfilePhotos(details) });
+  } catch (error) {
+    console.error('Get admin report details error:', error);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
+
 const resolveReport = async (req, res) => {
   try {
     const { reportId } = req.params;
     const { action, resolution } = req.body;
+
+    const reportFilter = getReportIdentifierFilter(reportId);
+    if (!reportFilter) return res.status(400).json({ message: 'Invalid report ID' });
 
     // Validate action
     const validActions = ['none', 'warning', 'suspend', 'delete_content', 'terminate_account'];
@@ -745,7 +913,7 @@ const resolveReport = async (req, res) => {
       });
     }
 
-    const report = await Report.findById(reportId);
+    const report = await Report.findOne(reportFilter);
     if (!report) return res.status(404).json({ message: 'Report not found' });
 
     // Check if user has permission for this action
@@ -1601,10 +1769,12 @@ module.exports = {
   
   // Project Management (Admin)
   getAdminProjects,
+  getAdminProjectDetails,
   
   // Report Management
   getReports,
   getAdminReports,
+  getAdminReportDetails,
   resolveReport,
   
   // Admin Management

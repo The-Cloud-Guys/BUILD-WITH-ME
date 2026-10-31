@@ -4007,7 +4007,40 @@
           "response": []
         },
         {
-          "name": "091. Get Reports",
+          "name": "091. Get Admin Project Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is JSON', () => {",
+                  "  const ct = pm.response.headers.get('Content-Type') || '';",
+                  "  pm.expect(ct.toLowerCase()).to.include('application/json');",
+                  "});",
+                  "pm.test('Project detail contract is present', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.project).to.be.an('object');",
+                  "  pm.expect(body.project.metadata).to.be.an('object');",
+                  "  pm.expect(body.project.teamMembers).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/admin/projects/{{projectId}}",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Requires the Firebase adminSession HttpOnly cookie and manage_projects permission. Returns the complete Project Details screen contract."
+          },
+          "response": []
+        },
+        {
+          "name": "092. Get Reports",
           "event": [
             {
               "listen": "test",
@@ -4037,7 +4070,40 @@
           "response": []
         },
         {
-          "name": "092. Resolve Report - No Violation",
+          "name": "093. Get Admin Report Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is JSON', () => {",
+                  "  const ct = pm.response.headers.get('Content-Type') || '';",
+                  "  pm.expect(ct.toLowerCase()).to.include('application/json');",
+                  "});",
+                  "pm.test('Report detail contract is present', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.report).to.be.an('object');",
+                  "  pm.expect(body.report.moderation).to.be.an('object');",
+                  "  pm.expect(body.report.evidence).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/admin/reports/{{reportId}}",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Requires the Firebase adminSession HttpOnly cookie and manage_reports permission. reportId may be the MongoDB ID or the RPT case ID."
+          },
+          "response": []
+        },
+        {
+          "name": "094. Resolve Report - No Violation",
           "event": [
             {
               "listen": "test",
@@ -4067,7 +4133,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"action\": \"approve\",\n  \"resolution\": \"Reviewed by Postman test; no violation.\"\n}",
+              "raw": "{\n  \"action\": \"none\",\n  \"resolution\": \"Reviewed by Postman test; no violation.\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4082,7 +4148,7 @@
           "response": []
         },
         {
-          "name": "093. Get Admin Activities",
+          "name": "095. Get Admin Activities",
           "event": [
             {
               "listen": "test",
@@ -4112,7 +4178,7 @@
           "response": []
         },
         {
-          "name": "094. List Dedicated Admins",
+          "name": "096. List Dedicated Admins",
           "event": [
             {
               "listen": "test",
@@ -4135,7 +4201,7 @@
           "response": []
         },
         {
-          "name": "095. Create Admin Invitation",
+          "name": "097. Create Admin Invitation",
           "event": [
             {
               "listen": "test",
@@ -4179,7 +4245,7 @@
           "response": []
         },
         {
-          "name": "096. List Admin Invitations",
+          "name": "098. List Admin Invitations",
           "event": [
             {
               "listen": "test",
@@ -4202,7 +4268,7 @@
           "response": []
         },
         {
-          "name": "097. Revoke Admin Invitation",
+          "name": "099. Revoke Admin Invitation",
           "event": [
             {
               "listen": "test",
@@ -4225,7 +4291,7 @@
           "response": []
         },
         {
-          "name": "098. Update Dedicated Admin Access",
+          "name": "100. Update Dedicated Admin Access",
           "event": [
             {
               "listen": "test",
@@ -4264,7 +4330,7 @@
           "response": []
         },
         {
-          "name": "099. Deactivate Dedicated Admin",
+          "name": "101. Deactivate Dedicated Admin",
           "event": [
             {
               "listen": "test",
@@ -4287,7 +4353,7 @@
           "response": []
         },
         {
-          "name": "100. Get Admin Actions",
+          "name": "102. Get Admin Actions",
           "event": [
             {
               "listen": "test",
@@ -4317,7 +4383,7 @@
           "response": []
         },
         {
-          "name": "101. Execute Admin Action",
+          "name": "103. Execute Admin Action",
           "event": [
             {
               "listen": "test",
@@ -4362,7 +4428,7 @@
           "response": []
         },
         {
-          "name": "102. Get Permission Presets",
+          "name": "104. Get Permission Presets",
           "event": [
             {
               "listen": "test",
@@ -4392,7 +4458,7 @@
           "response": []
         },
         {
-          "name": "103. Verify Admin Invitation Token",
+          "name": "105. Verify Admin Invitation Token",
           "request": {
             "method": "POST",
             "header": [
@@ -4426,7 +4492,7 @@
           ]
         },
         {
-          "name": "104. Accept Admin Invitation with Firebase",
+          "name": "106. Accept Admin Invitation with Firebase",
           "request": {
             "method": "POST",
             "header": [
@@ -4465,7 +4531,7 @@
       "name": "12 - Negative & Validation Tests",
       "item": [
         {
-          "name": "105. Login with Invalid Password",
+          "name": "107. Login with Invalid Password",
           "event": [
             {
               "listen": "test",
@@ -4503,7 +4569,7 @@
           "response": []
         },
         {
-          "name": "106. Protected Route with Invalid Token",
+          "name": "108. Protected Route with Invalid Token",
           "event": [
             {
               "listen": "test",
@@ -4536,7 +4602,7 @@
           "response": []
         },
         {
-          "name": "107. Apply to Invalid Project Role",
+          "name": "109. Apply to Invalid Project Role",
           "event": [
             {
               "listen": "test",
@@ -4581,7 +4647,7 @@
           "response": []
         },
         {
-          "name": "108. Create Project Missing Title",
+          "name": "110. Create Project Missing Title",
           "event": [
             {
               "listen": "test",
@@ -4625,7 +4691,7 @@
       "name": "13 - Cleanup & Logout",
       "item": [
         {
-          "name": "109. Delete Poll Post",
+          "name": "111. Delete Poll Post",
           "event": [
             {
               "listen": "test",
@@ -4655,7 +4721,7 @@
           "response": []
         },
         {
-          "name": "110. Remove Applicant from Project Team",
+          "name": "112. Remove Applicant from Project Team",
           "event": [
             {
               "listen": "test",
@@ -4692,7 +4758,7 @@
           "response": []
         },
         {
-          "name": "111. Delete Community Post",
+          "name": "113. Delete Community Post",
           "event": [
             {
               "listen": "test",
@@ -4728,7 +4794,7 @@
           "response": []
         },
         {
-          "name": "112. Delete Project",
+          "name": "114. Delete Project",
           "event": [
             {
               "listen": "test",
@@ -4764,7 +4830,7 @@
           "response": []
         },
         {
-          "name": "113. Logout via Cookie",
+          "name": "115. Logout via Cookie",
           "event": [
             {
               "listen": "test",
@@ -4805,7 +4871,7 @@
           "response": []
         },
         {
-          "name": "114. Logout Dedicated Admin",
+          "name": "116. Logout Dedicated Admin",
           "event": [
             {
               "listen": "test",

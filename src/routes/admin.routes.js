@@ -9,7 +9,9 @@ const {
   getUsers,
   getUserDetails,
   getAdminProjects,
+  getAdminProjectDetails,
   getAdminReports,
+  getAdminReportDetails,
   getAdminActivities,
   getReports,
   resolveReport,
@@ -49,9 +51,11 @@ router.get('/users/:userId', requireAdminPermission('manage_users'), getUserDeta
 
 // Project Management
 router.get('/projects', requireAdminPermission('manage_projects'), getAdminProjects);
+router.get('/projects/:projectId', requireAdminPermission('manage_projects'), getAdminProjectDetails);
 
 // Reports
 router.get('/reports', requireAdminPermission('manage_reports'), getAdminReports);
+router.get('/reports/:reportId', requireAdminPermission('manage_reports'), getAdminReportDetails);
 router.put('/reports/:reportId', requireAdminPermission('manage_reports'), resolveReport);
 
 // Activity Logs
