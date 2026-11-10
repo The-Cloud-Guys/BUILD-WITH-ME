@@ -3,6 +3,10 @@ const { uploadFile, deleteFile, getSignedUrl } = require('../services/supabase.s
 const sharp = require('sharp');
 const { getOnboardingStatus } = require('../utils/onboardingStatus');
 const { resolveProfilePhotos } = require('../services/avatar.service');
+const {
+  combinedProfileValidation,
+  normalizeSkillsInput,
+} = require('../validation/onboarding.validation');
 
 // ==============================
 // HELPERS
@@ -61,7 +65,7 @@ const getMyProfile = async (req, res) => {
 };
 
 // ✅ SINGLE createUserProfile function (removed duplicate)
-// @desc    Create full user profile (onboarding step 3) with optional photo
+// @desc    Complete onboarding in one multipart request with optional photo
 // @route   POST /api/profile/userProfile
 // @access  Private
 const createUserProfile = async (req, res) => {
@@ -69,24 +73,29 @@ const createUserProfile = async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const { firstName, lastName, bio, skills, externalLink } = req.body;
+    const normalizedInput = {
+      ...req.body,
+      skills: normalizeSkillsInput(req.body.skills),
+    };
+    const { error, value } = combinedProfileValidation(normalizedInput);
+    if (error) {
+      return res.status(400).json({
+        message: error.details[0].message,
+        errors: error.details.map((detail) => detail.message),
+      });
+    }
+
+    const { firstName, lastName, role, bio, skills, externalLink } = value;
     const updateData = {};
     let oldPhotoToDelete = null;
 
-    // Validate required fields
-    if (!firstName || !lastName) {
-      return res.status(400).json({ message: 'First name and last name are required' });
-    }
-
-    if (firstName) updateData.firstName = firstName.trim();
-    if (lastName) updateData.lastName = lastName.trim();
-    if (bio) updateData.bio = bio.slice(0, 500);
-    if (externalLink) updateData.externalLink = externalLink.trim();
-    if (skills !== undefined) {
-      updateData.skills = Array.isArray(skills)
-        ? skills.map((skill) => skill.trim()).filter(Boolean)
-        : skills.split(',').map((skill) => skill.trim()).filter(Boolean);
-    }
+    updateData.firstName = firstName;
+    updateData.lastName = lastName;
+    updateData.role = role;
+    updateData.skills = skills;
+    updateData.bio = bio || '';
+    updateData.externalLink = externalLink || '';
+    updateData.onboardingStep = 3;
 
     // Handle profile photo if provided
     if (req.file) {
@@ -116,12 +125,6 @@ const createUserProfile = async (req, res) => {
       await deleteFile(process.env.SUPABASE_BUCKET_AVATAR, oldPhotoToDelete);
     }
 
-    // Always set onboardingStep to 3 if not already
-    if (updatedUser.onboardingStep < 3) {
-      updatedUser.onboardingStep = 3;
-      await updatedUser.save();
-    }
-
     // Generate signed URL for photo if needed
     const userObj = await resolveProfilePhotos(updatedUser);
 
@@ -145,20 +148,30 @@ const updateUserProfile = async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const { firstName, lastName, bio, skills, externalLink } = req.body;
+    const normalizedInput = {
+      ...req.body,
+      skills: normalizeSkillsInput(req.body.skills),
+    };
+    const { error, value } = combinedProfileValidation(normalizedInput, { partial: true });
+    if (error) {
+      return res.status(400).json({
+        message: error.details[0].message,
+        errors: error.details.map((detail) => detail.message),
+      });
+    }
+
+    const { firstName, lastName, role, bio, skills, externalLink } = value;
     const updateData = {};
     let oldPhotoToDelete = null;
 
     if (firstName !== undefined) updateData.firstName = firstName.trim();
     if (lastName !== undefined) updateData.lastName = lastName.trim();
+    if (role !== undefined) updateData.role = role;
     if (bio !== undefined) updateData.bio = bio.slice(0, 500);
     if (externalLink !== undefined) updateData.externalLink = externalLink.trim();
 
     if (skills !== undefined) {
-      const normalized = Array.isArray(skills)
-        ? skills.map((skill) => skill.trim()).filter(Boolean)
-        : skills.split(',').map((skill) => skill.trim()).filter(Boolean);
-      updateData.skills = normalized;
+      updateData.skills = skills;
     }
 
     if (req.file) {

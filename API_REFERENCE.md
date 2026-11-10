@@ -20,7 +20,7 @@ Version 6.0 working-copy reference. The source of truth is `src/routes/`; the ex
 | ProjectInput | `{ title: string, description: string, requiredSkills?: string[], techStack?: string[], stage?: "IDEA"|"PROTOTYPE"|"MVP", status?: "OPEN"|"IN_PROGRESS"|"COMPLETED"|"CANCELLED", roles: Array<{ roleName: string, requiredCount: integer, description?: string }> }` |
 | ProjectPatch | Partial `ProjectInput`; owner-only |
 | ApplicationInput | multipart: `role: string`, `message: string`, `portfolioLink?: string(url)`, `cv?: File(PDF|DOC|DOCX|TXT, <=10MB)` |
-| ProfileInput | multipart or JSON: `firstName?: string`, `lastName?: string`, `bio?: string`, `externalLink?: string(url)`, `location?: string`, `availability?: string`, `experienceLevel?: string`, `photo?: File(image)` |
+| ProfileInput | multipart: `firstName: string`, `lastName: string`, `role: "Developer"|"Designer"|"Product Manager"|"Security"|"Data/ML"|"DevOps"|"Mobile Dev"|"Other"`, `skills: string[]` (repeated fields, comma-separated text, or JSON-array text), `bio?: string`, `externalLink?: string(url)`, `photo?: File(JPEG|PNG|WEBP, <=5MB)` |
 | PostInput | multipart form-data. Common: `postType: "text"|"code"|"link"|"poll"|"photo"`, `content?: string`, `tags?: string[]` (send arrays as JSON text in multipart). Code: `codeLanguage`, `codeSnippet`. Link: `linkUrl`, `linkTitle?`, `linkDescription?`, `linkPreviewImage?`. Poll: `pollQuestion`, `pollOptions` (2–10 strings), `pollDurationHours` (1–720). Photo/media: `media` file field, at most 10 files, 10 MB per file. |
 | MessageInput | `{ content: string, replyTo?: ObjectId }` |
 
@@ -55,8 +55,8 @@ The Postman journey orders authentication as registration → resend verificatio
 | POST | `/api/onboarding/profile` | user | `ProfileInput` JSON | object: message, user/profile state |
 | GET | `/api/profile/me` | user | none | object: profile/user |
 | DELETE | `/api/profile/me/photo` | user | none | object: message |
-| POST | `/api/profile/userProfile` | user | multipart `ProfileInput` | object: message, profile/user |
-| PATCH | `/api/profile/userProfile` | user | multipart partial `ProfileInput` | object: message, profile/user |
+| POST | `/api/profile/userProfile` | user | multipart `ProfileInput`; completes onboarding in one request | object: message, onboarding state, profile/user |
+| PATCH | `/api/profile/userProfile` | user | multipart partial `ProfileInput`; role and skills may also be updated | object: message, onboarding state, profile/user |
 
 ## Projects and applications
 

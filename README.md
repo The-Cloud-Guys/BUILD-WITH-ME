@@ -51,12 +51,12 @@ All endpoints return JSON. Errors follow `{ "message": "..." }` with appropriate
 
 ### Onboarding
 
-- Step 1 – Role selection (single choice from 8 roles)
-- Step 2 – Skills selection (multiple, free text)
-- Step 3 – Profile completion via `POST /api/profile/userProfile` (firstName, lastName, bio, externalLink, optional photo)
+- Canonical single request – `POST /api/profile/userProfile` uses `multipart/form-data` and accepts `firstName`, `lastName`, `role`, `skills`, `bio`, `externalLink`, and optional `photo` together.
+- `skills` may be repeated form fields, comma-separated text, or a JSON-array string.
+- The legacy `/api/onboarding/role`, `/skills`, and `/profile` endpoints remain available for existing clients but are no longer required by the canonical flow.
 - Responses include `onboardingStatus` (email_verified | role_pending | skills_pending | completed) and `onboardingCompleted` boolean
 
-`POST /api/onboarding/profile` remains available for JSON onboarding details. The canonical full profile route is multipart `POST /api/profile/userProfile`, which accepts profile text and an optional photo together.
+`POST /api/onboarding/profile` remains available for legacy JSON onboarding. The canonical multipart request completes role, skills, profile details, and optional photo in one operation.
 
 ### Profile Management
 
@@ -175,7 +175,7 @@ Android domain verification is served publicly from `GET /.well-known/assetlinks
 
 ### Onboarding (/api/onboarding)
 
-All endpoints require a valid `accessToken` cookie. Steps must be completed in order.
+All endpoints require a valid `accessToken` cookie. These step endpoints are retained for backward compatibility; new clients should use the combined multipart profile route.
 
 | Method | Endpoint  | Description                                        |
 |--------|-----------|----------------------------------------------------|
@@ -184,7 +184,7 @@ All endpoints require a valid `accessToken` cookie. Steps must be completed in o
 | POST   | /skills   | Set skills array (step 1 to 2)                     |
 | POST   | /profile  | Complete onboarding profile                         |
 
-Step 3 (profile completion) is handled by `POST /api/profile/userProfile`.
+The complete onboarding flow can be handled by one `POST /api/profile/userProfile` request.
 
 ### Profile Management (/api/profile)
 
@@ -194,10 +194,10 @@ All routes require a valid `accessToken` cookie.
 |--------|----------------|----------------------------------------------------------------------|
 | GET    | /me            | Get full profile; profilePhoto returned as a signed URL (1 hour)     |
 | DELETE | /me/photo      | Delete the profile photo                            |
-| POST   | /userProfile   | Combined: create profile and optional photo (multipart). Completes onboarding |
-| PATCH  | /userProfile   | Combined: update profile fields and optional photo replacement (multipart) |
+| POST   | /userProfile   | Combined: role, skills, profile details and optional photo (multipart). Completes onboarding |
+| PATCH  | /userProfile   | Combined: update role, skills, profile fields and optional photo replacement (multipart) |
 
-Multipart fields – Text: firstName, lastName, bio, externalLink. File: photo (optional, jpeg/png/webp, max 2 MB).
+Multipart fields – Required text: `firstName`, `lastName`, `role`, `skills`. Optional text: `bio`, `externalLink`. Optional file: `photo` (jpeg/png/webp, max 5 MB). `skills` accepts repeated fields, comma-separated text, or a JSON-array string.
 
 ### Projects (/api/projects)
 

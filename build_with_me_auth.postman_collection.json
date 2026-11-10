@@ -1172,7 +1172,7 @@
       "name": "03 - Profile",
       "item": [
         {
-          "name": "020. Create Profile (multipart text + optional photo)",
+          "name": "020. Complete Onboarding (single multipart request)",
           "event": [
             {
               "listen": "test",
@@ -1207,6 +1207,12 @@
                   "key": "lastName",
                   "value": "{{testLastName}}",
                   "type": "text"
+                },
+                {
+                  "key": "role",
+                  "value": "Developer",
+                  "type": "text",
+                  "description": "Required. One of: Developer, Designer, Product Manager, Security, Data/ML, DevOps, Mobile Dev, Other."
                 },
                 {
                   "key": "bio",
@@ -1321,6 +1327,12 @@
                   "key": "lastName",
                   "value": "{{testLastName}}",
                   "type": "text"
+                },
+                {
+                  "key": "role",
+                  "value": "Developer",
+                  "type": "text",
+                  "description": "Optional during update; when provided it must be an allowed onboarding role."
                 },
                 {
                   "key": "bio",
