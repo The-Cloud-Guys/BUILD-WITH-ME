@@ -259,7 +259,7 @@ All routes below require the Firebase `adminSession` cookie and their assigned M
 | GET | `/reports` | admin | query `page?, limit?, status?, type?, offenseType?` | object: reports with `targetType`, `offenseType`, populated `target`, populated `project`, reporter/reported user, and pagination |
 | GET | `/reports/:reportId` | `manage_reports` | path MongoDB `_id` or case ID such as `RPT-142` | object: complete case, reporter, reported user, reported content, related project, notes and moderation state |
 | PUT | `/reports/:reportId` | `manage_reports` | path MongoDB `_id` or `RPT-*` case ID; body `{ action:"none"|"warning"|"suspend"|"delete_content"|"terminate_account", resolution?:string }` | object: resolved report/message; the design's “Approve - No Violation” action uses `action:"none"` |
-| GET | `/activities` | admin | pagination/type query | object: activities, pagination |
+| GET | `/activities` | admin | pagination/type query | object: activities, pagination; user-target actions include `target:{ _id, firstName, lastName, fullName, email, role, profilePhoto }`, or `target:null` if the user no longer exists |
 | GET | `/admins` | `manage_admins` | none | object: dedicated admins |
 | POST | `/admins/invitations` | `manage_admins` | `{ email:string, role?:string, permissions?:string[] }`; `role` defaults to `admin` and permissions default to that role's preset | 201 object: emailed invitation metadata; verified Firebase name/photo are inherited only when the invitee accepts |
 | GET | `/admins/invitations` | `manage_admins` | none | object: invitations |

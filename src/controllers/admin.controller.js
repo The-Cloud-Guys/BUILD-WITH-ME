@@ -18,6 +18,7 @@ const {
   getPendingReason,
   getUserStatus,
 } = require('../utils/userStatus');
+const { resolveActivityUserTargets } = require('../services/activityTarget.service');
 
 const ADMIN_PUBLIC_USER_FIELDS = 'firstName lastName profilePhoto email role skills bio externalLink';
 
@@ -1660,8 +1661,13 @@ const getActivities = async (req, res) => {
       report: await AuditLog.countDocuments({ targetType: 'report' })
     };
 
+    const activitiesWithTargets = await resolveActivityUserTargets(
+      activities,
+      createAvatarResolver()
+    );
+
     res.json({
-      activities: await resolveProfilePhotos(activities),
+      activities: await resolveProfilePhotos(activitiesWithTargets),
       counts,
       pagination: {
         page: parseInt(page),
@@ -1708,8 +1714,9 @@ const getAdminActivities = async (req, res) => {
       .lean();
 
     const resolveAvatar = createAvatarResolver();
+    const activitiesWithTargets = await resolveActivityUserTargets(activities, resolveAvatar);
     const activitiesWithDetails = await Promise.all(
-      activities.map(async (activity) => {
+      activitiesWithTargets.map(async (activity) => {
         const actor = activity.adminAccount || activity.admin;
         return {
           ...activity,
